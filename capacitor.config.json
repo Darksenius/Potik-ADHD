@@ -1,0 +1,11 @@
+{
+  "appId": "com.flow.adhd",
+  "appName": "Потік",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0d0f14"
+  }
+}

@@ -1,0 +1,119 @@
+apply plugin: 'com.android.application'
+
+// ─── ВЕРСІЯ ЗАСТОСУНКУ ────────────────────────────────────────────────
+// Семантичне версіонування MAJOR.MINOR.PATCH. Міняй ЛИШЕ ці три числа.
+//   MAJOR — велике переписування / несумісні зміни
+//   MINOR — нові фічі без поломок
+//   PATCH — виправлення багів
+// versionCode рахується автоматично і ЗАВЖДИ монотонно зростає
+// (Google Play вимагає, щоб новіша збірка мала більший versionCode).
+//   правило: MAJOR*10000 + MINOR*100 + PATCH   (MINOR/PATCH < 100)
+//   1.0.0 → 10000 · 1.2.3 → 10203 · 2.0.0 → 20000
+def versionMajor = 1
+def versionMinor = 3
+def versionPatch = 0
+
+android {
+    namespace = "com.flow.adhd"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.flow.adhd"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode versionMajor * 10000 + versionMinor * 100 + versionPatch
+        versionName "${versionMajor}.${versionMinor}.${versionPatch}"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // ─── ПІДПИС РЕЛІЗІВ ───────────────────────────────────────────────
+    // Ключ читається з env-змінних (CI / GitHub Actions) або з android/keystore.properties
+    // (локально; файл у .gitignore — НЕ комітити). Без ключа release лишиться непідписаним.
+    signingConfigs {
+        release {
+            def ksProps = new Properties()
+            def propsFile = rootProject.file('keystore.properties')
+            if (propsFile.exists()) { propsFile.withInputStream { ksProps.load(it) } }
+            def ksPath = System.getenv('KEYSTORE_FILE') ?: ksProps.getProperty('storeFile')
+            if (ksPath) {
+                storeFile file(ksPath)
+                storePassword System.getenv('KEYSTORE_PASSWORD') ?: ksProps.getProperty('storePassword')
+                keyAlias System.getenv('KEY_ALIAS') ?: ksProps.getProperty('keyAlias')
+                keyPassword System.getenv('KEY_PASSWORD') ?: ksProps.getProperty('keyPassword')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (signingConfigs.release.storeFile) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    buildFeatures {
+        // потрібно, щоб FlowBridge.appVersion() бачив BuildConfig.VERSION_NAME
+        buildConfig true
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+
+    // ── Room Database ──────────────────────────────────────
+    implementation "androidx.room:room-runtime:2.6.1"
+    annotationProcessor "androidx.room:room-compiler:2.6.1"
+}
+
+// ─── АВТОКОПІЯ APK ────────────────────────────────────────────────────
+// Після кожної збірки (gradlew assembleDebug АБО Build/Run в Android Studio)
+// готовий APK копіюється у D:\Kantor-non-admin\Flow як «Потік.apk» (перезапис).
+// УВАГА: файл має лишатися в UTF-8 (без BOM), інакше ім'я і коментарі поб'ються.
+tasks.register('copyApkToFlow') {
+    doLast {
+        def src = layout.buildDirectory.file('outputs/apk/debug/app-debug.apk').get().asFile
+        def dir = new File('D:/Kantor-non-admin/Flow')
+        dir.mkdirs()
+        def dst = new File(dir, 'Потік.apk')
+        java.nio.file.Files.copy(src.toPath(), dst.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        // і одразу архів поруч (перезапис) — для пересилання
+        def zip = new File(dir, 'Потік.zip')
+        new java.util.zip.ZipOutputStream(new FileOutputStream(zip)).withCloseable { zos ->
+            zos.putNextEntry(new java.util.zip.ZipEntry('Потік.apk'))
+            dst.withInputStream { zos << it }
+            zos.closeEntry()
+        }
+        println "APK скопійовано: ${dst}"
+        println "Архів оновлено: ${zip}"
+    }
+}
+afterEvaluate {
+    tasks.named('assembleDebug').configure { finalizedBy 'copyApkToFlow' }
+}
+
+apply from: 'capacitor.build.gradle'
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

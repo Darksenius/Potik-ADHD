@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash «Потік»: темний фон + знак (хвилі). Замість старої дефолтної іконки. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background"/>
+    <item
+        android:gravity="center"
+        android:width="140dp"
+        android:height="140dp"
+        android:drawable="@drawable/ic_launcher_foreground"/>
+</layer-list>

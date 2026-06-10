@@ -1,0 +1,54 @@
+# Автозбірка релізу: пуш тега v* (напр. v1.3.0) → зібраний і підписаний APK
+# з'являється на сторінці Releases. Потрібні секрети репозиторію:
+#   KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD (див. README процесу).
+name: Release APK
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install web deps & sync Capacitor
+        run: |
+          npm ci
+          npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Decode signing keystore
+        run: echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > android/flow-release.jks
+
+      - name: Build signed release APK
+        working-directory: android
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/android/flow-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk Potik-${{ github.ref_name }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Potik-*.apk
+          generate_release_notes: true

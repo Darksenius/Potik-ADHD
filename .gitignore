@@ -1,0 +1,32 @@
+# Node
+node_modules/
+
+# Android / Gradle — збірочні артефакти
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/captures/
+
+# Згенероване Capacitor-ом (відтворюється через `npx cap sync android`)
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/capacitor-cordova-android-plugins/
+
+# Підпис релізів — НІКОЛИ не комітити!
+*.jks
+*.keystore
+keystore.properties
+
+# Локальні бекапи та тимчасове
+index.html.bak*
+*.bak
+s*.png
+
+# Приватний хендовер між агентами
+Від Ші до Ші.md

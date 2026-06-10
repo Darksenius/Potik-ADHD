@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Потік</string>
+    <string name="title_activity_main">Потік</string>
+    <string name="package_name">com.flow.adhd</string>
+    <string name="custom_url_scheme">com.flow.adhd</string>
+</resources>

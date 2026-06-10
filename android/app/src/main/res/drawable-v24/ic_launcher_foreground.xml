@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Іконка «Потік»: обводка по формі скругленого квадрата + хвилі
+     (верхня блакитна, середня блакитна→жовта, нижня жовта). Кодом, vector. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+  <!-- обводка по краю (скруглений квадрат) -->
+  <path
+      android:fillColor="#00000000"
+      android:strokeColor="#bd10e0"
+      android:strokeWidth="2.5"
+      android:pathData="M30,14 L78,14 Q94,14 94,30 L94,78 Q94,94 78,94 L30,94 Q14,94 14,78 L14,30 Q14,14 30,14 Z"/>
+  <!-- верхня хвиля — блакитна -->
+  <path
+      android:fillColor="#00000000"
+      android:strokeColor="#4f8ef7"
+      android:strokeWidth="6"
+      android:strokeLineCap="round"
+      android:pathData="M28,44 C37,37 46,51 54,44 C62,37 71,51 80,44"/>
+  <!-- середня хвиля — блакитна зліва → жовта справа -->
+  <path
+      android:fillColor="#00000000"
+      android:strokeWidth="6"
+      android:strokeLineCap="round"
+      android:pathData="M28,54 C37,47 46,61 54,54 C62,47 71,61 80,54">
+    <aapt:attr name="android:strokeColor">
+      <gradient
+          android:type="linear"
+          android:startX="28" android:startY="54"
+          android:endX="80" android:endY="54">
+        <item android:offset="0" android:color="#4f8ef7"/>
+        <item android:offset="1" android:color="#f5a623"/>
+      </gradient>
+    </aapt:attr>
+  </path>
+  <!-- нижня хвиля — жовта -->
+  <path
+      android:fillColor="#00000000"
+      android:strokeColor="#f5a623"
+      android:strokeWidth="6"
+      android:strokeLineCap="round"
+      android:pathData="M28,64 C37,57 46,71 54,64 C62,57 71,71 80,64"/>
+</vector>
