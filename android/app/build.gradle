@@ -10,7 +10,7 @@ apply plugin: 'com.android.application'
 //   правило: MAJOR*10000 + MINOR*100 + PATCH   (MINOR/PATCH < 100)
 //   1.0.0 → 10000 · 1.2.3 → 10203 · 2.0.0 → 20000
 def versionMajor = 1
-def versionMinor = 4
+def versionMinor = 5
 def versionPatch = 0
 
 android {

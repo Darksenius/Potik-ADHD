@@ -683,14 +683,8 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
     <div style="font-size:10px;color:var(--t3)"><span id="done-count-lbl"></span></div>
     <button id="show-done-btn" onclick="toggleShowDone()" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:3px 9px;font-size:11px;color:var(--t3);cursor:pointer;font-family:'Syne',sans-serif">Виконані ▼</button>
   </div>
-  <div class="ctx-filter">
-    <div class="ctxf act" onclick="setCtx('all',this)">Всі</div>
-    <div class="ctxf" onclick="setCtx('home',this)">🏠</div>
-    <div class="ctxf" onclick="setCtx('phone',this)">📱</div>
-    <div class="ctxf" onclick="setCtx('work',this)">💼</div>
-    <div class="ctxf" onclick="setCtx('kid',this)">👶</div>
-    <div class="ctxf" onclick="setCtx('neg',this)" style="color:var(--neg)">⚠</div>
-  </div>
+  <!-- Фільтр задач за ПАПКАМИ (спільні з нотатками) + шкідливі. Рендериться динамічно. -->
+  <div class="ctx-filter" id="task-folder-chips"></div>
   <!-- Add task -->
   <div id="add-bar">
     <input type="text" id="ti" placeholder="Нова задача..." onkeydown="if(event.key==='Enter')doAddTask()">
@@ -1412,7 +1406,7 @@ function updateClock(){
     zc.innerHTML = dots + zones.slice(0,3).map(function(z,i){
       return '<div class="zl" style="border-left-color:'+z.color+'">'+
         '<div><h3 style="color:'+z.color+'">'+z.nm+'</h3><p>'+z.desc+'</p>'+(i===0?focusBadge:'')+'</div>'+
-        (i===0?'<div id="clock">'+t+'</div>':'<span class="badge" style="border-left:2px solid '+z.color+'">'+zoneSlotRange(z,hm)+'</span>')+
+        (i===0?'<div id="clock">'+t+'</div>':'<span class="badge" style="border-left:2px solid '+z.color+';font-family:\'Space Mono\',monospace">'+zoneSlotRange(z,hm)+'</span>')+
       '</div>';
     }).join('');
   }
@@ -1462,9 +1456,16 @@ function updateZoneBanner(pz){
         (t.zoneDoneToday?'✓':'')+
       '</button>'+
       '<span class="ztb-title '+(t.zoneDoneToday?'done-t':'')+'">'+t.title+'</span>'+
-      '<span class="ztb-rep">'+REP[t.repeat]||''+'</span>'+
+      '<span class="ztb-rep">'+(REP[t.repeat]||'')+'</span>'+
+      '<button class="ab eb" onclick="openEdit('+t.id+')" title="Редагувати" style="flex-shrink:0">✎</button>'+
+      '<button class="ab del" onclick="delZoneTask('+t.id+')" title="Видалити" style="flex-shrink:0">✕</button>'+
     '</div>';
   }).join('');
+}
+// Видалити зв'язану із зоною задачу прямо з банера зони
+function delZoneTask(id){
+  delTask(id);
+  lastZoneId=-1; updateClock();
 }
 function doneZoneTask(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
@@ -1775,7 +1776,17 @@ function updZoneSel(){
   });
 }
 function setCtx(f,el){
-  ctxFilter=f;document.querySelectorAll('.ctxf').forEach(function(b){b.classList.remove('act');});el.classList.add('act');renderTasks();
+  ctxFilter=f; renderTaskFolderChips(); renderTasks();
+}
+// Чіпи-фільтри над списком задач: «Всі» + емодзі папок (спільних із нотатками) + ⚠ шкідливі
+function renderTaskFolderChips(){
+  var el=document.getElementById('task-folder-chips'); if(!el) return;
+  var h='<div class="ctxf '+(ctxFilter==='all'?'act':'')+'" onclick="setCtx(\'all\',this)">Всі</div>';
+  S.folders.forEach(function(f){
+    h+='<div class="ctxf '+(ctxFilter==='f:'+f.id?'act':'')+'" onclick="setCtx(\'f:'+f.id+'\',this)" title="'+f.nm+'">'+(f.ico||'📁')+'</div>';
+  });
+  h+='<div class="ctxf '+(ctxFilter==='neg'?'act':'')+'" onclick="setCtx(\'neg\',this)" style="color:var(--neg)" title="Шкідливі">⚠</div>';
+  el.innerHTML=h;
 }
 function mkTask(title,type,zid,alarmTime){
   var zone=zid?S.zones.find(function(z){return z.id===zid;}):null;
@@ -2173,13 +2184,9 @@ function renderTasks(){
   if(doneBtn)doneBtn.textContent=showDone?'Виконані ▲':'Виконані ('+doneTasks.length+') ▼';
   if(doneLbl)doneLbl.textContent=doneTasks.length?'✓ '+doneTasks.length+' виконано':'';
   if(ctxFilter==='neg')tasks=tasks.filter(function(t){return t.type==='negative';});
-  else if(ctxFilter!=='all'){
-    var tag=CTXMAP[ctxFilter];
-    tasks=tasks.filter(function(t){
-      if(t.type==='negative')return false;
-      if(ctxFilter==='kid')return t.type==='kid'||((t.ctxTags)||[]).includes('👶 Дитина');
-      return ((t.ctxTags)||[]).includes(tag);
-    });
+  else if(ctxFilter&&ctxFilter.indexOf('f:')===0){
+    var _fid=ctxFilter.slice(2);
+    tasks=tasks.filter(function(t){return t.folderId===_fid;});
   }
   if(!tasks.length){el.innerHTML='<div class="empty"><div class="empty-i">📭</div>Задач немає</div>';return;}
   el.innerHTML=tasks.map(function(t){
@@ -2194,7 +2201,8 @@ function renderTasks(){
     var noZoneB=(t.type==='zonelinked'&&!t.zoneId)?'<span class="badge" style="background:rgba(226,75,74,.12);color:var(--neg);border:1px solid rgba(226,75,74,.25)" title="Не вказано зону">! зона</span>':'';
     var tgb=(t.tags||[]).length?'<span class="badge" style="color:var(--z)">#'+t.tags[0]+'</span>':'';
     var _fld=t.folderId?S.folders.find(function(f){return f.id===t.folderId;}):null;
-    var fb2=_fld?'<span class="badge" style="background:var(--s2);color:var(--t2)">'+(_fld.ico||'📁')+' '+_fld.nm+'</span>':'';
+    // лише емодзі папки (без назви) — компактно; нема папки — нема бейджа
+    var fb2=_fld?'<span class="badge" style="background:var(--s2)" title="'+_fld.nm+'">'+(_fld.ico||'📁')+'</span>':'';
     var negB=isNeg?'<span class="badge" style="background:rgba(226,75,74,.12);color:var(--neg)">−'+(t.negXp||5)+' досвіду</span>':'';
     var xpS=isNeg?('<span style="font-size:10px;color:var(--neg);font-family:\'Space Mono\',monospace;flex-shrink:0">−'+(t.negXp||5)+'</span>'):('<span style="font-size:10px;color:var(--xp);font-family:\'Space Mono\',monospace;flex-shrink:0">+'+(TXP[t.type]||10)+'</span>');
     return '<div class="tc '+(t.done?'done-t':'')+' '+(isNeg?'neg-tc':'')+' '+(_prio.indexOf(t.id)>=0?'prio-task':'')+'" style="border-left-color:'+(t.zoneColor||'transparent')+'">'+
@@ -2329,6 +2337,8 @@ function renderFolderTabs(){
     sel.innerHTML=S.folders.map(function(f){return '<option value="'+f.id+'">'+(f.ico||'📁')+' '+f.nm+'</option>';}).join('');
     if(cur&&S.folders.some(function(f){return f.id===cur;})) sel.value=cur;
   }
+  // чіпи-фільтри у вкладці Задачі живуть тими ж папками
+  if(typeof renderTaskFolderChips==='function') renderTaskFolderChips();
 }
 function setFolder(f){ curFolder=f; renderFolderTabs(); renderQN(); }
 function doSaveFolder(){
@@ -2348,6 +2358,7 @@ function delFolder(id){
   S.qnotes.forEach(function(n){ if(n.folder===id) n.folder='general'; });
   S.tasks.forEach(function(t){ if(t.folderId===id) t.folderId=null; });
   if(curFolder===id) curFolder='all';
+  if(ctxFilter==='f:'+id) ctxFilter='all';
   renderFolderTabs(); renderQN(); renderTasks();
   if(typeof renderEfFolders==='function') renderEfFolders();
   queueSave();
@@ -2648,33 +2659,53 @@ function exportReadable(){
 
 // Імпорт = ДОДАВАННЯ (merge), а не заміна. Існуючі дані лишаються,
 // з файлу підтягуються лише ті елементи, яких ще немає (дедуп по змісту).
+// ВАЖЛИВО: id з файлу переозначуються, тому ведемо мапи старий→новий і
+// перешиваємо ВСІ перехресні посилання (задача→зона, пріоритети→задачі,
+// блоки шаблонів/правил→зони, графіки→шаблони дня). Інакше після відновлення
+// на чистому встановленні пріоритети й прив'язки до зон мовчки гублися.
 function mergeState(d){
   if(!d || typeof d!=='object') return 0;
   var added=0;
+  var zoneMap={}, taskMap={}, tplMap={};
+  // ── 1. Зони (першими — на них посилаються задачі/шаблони/план) ──
+  if(Array.isArray(d.zones)) d.zones.forEach(function(z){
+    if(!z||!z.nm||z.id===undefined) return;
+    var ex=S.zones.find(function(x){ return x.nm===z.nm; });
+    if(ex){ zoneMap[z.id]=ex.id; return; }
+    var nz=JSON.parse(JSON.stringify(z));
+    nz.id=S.zones.reduce(function(m,x){ return Math.max(m,x.id||0); },0)+1;
+    zoneMap[z.id]=nz.id;
+    S.zones.push(nz); added++;
+  });
+  function zid(old){ return zoneMap[old]!==undefined ? zoneMap[old] : old; }
+  // ── 2. Папки (id не переозначуються — рядкові, унікальні за змістом) ──
+  if(Array.isArray(d.folders)) d.folders.forEach(function(f){
+    if(!f||!f.id) return;
+    if(S.folders.some(function(x){ return x.id===f.id; })) return;
+    S.folders.push(JSON.parse(JSON.stringify(f))); added++;
+  });
+  // ── 3. Задачі (мапа старий id → новий, перешиваємо зону) ──
   if(Array.isArray(d.tasks)) d.tasks.forEach(function(t){
     if(!t||!t.title) return;
-    var dup=S.tasks.some(function(x){ return x.title===t.title && (x.type||'simple')===(t.type||'simple') && !!x.someday===!!t.someday && !x.trashed; });
-    if(dup) return;
-    var nt=JSON.parse(JSON.stringify(t)); nt.id=S.nid++; nt.trashed=false;
+    var ex=S.tasks.find(function(x){ return x.title===t.title && (x.type||'simple')===(t.type||'simple') && !!x.someday===!!t.someday && !x.trashed; });
+    if(ex){ if(t.id!==undefined) taskMap[t.id]=ex.id; return; }
+    var nt=JSON.parse(JSON.stringify(t));
+    if(t.id!==undefined) taskMap[t.id]=S.nid;
+    nt.id=S.nid++; nt.trashed=false;
+    if(nt.zoneId) nt.zoneId=zid(nt.zoneId);
     S.tasks.push(nt); added++;
+  });
+  // ── 4. Пріоритети (посилання на задачі — через мапу; не перезаписуємо зайняті слоти) ──
+  if(Array.isArray(d.priorities)) d.priorities.forEach(function(pid,i){
+    if(!pid || i>2 || S.priorities[i]) return;
+    var nid=taskMap[pid];
+    if(nid && !S.priorities.some(function(x){return x===nid;})){ S.priorities[i]=nid; added++; }
   });
   if(Array.isArray(d.qnotes)) d.qnotes.forEach(function(n){
     if(!n||!n.txt) return;
     if(S.qnotes.some(function(x){ return x.txt===n.txt; })) return;
     var nn=JSON.parse(JSON.stringify(n)); nn.id=qnid++;
     S.qnotes.push(nn); added++;
-  });
-  if(Array.isArray(d.zones)) d.zones.forEach(function(z){
-    if(!z||!z.nm) return;
-    if(S.zones.some(function(x){ return x.nm===z.nm; })) return;
-    var nz=JSON.parse(JSON.stringify(z));
-    nz.id=S.zones.reduce(function(m,x){ return Math.max(m,x.id||0); },0)+1;
-    S.zones.push(nz); added++;
-  });
-  if(Array.isArray(d.folders)) d.folders.forEach(function(f){
-    if(!f||!f.id) return;
-    if(S.folders.some(function(x){ return x.id===f.id; })) return;
-    S.folders.push(JSON.parse(JSON.stringify(f))); added++;
   });
   if(Array.isArray(d.recur)) d.recur.forEach(function(r){
     if(!r||!r.nm) return;
@@ -2691,18 +2722,33 @@ function mergeState(d){
   if(Array.isArray(d.focusChips)) d.focusChips.forEach(function(c){
     if(c && S.focusChips.indexOf(c)<0){ S.focusChips.push(c); added++; }
   });
+  // ── 5. Шаблони дня (мапа старий→новий, перешиваємо зони у блоках) ──
   if(Array.isArray(d.dayTemplates)){ if(!S.dayTemplates) S.dayTemplates=[]; d.dayTemplates.forEach(function(tpl){
     if(!tpl||!tpl.name) return;
-    if(S.dayTemplates.some(function(x){return x.name===tpl.name;})) return;
+    var ex=S.dayTemplates.find(function(x){return x.name===tpl.name;});
+    if(ex){ if(tpl.id) tplMap[tpl.id]=ex.id; return; }
     var nt=JSON.parse(JSON.stringify(tpl)); nt.id='tpl'+Date.now()+Math.floor(Math.random()*1e4);
+    if(tpl.id) tplMap[tpl.id]=nt.id;
+    (nt.blocks||[]).forEach(function(b){ b.zoneId=zid(b.zoneId); });
     S.dayTemplates.push(nt); added++;
   }); }
+  function tid(old){ return tplMap[old]!==undefined ? tplMap[old] : old; }
+  // ── 6. Графіки тижня та застосовані правила (перешиваємо посилання на шаблони) ──
   if(Array.isArray(d.weekTemplates)){ if(!S.weekTemplates) S.weekTemplates=[]; d.weekTemplates.forEach(function(tpl){
     if(!tpl||!tpl.name||!Array.isArray(tpl.days)) return;
     if(S.weekTemplates.some(function(x){return x.name===tpl.name;})) return;
     var nt=JSON.parse(JSON.stringify(tpl)); nt.id='wk'+Date.now()+Math.floor(Math.random()*1e4);
+    nt.days.forEach(function(e){ if(e&&e.tplId) e.tplId=tid(e.tplId); });
     S.weekTemplates.push(nt); added++;
   }); }
+  if(Array.isArray(d.planRules)){ if(!planRules) planRules=[]; d.planRules.forEach(function(r){
+    if(!r||!r.start||!Array.isArray(r.days)) return;
+    if(planRules.some(function(x){ return x.start===r.start&&x.end===r.end&&x.name===r.name; })) return;
+    var nr=JSON.parse(JSON.stringify(r));
+    nr.days.forEach(function(e){ if(e&&e.tplId) e.tplId=tid(e.tplId); });
+    planRules.push(nr); added++;
+  }); }
+  // ── 7. План по днях (перешиваємо зони) ──
   if(d.planItems && typeof d.planItems==='object') Object.keys(d.planItems).forEach(function(ds){
     var arr=d.planItems[ds]; if(!Array.isArray(arr)) return;
     if(!planItems[ds]) planItems[ds]=[];
@@ -2717,20 +2763,16 @@ function mergeState(d){
     if(!planDayZones[ds]) planDayZones[ds]=[];
     arr.forEach(function(b){
       if(!b) return;
-      if(planDayZones[ds].some(function(x){ return x.zoneId===b.zoneId && x.s===b.s && x.e===b.e; })) return;
-      planDayZones[ds].push(JSON.parse(JSON.stringify(b))); added++;
+      var nb=JSON.parse(JSON.stringify(b)); nb.zoneId=zid(nb.zoneId);
+      if(planDayZones[ds].some(function(x){ return x.zoneId===nb.zoneId && x.s===nb.s && x.e===nb.e; })) return;
+      planDayZones[ds].push(nb); added++;
     });
   });
   if(d.planDayOff && typeof d.planDayOff==='object') Object.keys(d.planDayOff).forEach(function(ds){
     var arr=d.planDayOff[ds]; if(!Array.isArray(arr)) return;
     if(!planDayOff[ds]) planDayOff[ds]=[];
-    arr.forEach(function(zid){ if(planDayOff[ds].indexOf(zid)<0){ planDayOff[ds].push(zid); added++; } });
+    arr.forEach(function(z){ var nz=zid(z); if(planDayOff[ds].indexOf(nz)<0){ planDayOff[ds].push(nz); added++; } });
   });
-  if(Array.isArray(d.planRules)){ if(!planRules) planRules=[]; d.planRules.forEach(function(r){
-    if(!r||!r.start||!Array.isArray(r.days)) return;
-    if(planRules.some(function(x){ return x.start===r.start&&x.end===r.end&&x.name===r.name; })) return;
-    planRules.push(JSON.parse(JSON.stringify(r))); added++;
-  }); }
   return added;
 }
 
@@ -2745,7 +2787,7 @@ function importPickedFile(input){
     if(!d){ alert('✗ Не вдалося прочитати файл. Потрібен JSON-файл експорту Потік (flow-backup-*.json).'); return; }
     var added = mergeState(d);
     saveState();
-    renderTasks(); renderRecur(); renderZones(); renderQN();
+    renderTasks(); renderRecur(); renderZones(); renderQN(); renderFolderTabs();
     renderSomeday(); renderPlanner(); renderPrios(); renderFocusChips(); updXP();
     updateClock();
     alert(added>0 ? ('✓ Додано нових елементів: '+added) : 'Нічого нового — усе з файлу вже є у застосунку');
@@ -3153,7 +3195,11 @@ renderZones = function() {
       (z.desc?'<div class="zdesc">'+z.desc+'</div>':'')+
       _zoneModeHtml(z)+
       (off&&z.off?'<div class="zdesc" style="color:var(--t3)">💤 вимкнена вручну</div>':'')+
-      (linked.length?'<div class="zdesc" style="color:var(--z)">🔗 '+linked.map(function(t){ return t.title; }).join(', ')+'</div>':'')+
+      (linked.length?'<div class="zdesc" style="color:var(--z)">'+linked.map(function(t){
+        return '🔗 '+t.title+
+          ' <span onclick="openEdit('+t.id+')" title="Редагувати" style="cursor:pointer;padding:0 2px">✎</span>'+
+          '<span onclick="delTask('+t.id+');renderZones()" title="Видалити" style="color:var(--t3);cursor:pointer;padding:0 2px">✕</span>';
+      }).join('<br>')+'</div>':'')+
       '</div>'+
       '<div class="rt-sw'+(off?'':' on')+'" onclick="toggleZoneOff('+z.id+')" title="'+(off?'Увімкнути':'Вимкнути')+'" style="cursor:pointer;flex-shrink:0;margin-right:4px"></div>'+
       '<button class="zedit-btn" onclick="openZoneEdit('+z.id+')">✎ Ред.</button>'+
