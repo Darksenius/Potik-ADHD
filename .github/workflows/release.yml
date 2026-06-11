@@ -50,7 +50,16 @@ jobs:
         run: cp android/app/build/outputs/apk/release/app-release.apk Potik-${{ github.ref_name }}.apk
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: Potik-*.apk
           generate_release_notes: true
+
+      # При ручному запуску (без тега) — просто прикріпити APK як артефакт
+      - name: Upload artifact (manual run)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Potik-apk
+          path: Potik-*.apk

@@ -1186,9 +1186,15 @@ var LS_KEY='flow_v2';
 var planWeekOffset=0, planSelectedDay=null;
 var planItems={}, planRestDays={}, planSchedules={}, planDayLog={};
 // Часові зони, заплановані під конкретний день: { 'YYYY-MM-DD': [{zoneId,s,e}] }
+// Тут живуть ЛИШЕ ручні правки конкретних днів. Масова розмітка (графіки 5/2 тощо)
+// зберігається правилами у planRules і розгортається на льоту через dayBlocks(ds).
 var planDayZones={};
 // Щоденні (безстрокові) зони, вимкнені на конкретний день: { 'YYYY-MM-DD': [zoneId,...] }
 var planDayOff={};
+// Правила розмітки: [{id, name, start:'YYYY-MM-DD', end:'YYYY-MM-DD', days:[{tplId,rest}]}]
+// Одне правило = застосований графік на період (замість тисяч записів по днях).
+// При перетині пізніше правило перекриває раніше. Ручні правки дня сильніші за правило.
+var planRules=[];
 
 // ── CONSTANTS ──
 var TL={simple:'Проста',check:'Чекліст',counter:'Лічильник',note:'Нотатка',alarm:'Будильник',sched:'Заплановано',timewin:'Вікно часу',habit:'Звичка',kid:'Дитяча',negative:'Шкідлива',zonelinked:'До зони'};
@@ -1274,8 +1280,8 @@ function getZones(hm){
     if(dayOff.indexOf(z.id)>=0)return;       // щоденна, але вимкнена саме на сьогодні
     (z.slots||[]).forEach(function(sl){var s=toMin(sl.s),e=toMin(sl.e);if(e===0)e=1440;if(cur>=s&&cur<e&&!found.find(function(f){return f.id===z.id;}))found.push(z);});
   });
-  // Часові зони, заплановані САМЕ на сьогодні (планувальник) — мають пріоритет
-  (planDayZones[todayStr]||[]).forEach(function(b){
+  // Часові зони, заплановані САМЕ на сьогодні (ручні правки дня АБО правило-графік)
+  ((typeof dayBlocks==='function'?dayBlocks(todayStr):planDayZones[todayStr])||[]).forEach(function(b){
     var s=toMin(b.s),e=toMin(b.e); if(e===0)e=1440;
     if(cur>=s&&cur<e){
       var z=S.zones.find(function(zz){return zz.id===b.zoneId;});
@@ -1318,6 +1324,29 @@ function updateZoneActive(){
     (tp.blocks||[]).forEach(function(b){
       var x=u(b.zoneId); x.bound=true;
       if(x.tpls.indexOf(tp.name)<0) x.tpls.push(tp.name);
+    });
+  });
+  // Правила-графіки: дають зонам минуле/майбутнє і найближчу дату дії
+  (planRules||[]).forEach(function(r){
+    var len=r.days.length;
+    r.days.forEach(function(e,idx){
+      if(!e||!e.tplId) return;
+      var tp=(S.dayTemplates||[]).find(function(t){return t.id===e.tplId;}); if(!tp) return;
+      (tp.blocks||[]).forEach(function(b){
+        var x=u(b.zoneId); x.bound=true;
+        if(r.start<today){ x.past=true; var lp=r.end<today?r.end:addDaysDs(today,-1); if(lp>x.lastDs)x.lastDs=lp; }
+        if(r.end>=today){
+          var from=today>r.start?today:r.start;
+          for(var k=0;k<len;k++){
+            var ds2=addDaysDs(from,k); if(ds2>r.end)break;
+            if(ruleIdx(r,ds2)===idx){
+              x.future=true;
+              if(!x.nextDs||ds2<x.nextDs||(ds2===x.nextDs&&b.s<x.nextS)){ x.nextDs=ds2; x.nextS=b.s; }
+              break;
+            }
+          }
+        }
+      });
     });
   });
   S.zones.forEach(function(z){
@@ -2634,6 +2663,11 @@ function mergeState(d){
     if(!planDayOff[ds]) planDayOff[ds]=[];
     arr.forEach(function(zid){ if(planDayOff[ds].indexOf(zid)<0){ planDayOff[ds].push(zid); added++; } });
   });
+  if(Array.isArray(d.planRules)){ if(!planRules) planRules=[]; d.planRules.forEach(function(r){
+    if(!r||!r.start||!Array.isArray(r.days)) return;
+    if(planRules.some(function(x){ return x.start===r.start&&x.end===r.end&&x.name===r.name; })) return;
+    planRules.push(JSON.parse(JSON.stringify(r))); added++;
+  }); }
   return added;
 }
 
@@ -3068,12 +3102,48 @@ function fmtHuman(d){
   return wd[d.getDay()]+', '+d.getDate()+' '+mo[d.getMonth()];
 }
 function weekShift(dir){ planWeekOffset+=dir; renderPlanner(); }
+
+// ── ПРАВИЛА РОЗМІТКИ (розгортання графіків на льоту) ──
+function addDaysDs(ds,k){ var d=new Date(ds+'T12:00:00'); d.setDate(d.getDate()+k); return fmtDate(d); }
+function daysBetweenDs(a,b){ return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5); }
+// Останнє (найновіше) правило, що покриває день
+function ruleFor(ds){
+  var r=null;
+  (planRules||[]).forEach(function(x){ if(ds>=x.start&&ds<=x.end) r=x; });
+  return r;
+}
+// Індекс дня в циклі правила: 7 днів → прив'язка до Пн–Нд, інакше цикл від старту
+function ruleIdx(r,ds){
+  if(r.days.length===7){ return (new Date(ds+'T12:00:00').getDay()+6)%7; }
+  return ((daysBetweenDs(r.start,ds)%r.days.length)+r.days.length)%r.days.length;
+}
+function ruleEntry(r,ds){ return r?r.days[ruleIdx(r,ds)]:null; }
+// Ефективні зони дня: ручні правки (planDayZones) сильніші за правило
+function dayBlocks(ds){
+  if(planDayZones[ds]) return planDayZones[ds];
+  var e=ruleEntry(ruleFor(ds),ds);
+  if(!e||!e.tplId) return [];
+  var tp=(S.dayTemplates||[]).find(function(t){return t.id===e.tplId;});
+  return tp?(tp.blocks||[]).map(function(b){return {zoneId:b.zoneId,s:b.s,e:b.e};}):[];
+}
+// Вихідний: ручний прапорець (true/false) сильніший за правило
+function dayIsRest(ds){
+  if(planRestDays[ds]!==undefined&&planRestDays[ds]!==null) return !!planRestDays[ds];
+  var e=ruleEntry(ruleFor(ds),ds);
+  return !!(e&&e.rest);
+}
+// Copy-on-write: перед ручною правкою дня, керованого правилом, зафіксувати його блоки
+function materializeDay(ds){
+  if(!planDayZones[ds]) planDayZones[ds]=dayBlocks(ds).slice();
+  return planDayZones[ds];
+}
 function renderPlanner(){
   // Guard: колекції можуть бути undefined через порядок ініціалізації/старі збереження
   if(typeof planItems==='undefined'||!planItems) planItems={};
   if(typeof planRestDays==='undefined'||!planRestDays) planRestDays={};
   if(typeof planSchedules==='undefined'||!planSchedules) planSchedules={};
   if(typeof planDayZones==='undefined'||!planDayZones) planDayZones={};
+  if(typeof planRules==='undefined'||!planRules) planRules=[];
   if(typeof planWeekOffset!=='number'||isNaN(planWeekOffset)) planWeekOffset=0;
   if(!planSelectedDay) planSelectedDay=fmtDate(new Date());
   var mon=getWeekStart(planWeekOffset), today=fmtDate(new Date());
@@ -3084,7 +3154,7 @@ function renderPlanner(){
   pw.innerHTML='';
   for(var i=0;i<7;i++){
     var d=new Date(mon); d.setDate(mon.getDate()+i);
-    var ds=fmtDate(d), isToday=ds===today, isWE=i>=5, isRest=!!planRestDays[ds];
+    var ds=fmtDate(d), isToday=ds===today, isWE=i>=5, isRest=dayIsRest(ds);
     var items=planItems[ds]||[];
     var div=document.createElement('div');
     div.className='plan-day'+(isToday?' today':'')+(isWE&&!isRest?' weekend-day':'')+(isRest?' rest-day':'')+(planSelectedDay===ds?' sel':'');
@@ -3092,7 +3162,7 @@ function renderPlanner(){
     var hasTasks=(items||[]).some(function(it){return !it.isEvent;});
     var sched=planSchedules[ds]||'';
     // кольорові крапки запланованих зон дня
-    var _zc=[]; (planDayZones[ds]||[]).forEach(function(b){ var z=S.zones.find(function(z){return z.id===b.zoneId;}); if(z&&_zc.indexOf(z.color)<0)_zc.push(z.color); });
+    var _zc=[]; dayBlocks(ds).forEach(function(b){ var z=S.zones.find(function(z){return z.id===b.zoneId;}); if(z&&_zc.indexOf(z.color)<0)_zc.push(z.color); });
     var zstrip=_zc.length?'<div class="pd-zstrip">'+_zc.slice(0,4).map(function(c){return '<span style="background:'+c+'"></span>';}).join('')+'</div>':'';
     div.innerHTML='<div class="pd-wd">'+dw[i]+'</div><div class="pd-num">'+d.getDate()+'</div>'+
       (isRest?'<div class="pd-rest">вих</div>':
@@ -3107,9 +3177,10 @@ function renderPlanner(){
   if(planSelectedDay) renderPlanDetail(planSelectedDay);
 }
 function planSelDay(ds){
+  // Без scrollIntoView: автопрокрутка совала інтерфейс при перемиканні днів (репорт 11.06)
   planSelectedDay=ds; renderPlanner();
   var det=document.getElementById('plan-detail');
-  if(det){ det.classList.add('open'); setTimeout(function(){det.scrollIntoView({behavior:'smooth',block:'nearest'});},50); }
+  if(det) det.classList.add('open');
 }
 // ── PLAN TEMPLATES & EVENTS ──
 // Daily log: {date: {focus:[...], energy:N, routineDone:{...}, priorities:[...], tasksDone:N}}
@@ -3164,7 +3235,7 @@ function renderPlanDetail(ds){
   try {
   var det=document.getElementById('plan-detail'); if(!det) return;
   det.classList.add('open');
-  var d=new Date(ds+'T12:00:00'), isRest=!!planRestDays[ds], items=planItems[ds]||[];
+  var d=new Date(ds+'T12:00:00'), isRest=dayIsRest(ds), items=planItems[ds]||[];
   var todayStr=fmtDate(new Date());
   var isPast=ds<todayStr, isFuture=ds>todayStr;
   var sched=planSchedules[ds]||'';
@@ -3206,7 +3277,7 @@ function renderPlanDetail(ds){
   // Події та часові зони — праворуч (контекст дня)
   var _jrRight=[];
   (planItems[ds]||[]).filter(function(it){return it.isEvent;}).forEach(function(it){ _jrRight.push({ic:'🎉',tx:(it.time?it.time+' ':'')+it.title}); });
-  (planDayZones[ds]||[]).forEach(function(b){ var z=S.zones.find(function(z){return z.id===b.zoneId;}); _jrRight.push({ic:'🕐',tx:(z?z.nm:'зона')+' '+b.s+'–'+b.e}); });
+  dayBlocks(ds).forEach(function(b){ var z=S.zones.find(function(z){return z.id===b.zoneId;}); _jrRight.push({ic:'🕐',tx:(z?z.nm:'зона')+' '+b.s+'–'+b.e}); });
   var journalHtml='<div class="pd-journal">'+
     '<div class="pd-jrnl-h">📜 Журнал дня <span style="color:var(--t3);font-weight:400;text-transform:none;letter-spacing:0">· '+_jr.length+'</span></div>'+
     _jrRight.map(function(e){ return '<div class="jrow jrow-r"><span class="jtxt jtxt-r">'+e.tx+'</span><span class="jic">'+e.ic+'</span></div>'; }).join('')+
@@ -3215,8 +3286,13 @@ function renderPlanDetail(ds){
     }).join('') : (_jrRight.length?'':'<div style="font-size:11px;color:var(--t3);padding:4px 0 4px 11px">Поки порожньо — виконуй задачі, лови нотатки, відмічай фокус.</div>'))+
   '</div>';
 
-  // ── ЧАСОВІ ЗОНИ ДНЯ (повна розкладка: щоденні + планові) ──
-  var dayZones=planDayZones[ds]||[];
+  // ── ЧАСОВІ ЗОНИ ДНЯ (повна розкладка: щоденні + планові/за правилом) ──
+  var dayZones=dayBlocks(ds);
+  var _dayRule=ruleFor(ds), _dayExplicit=!!planDayZones[ds];
+  // звідки взялася розмітка дня + кнопка повернення до графіка після ручних правок
+  var srcHint='';
+  if(_dayExplicit&&_dayRule) srcHint='<div style="font-size:10px;color:var(--t3);padding:1px 0 4px">✍ ручні правки · <span onclick="dayResetToRule()" style="color:var(--z);cursor:pointer;text-decoration:underline">повернути графік «'+_dayRule.name+'»</span></div>';
+  else if(_dayRule&&dayZones.length) srcHint='<div style="font-size:10px;color:var(--t3);padding:1px 0 4px">📋 за графіком «'+_dayRule.name+'» — правка створить виняток лише для цього дня</div>';
   var _zsort=S.zones.slice().sort(function(a,b){return (a.active===false?1:0)-(b.active===false?1:0);});
   var zoneOpts='<option value="">— зона —</option>'+_zsort.map(function(z){return '<option value="'+z.id+'">'+z.nm+(z.active===false?' 💤':'')+'</option>';}).join('');
   var _dayOffArr=planDayOff[ds]||[];
@@ -3237,7 +3313,7 @@ function renderPlanDetail(ds){
   }).join('');
   var zonesHtml='<div style="margin:4px 0 8px">'+
     '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">🕐 Часові зони дня</div>'+
-    dailyHtml+offHtml+
+    srcHint+dailyHtml+offHtml+
     dayZones.map(function(b,i){
       var z=S.zones.find(function(z){return z.id===b.zoneId;});
       return '<div class="plan-task-row" style="border-left:3px solid '+(z?z.color:'#888')+'">'+
@@ -3308,14 +3384,20 @@ function saveDayZone(){
   var zsel=document.getElementById('pdz-zone'); var zid=zsel?parseInt(zsel.value):0;
   var s=(document.getElementById('pdz-s')||{}).value, e=(document.getElementById('pdz-e')||{}).value;
   if(!zid||!s||!e){ return; }
-  if(!planDayZones[ds]) planDayZones[ds]=[];
-  planDayZones[ds].push({zoneId:zid,s:s,e:e});
+  materializeDay(ds).push({zoneId:zid,s:s,e:e});
   updateZoneActive(); renderPlanDetail(ds); renderPlanner(); queueSave(); updateClock();
 }
 function rmDayZone(i){
-  var ds=planSelectedDay; if(!ds||!planDayZones[ds]) return;
-  planDayZones[ds].splice(i,1);
-  if(!planDayZones[ds].length) delete planDayZones[ds];
+  var ds=planSelectedDay; if(!ds) return;
+  // День під правилом: спершу фіксуємо його блоки як ручні (copy-on-write), тоді правимо.
+  // Порожній масив НЕ видаляємо — це явний «день без зон», інакше правило воскресне.
+  materializeDay(ds).splice(i,1);
+  updateZoneActive(); renderPlanDetail(ds); renderPlanner(); queueSave(); updateClock();
+}
+// Прибрати ручні правки дня — повернутися до розмітки за правилом-графіком
+function dayResetToRule(){
+  var ds=planSelectedDay; if(!ds) return;
+  delete planDayZones[ds]; delete planRestDays[ds]; delete planDayOff[ds];
   updateZoneActive(); renderPlanDetail(ds); renderPlanner(); queueSave(); updateClock();
 }
 // ── Щоденні зони в конкретному дні (override лише на день) ──
@@ -3336,8 +3418,8 @@ function dayRestoreDaily(zid){
 function dayEditDaily(zid){
   var ds=planSelectedDay; if(!ds) return;
   var z=S.zones.find(function(z){return z.id===zid;}); if(!z) return;
-  if(!planDayZones[ds]) planDayZones[ds]=[];
-  (z.slots||[]).forEach(function(sl){ planDayZones[ds].push({zoneId:zid,s:sl.s,e:sl.e,ov:true}); });
+  var arr=materializeDay(ds);
+  (z.slots||[]).forEach(function(sl){ arr.push({zoneId:zid,s:sl.s,e:sl.e,ov:true}); });
   if(!planDayOff[ds]) planDayOff[ds]=[];
   if(planDayOff[ds].indexOf(zid)<0) planDayOff[ds].push(zid);
   updateZoneActive(); renderPlanDetail(ds); renderPlanner(); queueSave(); lastZoneId=-1; updateClock();
@@ -3345,7 +3427,7 @@ function dayEditDaily(zid){
 // ── Шаблони дня (іменований набір часових зон) ──
 function saveDayTemplate(){
   var ds=planSelectedDay; if(!ds) return;
-  var blocks=(planDayZones[ds]||[]).map(function(b){return {zoneId:b.zoneId,s:b.s,e:b.e};});
+  var blocks=dayBlocks(ds).map(function(b){return {zoneId:b.zoneId,s:b.s,e:b.e};});
   if(!blocks.length){ alert('Спочатку додай хоча б одну часову зону дня — тоді її можна зберегти як шаблон.'); return; }
   var name=prompt('Назва шаблону дня (напр. «Робочий день»):'); if(!name) return; name=name.trim(); if(!name) return;
   if(!S.dayTemplates) S.dayTemplates=[];
@@ -3417,9 +3499,18 @@ function renderWeekCtor(){
       '<button class="wkc-btn" onclick="wkcEdit(\''+tp.id+'\')">✎</button>'+
       '<button class="wkc-btn" onclick="wkcDel(\''+tp.id+'\')">✕</button></div>';
   }).join('');
+  var fmtDsShort=function(ds){ return fmtHuman(new Date(ds+'T12:00:00')); };
+  var rulesHtml=(planRules||[]).length?
+    '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:9px 0 3px">✓ Застосовано</div>'+
+    (planRules||[]).map(function(r,i){
+      return '<div class="wkc-row"><span class="wkc-nm">'+r.name+'</span>'+
+        '<span style="font-size:10px;color:var(--t2);flex:1">'+fmtDsShort(r.start)+' → '+fmtDsShort(r.end)+'</span>'+
+        '<button class="wkc-btn" onclick="wkcRuleDel('+i+')">✕</button></div>';
+    }).join(''):'';
   el.innerHTML=head+'<div class="wkc-body open">'+
     '<div style="font-size:10px;color:var(--t3);margin-bottom:5px">Обери графік і застосуй на період — зони ляжуть по днях самі. ▶ — застосувати.</div>'+
     (list||'<div style="font-size:11px;color:var(--t3);padding:4px 0">Ще немає графіків — створи перший</div>')+
+    rulesHtml+
     (wkcApplyId?_wkcApplyHtml():'')+
     (wkcDraft?_wkcEditorHtml():'')+
     (wkcDraft?'':'<button class="pdd-add" style="margin-top:8px" onclick="wkcNew()">+ Новий графік</button>')+
@@ -3491,27 +3582,32 @@ function _wkcApplyHtml(){
     (tp.days.length===7?'<div style="font-size:10px;color:var(--t3);margin-top:5px">Графік на 7 днів — кожен день стане на свій Пн–Нд автоматично.</div>':'')+
   '</div>';
 }
+// Застосування графіка = ОДНЕ правило {name,start,end,days} замість запису на кожен
+// день (рік розмітки — один маленький об'єкт у збереженні). Дні розгортаються на
+// льоту через dayBlocks()/dayIsRest(). Ручні правки днів у періоді стираються.
 function wkcDoApply(){
   var tp=(S.weekTemplates||[]).find(function(x){return x.id===wkcApplyId;});
   if(!tp||!(tp.days||[]).length) return;
   var sEl=document.getElementById('wkc-start'), spEl=document.getElementById('wkc-span');
   var startDs=(sEl&&sEl.value)||fmtDate(new Date());
   var span=parseInt(spEl&&spEl.value)||28;
-  var start=new Date(startDs+'T12:00:00');
-  var len=tp.days.length, overwrite=0, i, d, ds;
-  for(i=0;i<span;i++){ d=new Date(start); d.setDate(start.getDate()+i); ds=fmtDate(d); if((planDayZones[ds]||[]).length) overwrite++; }
-  var end=new Date(start); end.setDate(start.getDate()+span-1);
-  if(!confirm('Застосувати «'+tp.name+'» з '+fmtHuman(start)+' по '+fmtHuman(end)+' ('+span+' дн.)?'+(overwrite?'\nЗони, вже заплановані на '+overwrite+' дн., буде замінено.':''))) return;
-  for(i=0;i<span;i++){
-    d=new Date(start); d.setDate(start.getDate()+i); ds=fmtDate(d);
-    var idx=(len===7)?((d.getDay()+6)%7):(i%len);
-    var e=tp.days[idx];
-    var dt=e&&e.tplId?(S.dayTemplates||[]).find(function(x){return x.id===e.tplId;}):null;
-    if(dt&&(dt.blocks||[]).length) planDayZones[ds]=dt.blocks.map(function(b){return {zoneId:b.zoneId,s:b.s,e:b.e};});
-    else delete planDayZones[ds];
-    if(e&&e.rest) planRestDays[ds]=true; else delete planRestDays[ds];
-  }
+  var endDs=addDaysDs(startDs,span-1);
+  var manual=0, i, ds;
+  for(i=0;i<span;i++){ ds=addDaysDs(startDs,i); if(planDayZones[ds]||planRestDays[ds]!==undefined||planDayOff[ds]) manual++; }
+  if(!confirm('Застосувати «'+tp.name+'» з '+fmtHuman(new Date(startDs+'T12:00:00'))+' по '+fmtHuman(new Date(endDs+'T12:00:00'))+' ('+span+' дн.)?'+(manual?'\nРучні правки на '+manual+' дн. буде стерто.':''))) return;
+  for(i=0;i<span;i++){ ds=addDaysDs(startDs,i); delete planDayZones[ds]; delete planRestDays[ds]; delete planDayOff[ds]; }
+  if(!planRules) planRules=[];
+  // правила, повністю накриті новим періодом, більше нічого не вирішують — геть
+  planRules=planRules.filter(function(r){ return !(r.start>=startDs&&r.end<=endDs); });
+  planRules.push({id:'pr'+Date.now(), name:tp.name, start:startDs, end:endDs, days:JSON.parse(JSON.stringify(tp.days))});
   wkcApplyId=null;
+  updateZoneActive(); renderPlanner(); renderZones(); updZoneSel();
+  lastZoneId=-1; updateClock(); queueSave();
+}
+function wkcRuleDel(i){
+  var r=(planRules||[])[i]; if(!r) return;
+  if(!confirm('Прибрати графік «'+r.name+'» ('+r.start+' → '+r.end+')? Дні цього періоду стануть нерозміченими (ручні правки днів залишаться).')) return;
+  planRules.splice(i,1);
   updateZoneActive(); renderPlanner(); renderZones(); updZoneSel();
   lastZoneId=-1; updateClock(); queueSave();
 }
@@ -3528,7 +3624,9 @@ function planNewZone(){
 }
 function planTogRest(){
   var ds=planSelectedDay; if(!ds) return;
-  planRestDays[ds]=!planRestDays[ds];
+  // Явний override поверх правила-графіка (true/false), збереження — одразу
+  planRestDays[ds]=!dayIsRest(ds);
+  queueSave();
   if(planRestDays[ds]&&!(planItems[ds]||[]).find(function(i){return i.title.includes('заплануй');})){
     if(!planItems[ds])planItems[ds]=[];
     planItems[ds].push({title:'📋 Заплануй наступний тиждень',done:false});
@@ -3884,6 +3982,7 @@ function collectState() {
     planSchedules: planSchedules||{},
     planDayZones: planDayZones||{},
     planDayOff: planDayOff||{},
+    planRules: planRules||[],
     planDayLog: planDayLog||{},
     rareEvents: S.rareEvents||[],
     dayTemplates: S.dayTemplates||[],
@@ -3944,6 +4043,7 @@ function applyState(d) {
   if(d.planSchedules && typeof d.planSchedules === 'object') planSchedules = d.planSchedules;
   if(d.planDayZones  && typeof d.planDayZones  === 'object') planDayZones  = d.planDayZones;
   if(d.planDayOff    && typeof d.planDayOff    === 'object') planDayOff    = d.planDayOff;
+  if(Array.isArray(d.planRules)) planRules = d.planRules;
   if(d.planDayLog    && typeof d.planDayLog    === 'object') planDayLog    = d.planDayLog;
   // Нормалізуємо лічильники id, щоб нові задачі/нотатки не конфліктували
   S.tasks.forEach(function(t){ if(t.id >= S.nid) S.nid = t.id + 1; });
