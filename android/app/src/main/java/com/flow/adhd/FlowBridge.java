@@ -36,6 +36,8 @@ public class FlowBridge {
         String state = dao.getStateJson();
         if (state == null) state = "";
         dao.saveState(new AppState(state, notifJson));
+        // знімок оновився → перепланувати точний будильник на найближчу задачу
+        try { FlowAlarmReceiver.scheduleNextDue(ctx, this); } catch (Exception ignored) {}
     }
 
     /** window.FlowBridge.load() — повертає повний стан */

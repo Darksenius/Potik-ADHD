@@ -744,6 +744,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 <div id="notes-sec" class="tsec">
   <div class="np-wrap">
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="exportReadable()" title="Читабельний текст (.md) — для очей, не для імпорту" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:4px 13px;font-size:11px;color:var(--t2);cursor:pointer;font-family:'Syne',sans-serif">📄 Текстом</button>
       <button onclick="exportBackup()" title="Зберегти все у файл (.json)" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:4px 13px;font-size:11px;color:var(--t2);cursor:pointer;font-family:'Syne',sans-serif">↓ Експорт</button>
       <button onclick="document.getElementById('import-file').click()" title="Додати задачі/нотатки з файлу (не замінює наявні)" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:4px 13px;font-size:11px;color:var(--t2);cursor:pointer;font-family:'Syne',sans-serif">↑ Імпорт</button>
       <input type="file" id="import-file" accept="application/json,.json,.txt" style="display:none" onchange="importPickedFile(this)">
@@ -2428,8 +2429,9 @@ function editQN(id){
     placeholder:'Редагуй текст...',
     initialValue: n.txt,
     showTaskHint:false,
-    onSend:function(txt){
-      if(txt.trim()){n.txt=txt.trim();renderQN();renderWQN();}
+    folderSel: n.folder||'general',
+    onSend:function(txt, folder){
+      if(txt.trim()){ n.txt=txt.trim(); if(folder) n.folder=folder; renderQN(); renderWQN(); queueSave(); }
     }
   });
 }
@@ -2576,6 +2578,67 @@ function exportBackup(){
     try { window.FlowBridge.exportTxt(fname, json); return; } catch(e){ /* fallback */ }
   }
   var blob=new Blob([json],{type:'application/json;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download=fname;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// Експорт ЧИТАБЕЛЬНИЙ (Markdown) — для людей, терапевта, переглядання очима.
+// Це не резервна копія: імпорт читає лише JSON.
+function exportReadable(){
+  var L=[], today=fmtDate(new Date()), now=new Date();
+  L.push('# Потік — експорт '+today+' '+now.toLocaleTimeString('uk',{hour:'2-digit',minute:'2-digit'}));
+  L.push('');
+  // Пріоритети
+  var prios=(S.priorities||[]).filter(function(x){return x;}).map(function(id){
+    var t=S.tasks.find(function(t){return t.id===id;}); return t?t.title:null;
+  }).filter(Boolean);
+  if(prios.length){ L.push('## 🎯 Пріоритети'); prios.forEach(function(p){L.push('1. '+p);}); L.push(''); }
+  // Задачі
+  var act=S.tasks.filter(function(t){return !t.done&&!t.someday&&!t.trashed;});
+  var don=S.tasks.filter(function(t){return t.done&&!t.trashed;});
+  var idea=S.tasks.filter(function(t){return t.someday&&!t.trashed;});
+  L.push('## ✅ Задачі');
+  if(act.length){ L.push('### Активні ('+act.length+')');
+    act.forEach(function(t){ L.push('- [ ] '+t.title+(t.zoneName?' · 🕐 '+t.zoneName:'')+(t.schedDate?' · 📅 '+t.schedDate+' '+(t.schedTime||''):'')+(t.alarmTime?' · ⏰ '+t.alarmTime:'')); }); L.push(''); }
+  if(don.length){ L.push('### Виконані ('+don.length+')');
+    don.forEach(function(t){ L.push('- [x] '+t.title+(t.doneDate?' · '+t.doneDate:'')); }); L.push(''); }
+  if(idea.length){ L.push('### 💡 Колись / Ідеї ('+idea.length+')');
+    idea.forEach(function(t){ L.push('- '+t.title); }); L.push(''); }
+  // Рутина
+  if((S.recur||[]).length){ L.push('## 🔁 Рутина (сьогодні)');
+    S.recur.forEach(function(r){
+      L.push('- '+r.nm+': '+(r.unit==='check'?(r.done?'✓ виконано':'○ ні'):(r.val+' '+(ULBL[r.unit]||''))));
+    }); L.push(''); }
+  // Нотатки за папками
+  if((S.qnotes||[]).length){ L.push('## 📝 Нотатки');
+    S.folders.forEach(function(f){
+      var ns=S.qnotes.filter(function(n){return n.folder===f.id;});
+      if(!ns.length) return;
+      L.push('### '+(f.ico||'')+' '+f.nm);
+      ns.forEach(function(n){ L.push('- '+(n.date?n.date+' ':'')+(n.time?n.time+' — ':'')+n.txt); });
+      L.push('');
+    });
+    var orphan=S.qnotes.filter(function(n){return !S.folders.some(function(f){return f.id===n.folder;});});
+    if(orphan.length){ L.push('### 📦 Інше'); orphan.forEach(function(n){ L.push('- '+n.txt); }); L.push(''); }
+  }
+  // Вільний блокнот
+  if(S.notepad&&S.notepad.trim()){ L.push('## 🗒 Блокнот'); L.push(S.notepad.trim()); L.push(''); }
+  // Зони і графіки
+  if((S.zones||[]).length){ L.push('## 🕐 Зони');
+    S.zones.forEach(function(z){
+      L.push('- '+z.nm+(z.active===false?' (неактивна)':'')+': '+(z.slots||[]).map(function(s){return s.s+'–'+s.e;}).join(', ')+(z.desc?' — '+z.desc:''));
+    }); L.push(''); }
+  if((planRules||[]).length){ L.push('## 🗓 Застосовані графіки');
+    planRules.forEach(function(r){ L.push('- '+r.name+': '+r.start+' → '+r.end); }); L.push(''); }
+  var md=L.join('\n');
+  var fname='flow-export-'+today+'.md';
+  if(window.FlowBridge && typeof window.FlowBridge.exportTxt==='function'){
+    try { window.FlowBridge.exportTxt(fname, md); return; } catch(e){}
+  }
+  var blob=new Blob([md],{type:'text/markdown;charset=utf-8'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
   a.href=url; a.download=fname;
@@ -2868,6 +2931,16 @@ function kbdOpen(ctx) {
   inp.placeholder = ctx.placeholder || 'Пиши тут...';
   inp.value = ctx.initialValue || '';
   if(taskHint) taskHint.style.display = ctx.showTaskHint ? 'inline' : 'none';
+  // Селект папки (редагування нотатки): передай ctx.folderSel = поточна папка
+  var fsel = document.getElementById('kbd-folder');
+  if(fsel){
+    if(ctx.folderSel){
+      fsel.innerHTML = S.folders.map(function(f){
+        return '<option value="'+f.id+'" '+(f.id===ctx.folderSel?'selected':'')+'>'+(f.ico||'')+' '+f.nm+'</option>';
+      }).join('');
+      fsel.style.display='inline-block';
+    } else fsel.style.display='none';
+  }
   overlay.classList.add('show');
   setTimeout(function(){
     inp.focus();
@@ -2889,7 +2962,9 @@ function kbdCheckDots() {
 function kbdSend() {
   var txt = document.getElementById('kbd-txt').value.trim();
   if(!txt || !kbdCtx || !kbdCtx.onSend) { kbdClose(); return; }
-  kbdCtx.onSend(txt);
+  var fsel = document.getElementById('kbd-folder');
+  // другий аргумент — обрана папка (лише коли селект показано через folderSel)
+  kbdCtx.onSend(txt, (kbdCtx.folderSel && fsel) ? fsel.value : null);
   kbdClose();
 }
 // keyboard resize: scroll focused el into view
@@ -3784,12 +3859,28 @@ function fgNotifText(){
     try { var p=t.alarmTime.split(':'); var d=new Date(); d.setHours(parseInt(p[0],10),parseInt(p[1],10),0,0); dueMs=d.getTime(); } catch(e){}
     schedList.push({ id:t.id, title:t.title, dueMs:dueMs, fired:!!t.alarmFired });
   });
+  // ── Таймлайн зон на СЬОГОДНІ: нативний сервіс сам рахує поточну зону щохвилини,
+  //    тож сповіщення більше не висить зі старою зоною до наступного збереження. ──
+  var zoneTimeline=[];
+  var _dayOffT=(typeof planDayOff!=='undefined'&&planDayOff[todayStr])||[];
+  S.zones.forEach(function(z){
+    if(z.active===false) return;
+    if(z.bound&&!z.actPin) return;            // прив'язана — лише через план дня
+    if(_dayOffT.indexOf(z.id)>=0) return;     // вимкнена саме на сьогодні
+    (z.slots||[]).forEach(function(sl){ zoneTimeline.push({s:sl.s,e:sl.e,nm:z.nm,desc:z.desc||'',color:z.color,prio:z.prio||1}); });
+  });
+  if(typeof dayBlocks==='function') dayBlocks(todayStr).forEach(function(b){
+    var z=S.zones.find(function(zz){return zz.id===b.zoneId;}); if(!z) return;
+    zoneTimeline.push({s:b.s,e:b.e,nm:z.nm,desc:z.desc||'',color:z.color,prio:(z.prio||1)+10});
+  });
   // Focus
   var focus = (S.currentFocus && S.currentFocus !== pz.nm) ? S.currentFocus : '';
   var desc = pz.desc || (focus ? '🧠 '+focus : '');
   return {
     zone:    (zoneDots?zoneDots+' ':'')+pz.nm,
     zoneColor: pz.color||'#4f8ef7',
+    zoneTimeline: zoneTimeline,
+    tlDate:  todayStr,
     slots:   slots,
     desc:    desc,
     tasks:   taskLines,
@@ -4162,6 +4253,7 @@ setTimeout(function(){
   <div class="kbd-hint" id="kbd-hint-row">
     <span id="kbd-hint-txt">⚡ Швидка нотатка</span>
     <span class="kbd-hint-tag" id="kbd-task-hint" style="display:none">... на початку → створить задачу</span>
+    <select id="kbd-folder" style="display:none;margin-left:auto;background:var(--s3);border:1px solid var(--b2);border-radius:7px;padding:4px 7px;color:var(--t1);font-family:'Syne',sans-serif;font-size:11px;outline:none;cursor:pointer"></select>
   </div>
   <div class="kbd-row">
     <button class="kbd-cancel" onclick="kbdClose()">✕</button>

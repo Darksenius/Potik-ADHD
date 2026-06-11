@@ -173,10 +173,60 @@ public class FlowNotifService extends Service {
                 total     = j.optInt("total", total);
                 energy    = j.optInt("energy", energy);
                 zoneColor = j.optString("zoneColor", "");
+
+                // ── Поточна зона з таймлайна (zoneTimeline) ──
+                // Знімок міг бути збережений давно; зона в ньому застаріває. Якщо JS передав
+                // розклад зон на сьогодні — рахуємо актуальну зону прямо тут, щохвилини.
+                JSONArray tl = j.optJSONArray("zoneTimeline");
+                String tlDate = j.optString("tlDate", "");
+                if (tl != null && todayStr().equals(tlDate)) {
+                    java.util.Calendar cal = java.util.Calendar.getInstance();
+                    int cur = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60
+                            + cal.get(java.util.Calendar.MINUTE);
+                    JSONObject best = null;
+                    int bestPrio = -1;
+                    for (int i = 0; i < tl.length(); i++) {
+                        JSONObject seg = tl.optJSONObject(i);
+                        if (seg == null) continue;
+                        int s = toMin(seg.optString("s", ""));
+                        int e = toMin(seg.optString("e", ""));
+                        if (e == 0) e = 1440;
+                        if (s < 0 || e < 0) continue;
+                        int prio = seg.optInt("prio", 1);
+                        if (cur >= s && cur < e && prio > bestPrio) { best = seg; bestPrio = prio; }
+                    }
+                    if (best != null) {
+                        zone      = best.optString("nm", zone);
+                        slots     = best.optString("s", "") + "–" + best.optString("e", "");
+                        desc      = best.optString("desc", "");
+                        zoneColor = best.optString("color", zoneColor);
+                    } else {
+                        zone = "Вільний час"; slots = ""; desc = "";
+                    }
+                    time = String.format(java.util.Locale.US, "%02d:%02d",
+                            cal.get(java.util.Calendar.HOUR_OF_DAY),
+                            cal.get(java.util.Calendar.MINUTE));
+                }
             } catch (Exception ignored) {}
         }
         lastZoneColor = parseZoneColor(zoneColor);
         buildMain(zone, slots, desc, tasks, routine, body, time, done, total, energy);
+    }
+
+    /** "HH:MM" → хвилини доби; -1 якщо не парситься */
+    private int toMin(String hm) {
+        try {
+            String[] p = hm.split(":");
+            return Integer.parseInt(p[0]) * 60 + Integer.parseInt(p[1]);
+        } catch (Exception e) { return -1; }
+    }
+
+    private String todayStr() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        return String.format(java.util.Locale.US, "%04d-%02d-%02d",
+                c.get(java.util.Calendar.YEAR),
+                c.get(java.util.Calendar.MONTH) + 1,
+                c.get(java.util.Calendar.DAY_OF_MONTH));
     }
 
     private void buildMain(String zone, String slots, String desc, String tasks,

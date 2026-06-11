@@ -30,8 +30,14 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     public static final String ACTION_SCHED_CHECK = "com.flow.adhd.SCHED_CHECK";
     public static final String ACTION_DAILY_RESET = "com.flow.adhd.DAILY_RESET";
     public static final String ACTION_SNOOZE      = "com.flow.adhd.SNOOZE_FIRE";
+    // Точний будильник РІВНО на час найближчої задачі (а не 15-хв полінг)
+    public static final String ACTION_TASK_DUE    = "com.flow.adhd.TASK_DUE";
+    // Щогодинне нагадування про воду (09:00–21:00)
+    public static final String ACTION_WATER       = "com.flow.adhd.WATER_REMIND";
     public static final String CHANNEL_REMIND      = "flow_remind";
+    public static final String CHANNEL_WATER       = "flow_water";
     private static final int   REMIND_BASE         = 5000;
+    private static final int   WATER_NOTIF_ID      = 6001;
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -42,16 +48,27 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
 
         if (ACTION_SCHED_CHECK.equals(action)) {
             checkSched(context, bridge);
-            // переплановуємо наступну перевірку через 15 хв
+            // переплановуємо наступну перевірку через 15 хв (запасний механізм)
             schedule(context, ACTION_SCHED_CHECK, System.currentTimeMillis() + 15 * 60_000L, 1);
+            // + точний будильник на найближчу задачу
+            scheduleNextDue(context, bridge);
             // оновити основне сповіщення
             FlowNotifService.start(context);
+        } else if (ACTION_TASK_DUE.equals(action)) {
+            // настав ТОЧНИЙ час задачі: фаєримо нагадування і плануємо наступну
+            checkSched(context, bridge);
+            scheduleNextDue(context, bridge);
+            FlowNotifService.start(context);
+        } else if (ACTION_WATER.equals(action)) {
+            waterRemind(context, bridge);
+            scheduleWater(context);
         } else if (ACTION_DAILY_RESET.equals(action)) {
             // пишемо маркер у Room + broadcast — апка обробить миттєво або при відкритті
             pushAndNotify(context, bridge, "daily_reset");
             FlowNotifService.start(context);
-            // переплановуємо на завтра 00:10
+            // переплановуємо на завтра 00:10 (+ страхуємо водяний цикл)
             scheduleDailyReset(context);
+            scheduleWater(context);
         } else if (ACTION_SNOOZE.equals(action)) {
             // Відкладена задача: окреме нагадування через 1 годину (працює і коли апка закрита)
             String id = intent.getStringExtra("snooze_id");
@@ -129,6 +146,79 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         }
     }
 
+    // ════════════════ ВОДА ЩОГОДИНИ ════════════════
+
+    /**
+     * Сповіщення про воду: щогодини 09:00–21:00. Бере першу рутину з unit=="ml"
+     * зі знімка (routineList) — кнопка «+крок мл» працює без відкриття апки
+     * через стандартний шлях ACTION_RC_INC сервісу.
+     */
+    private void waterRemind(Context context, FlowBridge bridge) {
+        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        if (hour < 9 || hour > 21) return;
+        String notifJson = bridge.getNotifJson();
+        if (notifJson == null || notifJson.isEmpty()) return;
+        try {
+            JSONObject j = new JSONObject(notifJson);
+            JSONArray rl = j.optJSONArray("routineList");
+            if (rl == null) return;
+            JSONObject water = null;
+            for (int i = 0; i < rl.length(); i++) {
+                JSONObject r = rl.optJSONObject(i);
+                if (r != null && "ml".equals(r.optString("unit", ""))) { water = r; break; }
+            }
+            if (water == null) return; // водної рутини немає — нічого нагадувати
+            String id   = water.optString("id", "");
+            String nm   = water.optString("nm", "Вода");
+            int    val  = water.optInt("val", 0);
+            int    step = water.optInt("step", 100);
+
+            createWaterChannel(context);
+            Intent open = new Intent(context, MainActivity.class);
+            open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            int fImm = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
+            PendingIntent openPi = PendingIntent.getActivity(context, 0, open,
+                    fImm | PendingIntent.FLAG_UPDATE_CURRENT);
+
+            // кнопка «+step мл» → той самий механізм, що в сповіщеннях рутини
+            Intent inc = new Intent(context, FlowNotifService.class);
+            inc.setAction(FlowNotifService.ACTION_RC_INC);
+            inc.putExtra(FlowNotifService.EXTRA_ID, id);
+            inc.putExtra("notif_id", WATER_NOTIF_ID);
+            PendingIntent incPi = PendingIntent.getService(context,
+                    (FlowNotifService.ACTION_RC_INC.hashCode() ^ WATER_NOTIF_ID) & 0x7fffffff,
+                    inc, fImm | PendingIntent.FLAG_UPDATE_CURRENT);
+
+            NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_WATER)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle("💧 " + nm + ": " + val + " мл")
+                    .setContentText("Час випити води")
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                    .setAutoCancel(true)
+                    .setTimeoutAfter(55 * 60_000L)
+                    .setContentIntent(openPi)
+                    .addAction(new NotificationCompat.Action.Builder(
+                            android.R.drawable.ic_input_add, "＋" + step + " мл", incPi)
+                            .setShowsUserInterface(false).build());
+
+            NotificationManager nm2 = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm2 != null) nm2.notify(WATER_NOTIF_ID, b.build());
+        } catch (Exception ignored) {}
+    }
+
+    private void createWaterChannel(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null || nm.getNotificationChannel(CHANNEL_WATER) != null) return;
+            NotificationChannel ch = new NotificationChannel(
+                    CHANNEL_WATER, "Потік — вода", NotificationManager.IMPORTANCE_DEFAULT);
+            ch.setDescription("Щогодинне нагадування про воду (09:00–21:00)");
+            ch.enableVibration(true);
+            nm.createNotificationChannel(ch);
+        }
+    }
+
     // ════════════════ ПЛАНУВАННЯ ════════════════
 
     public static void schedule(Context ctx, String action, long triggerAtMs, int reqCode) {
@@ -165,10 +255,48 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         schedule(ctx, ACTION_DAILY_RESET, c.getTimeInMillis(), 2);
     }
 
-    /** Викликати при старті апки — запускає обидва цикли */
+    /**
+     * Точний будильник на НАЙБЛИЖЧУ незфаєрену задачу зі знімка (schedList).
+     * Викликається при кожному оновленні знімка (saveNotif) і після кожного
+     * спрацювання — нагадування приходить хвилина-в-хвилину, а не «раз на 15 хв».
+     */
+    public static void scheduleNextDue(Context ctx, FlowBridge bridge) {
+        try {
+            String notifJson = bridge.getNotifJson();
+            if (notifJson == null || notifJson.isEmpty()) return;
+            JSONObject j = new JSONObject(notifJson);
+            JSONArray sched = j.optJSONArray("schedList");
+            if (sched == null) return;
+            long now = System.currentTimeMillis(), next = Long.MAX_VALUE;
+            for (int i = 0; i < sched.length(); i++) {
+                JSONObject s = sched.optJSONObject(i);
+                if (s == null) continue;
+                long due = s.optLong("dueMs", 0);
+                if (!s.optBoolean("fired", false) && due > now && due < next) next = due;
+            }
+            if (next != Long.MAX_VALUE) schedule(ctx, ACTION_TASK_DUE, next, 3);
+        } catch (Exception ignored) {}
+    }
+
+    /** Наступне щогодинне нагадування про воду: найближча повна година в межах 09–21 */
+    public static void scheduleWater(Context ctx) {
+        Calendar c = Calendar.getInstance();
+        c.add(Calendar.HOUR_OF_DAY, 1);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        int h = c.get(Calendar.HOUR_OF_DAY);
+        if (h < 9) { c.set(Calendar.HOUR_OF_DAY, 9); }
+        else if (h > 21) { c.add(Calendar.DAY_OF_YEAR, 1); c.set(Calendar.HOUR_OF_DAY, 9); }
+        schedule(ctx, ACTION_WATER, c.getTimeInMillis(), 4);
+    }
+
+    /** Викликати при старті апки — запускає всі цикли */
     public static void scheduleAll(Context ctx) {
         schedule(ctx, ACTION_SCHED_CHECK, System.currentTimeMillis() + 60_000L, 1);
         scheduleDailyReset(ctx);
+        scheduleWater(ctx);
+        scheduleNextDue(ctx, new FlowBridge(ctx));
     }
 
     /** Запланувати окреме нагадування про відкладену задачу через delayMs (точний будильник) */
