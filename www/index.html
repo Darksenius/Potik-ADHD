@@ -1160,6 +1160,16 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 </div>
 <script>
 // ══════════════════════════════════════════════════
+// БЕЗПЕКА: екранування даних користувача перед вставкою в innerHTML.
+// Захищає від XSS — особливо при імпорті чужого JSON-файлу. Працює і для
+// тексту, і для значень у подвійних лапках атрибутів, і всередині <textarea>.
+// ══════════════════════════════════════════════════
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&#39;';
+  });
+}
+// ══════════════════════════════════════════════════
 // СТАН
 // ══════════════════════════════════════════════════
 var S = {
@@ -1425,17 +1435,17 @@ function updateClock(){
     // індикатори активних зон — кольорові кружечки (коли зон кілька)
     var dots = zones.length>1 && pz.id!==0 ?
       '<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px">'+
-        zones.slice(0,5).map(function(z){return '<span style="width:11px;height:11px;border-radius:50%;background:'+z.color+';display:inline-block;box-shadow:0 0 4px '+z.color+'"></span>';}).join('')+
+        zones.slice(0,5).map(function(z){return '<span style="width:11px;height:11px;border-radius:50%;background:'+esc(z.color)+';display:inline-block;box-shadow:0 0 4px '+esc(z.color)+'"></span>';}).join('')+
         '<span style="font-size:10px;color:var(--t3);margin-left:3px">'+zones.length+' зони активні</span>'+
       '</div>' : '';
     // поточний гіперфокус — коротко (ріжемо після 10 символів), маленьким шрифтом
     var _fc=S.currentFocus||'';
     var _fcShort=_fc.length>10?_fc.slice(0,10)+'…':_fc;
-    var focusBadge=_fcShort?'<div style="font-size:10px;color:var(--t3);margin-top:2px">🧠 '+_fcShort+'</div>':'';
+    var focusBadge=_fcShort?'<div style="font-size:10px;color:var(--t3);margin-top:2px">🧠 '+esc(_fcShort)+'</div>':'';
     zc.innerHTML = dots + zones.slice(0,3).map(function(z,i){
-      return '<div class="zl" style="border-left-color:'+z.color+'">'+
-        '<div><h3 style="color:'+z.color+'">'+z.nm+'</h3><p>'+z.desc+'</p>'+(i===0?focusBadge:'')+'</div>'+
-        (i===0?'<div id="clock">'+t+'</div>':'<span class="badge" style="border-left:2px solid '+z.color+';font-family:\'Space Mono\',monospace">'+zoneSlotRange(z,hm)+'</span>')+
+      return '<div class="zl" style="border-left-color:'+esc(z.color)+'">'+
+        '<div><h3 style="color:'+esc(z.color)+'">'+esc(z.nm)+'</h3><p>'+esc(z.desc)+'</p>'+(i===0?focusBadge:'')+'</div>'+
+        (i===0?'<div id="clock">'+t+'</div>':'<span class="badge" style="border-left:2px solid '+esc(z.color)+';font-family:\'Space Mono\',monospace">'+zoneSlotRange(z,hm)+'</span>')+
       '</div>';
     }).join('');
   }
@@ -1484,7 +1494,7 @@ function updateZoneBanner(pz){
       '<button class="ztb-ck '+(t.zoneDoneToday?'on':'')+'" onclick="doneZoneTask('+t.id+')">'+
         (t.zoneDoneToday?'✓':'')+
       '</button>'+
-      '<span class="ztb-title '+(t.zoneDoneToday?'done-t':'')+'">'+t.title+'</span>'+
+      '<span class="ztb-title '+(t.zoneDoneToday?'done-t':'')+'">'+esc(t.title)+'</span>'+
       '<span class="ztb-rep">'+(REP[t.repeat]||'')+'</span>'+
       '<button class="ab eb" onclick="openEdit('+t.id+')" title="Редагувати" style="flex-shrink:0">✎</button>'+
       '<button class="ab del" onclick="delZoneTask('+t.id+')" title="Видалити" style="flex-shrink:0">✕</button>'+
@@ -1683,12 +1693,12 @@ function renderFocusLog(){
   if(focusLogExpanded&&Object.keys(stats).length){
     statsHtml='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--b1)">';
     Object.keys(stats).forEach(function(k){
-      statsHtml+='<span style="background:color-mix(in srgb,var(--z) 12%,transparent);border:1px solid color-mix(in srgb,var(--z) 25%,transparent);border-radius:9px;padding:2px 8px;font-size:10px;color:var(--z)">'+k+': '+stats[k]+'хв</span>';
+      statsHtml+='<span style="background:color-mix(in srgb,var(--z) 12%,transparent);border:1px solid color-mix(in srgb,var(--z) 25%,transparent);border-radius:9px;padding:2px 8px;font-size:10px;color:var(--z)">'+esc(k)+': '+stats[k]+'хв</span>';
     });
     statsHtml+='</div>';
   }
   el.innerHTML=statsHtml+log.map(function(e){
-    return '<div class="ft-entry"><span class="fte-t">'+e.time+'</span><span class="fte-v">'+e.val+'</span>'+
+    return '<div class="ft-entry"><span class="fte-t">'+e.time+'</span><span class="fte-v">'+esc(e.val)+'</span>'+
       (e.dur?'<span class="fte-d">'+e.dur+' хв</span>':'<span class="fte-d" style="color:var(--z)">зараз</span>')+
     '</div>';
   }).join('')+
@@ -1717,8 +1727,8 @@ function renderPicker(){
   el.innerHTML=tasks.map(function(t){
     var sel=S.priorities.indexOf(t.id)>=0;
     return '<div class="tp-item '+(sel?'sel':'')+'" style="border-left-color:'+(t.zoneColor||'transparent')+';cursor:pointer" onclick="selPrio('+t.id+')" ontouchstart="">'+
-      '<div><div class="tp-item-title">'+(t.done?'<s style=\'opacity:.5\'>':'')+t.title+(t.done?'</s>':'')+'</div>'+
-      '<div class="tp-zone">'+(t.zoneName?'◐ '+t.zoneName+' · ':'')+TL[t.type]+'</div></div>'+
+      '<div><div class="tp-item-title">'+(t.done?'<s style=\'opacity:.5\'>':'')+esc(t.title)+(t.done?'</s>':'')+'</div>'+
+      '<div class="tp-zone">'+(t.zoneName?'◐ '+esc(t.zoneName)+' · ':'')+TL[t.type]+'</div></div>'+
       (sel?'<span style="font-size:10px;color:var(--z);font-family:\'Space Mono\',monospace">✓</span>':'')+
     '</div>';
   }).join('');
@@ -1735,9 +1745,9 @@ function renderPrios(){
     if(t){
       slot.innerHTML='<span class="prio-n">#'+(i+1)+'</span>'+
         '<span class="prio-task" style="'+(t.done?'text-decoration:line-through;opacity:.5':'')+'">'+
-          (t.done?'✓ ':'')+t.title+
+          (t.done?'✓ ':'')+esc(t.title)+
         '</span>'+
-        (t.zoneName?'<span style="font-size:10px;color:'+(t.zoneColor||'#888')+';font-family:\'Space Mono\',monospace;flex-shrink:0">'+t.zoneName+'</span>':'')+
+        (t.zoneName?'<span style="font-size:10px;color:'+esc(t.zoneColor||'#888')+';font-family:\'Space Mono\',monospace;flex-shrink:0">'+esc(t.zoneName)+'</span>':'')+
         '<button class="prio-clr" onclick="event.stopPropagation();clearPrio('+i+')">✕</button>';
     }else{
       slot.innerHTML='<span class="prio-n">#'+(i+1)+'</span><span class="prio-empty">Обрати з задач...</span>';
@@ -1754,14 +1764,14 @@ function renderRecur(){
     var negTag=r.neg?'<span class="neg-tag">−'+r.negXp+' досвіду</span>':'';
     if(r.unit==='check'){
       return '<div class="rc-item" style="'+negStyle+'">'+
-        '<div style="flex:1;min-width:0"><div class="rc-nm">'+r.nm+' '+negTag+'</div>'+
+        '<div style="flex:1;min-width:0"><div class="rc-nm">'+esc(r.nm)+' '+negTag+'</div>'+
         '<div class="rc-stat">'+(r.done?'✓ виконано':'не виконано')+'</div></div>'+
         '<div class="rc-ctrl">'+
         '<button class="rc-check '+(r.done?'on':'')+'" onclick="rcTogCheck(\''+r.id+'\')">'+(r.done?'✓ Виконано':'Виконати')+'</button>'+
         '<button class="rc-del" onclick="delRecur(\''+r.id+'\')">✕</button></div></div>';
     }
     return '<div class="rc-item" style="'+negStyle+'">'+
-      '<div style="flex:1;min-width:0"><div class="rc-nm">'+r.nm+' '+negTag+'</div>'+
+      '<div style="flex:1;min-width:0"><div class="rc-nm">'+esc(r.nm)+' '+negTag+'</div>'+
       '<div class="rc-stat">'+r.val+' '+ul+' сьогодні'+(r.done?' · ✓':'')+'</div></div>'+
       '<div class="rc-ctrl">'+
       '<button class="rc-b" onclick="rcDec(\''+r.id+'\')">−</button>'+
@@ -1801,7 +1811,7 @@ function updZoneSel(){
     var el=document.getElementById(sid);if(!el)return;
     var cur=el.value;
     el.innerHTML='<option value="">— без зони</option>'+
-      zs.map(function(z){return '<option value="'+z.id+'" '+(cur==z.id?'selected':'')+'>'+z.nm+(z.active===false?' 💤':'')+'</option>';}).join('');
+      zs.map(function(z){return '<option value="'+z.id+'" '+(cur==z.id?'selected':'')+'>'+esc(z.nm)+(z.active===false?' 💤':'')+'</option>';}).join('');
   });
 }
 function setCtx(f,el){
@@ -1812,7 +1822,7 @@ function renderTaskFolderChips(){
   var el=document.getElementById('task-folder-chips'); if(!el) return;
   var h='<div class="ctxf '+(ctxFilter==='all'?'act':'')+'" onclick="setCtx(\'all\',this)">Всі</div>';
   S.folders.forEach(function(f){
-    h+='<div class="ctxf '+(ctxFilter==='f:'+f.id?'act':'')+'" onclick="setCtx(\'f:'+f.id+'\',this)" title="'+f.nm+'">'+(f.ico||'📁')+'</div>';
+    h+='<div class="ctxf '+(ctxFilter==='f:'+f.id?'act':'')+'" onclick="setCtx(\'f:'+f.id+'\',this)" title="'+esc(f.nm)+'">'+(f.ico||'📁')+'</div>';
   });
   h+='<div class="ctxf '+(ctxFilter==='neg'?'act':'')+'" onclick="setCtx(\'neg\',this)" style="color:var(--neg)" title="Шкідливі">⚠</div>';
   el.innerHTML=h;
@@ -1947,7 +1957,7 @@ function renderTrash(){
   el.innerHTML=trashed.map(function(t){
     var daysLeft=Math.ceil((WEEK-(Date.now()-(t.trashedAt||0)))/86400000);
     return '<div class="tc" style="opacity:.65;display:flex;align-items:center;gap:6px;padding:6px 8px">'+
-      '<span style="font-size:12px;flex:1">'+t.title+'</span>'+
+      '<span style="font-size:12px;flex:1">'+esc(t.title)+'</span>'+
       '<span style="font-size:10px;color:var(--t3)">'+daysLeft+'д</span>'+
       '<button class="ab" onclick="restoreTask('+t.id+')" title="Відновити">↩</button>'+
       '<button class="ab" onclick="hardDeleteTask('+t.id+')" title="Назавжди" style="color:#e74c3c">✕</button>'+
@@ -2114,21 +2124,21 @@ function renderBody(t){
   if(t.type==='check'){
     h+='<div class="bl">Пункти</div>';
     (t.items||[]).forEach(function(it,i){
-      h+='<div class="ci '+(it.done?'cid':'')+'" id="ci-'+t.id+'-'+i+'"><input type="checkbox" '+(it.done?'checked':'')+' onchange="togCI('+t.id+','+i+')"><span>'+it.text+'</span></div>';
+      h+='<div class="ci '+(it.done?'cid':'')+'" id="ci-'+t.id+'-'+i+'"><input type="checkbox" '+(it.done?'checked':'')+' onchange="togCI('+t.id+','+i+')"><span>'+esc(it.text)+'</span></div>';
     });
     h+='<div class="ci-add"><input type="text" id="ci-i-'+t.id+'" placeholder="Новий пункт..." onkeydown="if(event.key===\'Enter\')addCI('+t.id+')"><button onclick="addCI('+t.id+')">+</button></div>';
   }
   if(t.type==='scale')h+='<div class="bl">Прогрес</div><div class="sw"><input type="range" min="0" max="100" value="'+t.scale+'" oninput="updScale('+t.id+',this.value)"><span class="svv" id="sv-'+t.id+'">'+t.scale+'%</span></div>';
   if(t.type==='counter')h+='<div class="bl">Лічильник</div><div class="cw"><button class="cbtn" onclick="chgCnt('+t.id+',-1)">−</button><span class="cvv" id="cv-'+t.id+'">'+t.counter+'</span><button class="cbtn" onclick="chgCnt('+t.id+',1)">+</button><span style="font-size:11px;color:var(--t3)">/ <input class="ct-inp" type="number" value="'+(t.counterTarget||10)+'" min="1" onchange="updCntTgt('+t.id+',this.value)"></span></div>';
-  if(t.type==='note')h+='<div class="bl">Нотатка</div><textarea class="tnote" oninput="updNote('+t.id+',this.value)">'+(t.note||'')+'</textarea>';
+  if(t.type==='note')h+='<div class="bl">Нотатка</div><textarea class="tnote" oninput="updNote('+t.id+',this.value)">'+esc(t.note||'')+'</textarea>';
   if(t.type==='alarm')h+='<div class="bl">Час будильника</div><div class="aw"><input type="time" value="'+(t.alarmTime||'')+'" onchange="updAlarm('+t.id+',this.value)"><span class="aw-st">'+(t.alarmFired?'✓ спрацював':t.alarmTime?'⏳ очікує':'— не задано')+'</span></div>';
   if(t.type==='pomodoro'){var s=t.pomSecs||0;h+='<div class="pom-wrap"><div class="pom-disp"><div class="pom-time" id="pt-'+t.id+'">'+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')+'</div><div class="pom-info">'+(t.pomMode==='work'?'🔴 Фокус':'🟢 Пауза')+' · '+(t.pomSessions||0)+' сес.</div></div><div class="pom-btns"><button class="pom-btn '+(t.pomRunning?'run':'')+'" onclick="togPom('+t.id+')">'+(t.pomRunning?'⏸ Пауза':'▶ Старт')+'</button><button class="pom-btn" onclick="rstPom('+t.id+')">↺ Скинути</button><button class="pom-btn" onclick="skipPom('+t.id+')">⏭ Далі</button></div></div>';}
   if(t.type==='habit'){h+='<div class="bl">Цей тиждень</div><div class="habit-week">';(t.habitDays||[]).forEach(function(d,i){h+='<div class="hday '+(d?'on':'')+'" onclick="togHabit('+t.id+','+i+')"><div>'+WD[i]+'</div><div>'+(d?'✓':'')+'</div></div>';});h+='</div>';}
-  if(t.type==='kid'){h+='<div class="bl">Зірочки</div><div class="kid-stars">';for(var i=1;i<=5;i++)h+='<span class="kstar '+((t.kidStars||0)>=i?'lit':'')+'" onclick="setStars('+t.id+','+i+')">★</span>';h+='</div><div class="kd-btns">'+['easy','mid','hard'].map(function(d){return '<div class="kd-btn '+(t.kidDiff===d?'sel':'')+'" onclick="setKidDiff('+t.id+',\''+d+'\')">'+(d==='easy'?'Легко':d==='mid'?'Норм':'Важко')+'</div>';}).join('')+'</div><div style="margin-top:6px;background:rgba(245,197,66,.08);border:1px solid rgba(245,197,66,.2);border-radius:7px;padding:7px 9px;font-size:12px;color:var(--xp)">🎁 <input type="text" value="'+(t.kidReward||'')+'" onchange="updKidReward('+t.id+',this.value)" style="background:none;border:none;outline:none;color:var(--xp);font-family:\'Syne\',sans-serif;font-size:12px;width:180px;vertical-align:middle" placeholder="Нагорода..."></div>';}
+  if(t.type==='kid'){h+='<div class="bl">Зірочки</div><div class="kid-stars">';for(var i=1;i<=5;i++)h+='<span class="kstar '+((t.kidStars||0)>=i?'lit':'')+'" onclick="setStars('+t.id+','+i+')">★</span>';h+='</div><div class="kd-btns">'+['easy','mid','hard'].map(function(d){return '<div class="kd-btn '+(t.kidDiff===d?'sel':'')+'" onclick="setKidDiff('+t.id+',\''+d+'\')">'+(d==='easy'?'Легко':d==='mid'?'Норм':'Важко')+'</div>';}).join('')+'</div><div style="margin-top:6px;background:rgba(245,197,66,.08);border:1px solid rgba(245,197,66,.2);border-radius:7px;padding:7px 9px;font-size:12px;color:var(--xp)">🎁 <input type="text" value="'+esc(t.kidReward||'')+'" onchange="updKidReward('+t.id+',this.value)" style="background:none;border:none;outline:none;color:var(--xp);font-family:\'Syne\',sans-serif;font-size:12px;width:180px;vertical-align:middle" placeholder="Нагорода..."></div>';}
   if(t.type==='ctx'){h+='<div class="bl">Контексти</div><div class="ctx-tags">';CTAGS.forEach(function(tg){h+='<div class="ctx-tag '+((t.ctxTags||[]).includes(tg)?'sel':'')+'" onclick="togCtx('+t.id+',\''+tg+'\')">'+tg+'</div>';});h+='</div>';}
   if(t.type==='negative')h+='<div class="bl">Зафіксовано</div><div class="neg-counter"><div class="neg-cnt-v" id="ncv-'+t.id+'">'+(t.counter||0)+'</div><span style="font-size:11px;color:var(--t3)">раз сьогодні</span><button class="neg-tap-btn" onclick="negTap('+t.id+')">⚠ Зафіксувати (−'+t.negXp+' досвіду)</button></div>';
-  if(t.type==='zonelinked')h+='<div class="bl">Прив\'язана до зони</div><div style="font-size:12px;color:var(--t2);margin-top:4px">Активується при вході в зону <b style="color:'+(t.zoneColor||'#888')+'">'+t.zoneName+'</b>. Повторення: '+(REP[t.repeat]||'—')+'.</div>';
-  if((t.tags||[]).length){h+='<div class="bl">Теги</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">';t.tags.forEach(function(tg,i){h+='<span style="background:color-mix(in srgb,var(--z) 10%,transparent);border:1px solid color-mix(in srgb,var(--z) 25%,transparent);border-radius:9px;padding:2px 7px;font-size:10px;color:var(--z);display:inline-flex;align-items:center;gap:3px">#'+tg+' <span style="cursor:pointer;color:var(--t3)" onclick="rmTag('+t.id+','+i+')">✕</span></span>';});h+='</div>';}
+  if(t.type==='zonelinked')h+='<div class="bl">Прив\'язана до зони</div><div style="font-size:12px;color:var(--t2);margin-top:4px">Активується при вході в зону <b style="color:'+esc(t.zoneColor||'#888')+'">'+esc(t.zoneName)+'</b>. Повторення: '+(REP[t.repeat]||'—')+'.</div>';
+  if((t.tags||[]).length){h+='<div class="bl">Теги</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">';t.tags.forEach(function(tg,i){h+='<span style="background:color-mix(in srgb,var(--z) 10%,transparent);border:1px solid color-mix(in srgb,var(--z) 25%,transparent);border-radius:9px;padding:2px 7px;font-size:10px;color:var(--z);display:inline-flex;align-items:center;gap:3px">#'+esc(tg)+' <span style="cursor:pointer;color:var(--t3)" onclick="rmTag('+t.id+','+i+')">✕</span></span>';});h+='</div>';}
   if(t.type!=='negative'&&t.type!=='zonelinked'){
     h+='<div class="bl">Повторення</div><div class="rep-row"><select class="rep-sel" onchange="updRepeat('+t.id+',this.value)">';
     Object.keys(REP).forEach(function(k){h+='<option value="'+k+'" '+(t.repeat===k?'selected':'')+'>'+REP[k]+'</option>';});
@@ -2153,8 +2163,8 @@ function renderSomeday(){
   lst.innerHTML=someday.map(function(t){
     return '<div class="tc" style="border-left-color:var(--b2);opacity:.7">'+
       '<div class="th">'+
-      '<span class="tt">'+t.title+'</span>'+
-      (t.zoneName?'<span class="badge zbadge" style="border-left-color:'+t.zoneColor+'">'+t.zoneName+'</span>':'')+
+      '<span class="tt">'+esc(t.title)+'</span>'+
+      (t.zoneName?'<span class="badge zbadge" style="border-left-color:'+esc(t.zoneColor)+'">'+esc(t.zoneName)+'</span>':'')+
       '<span class="badge">'+(TL[t.type]||t.type)+'</span>'+
       '<div class="acts">'+
       '<button class="ab" onclick="fromSomeday('+t.id+')" title="↩ Повернути до задач">↩</button>'+
@@ -2222,23 +2232,23 @@ function renderTasks(){
     var isNeg=t.type==='negative';
     var hb=t.type!=='simple';
     var ab=t.type==='alarm'&&t.alarmTime?'<span class="badge ab-b '+(t.alarmFired?'fired':'')+'">'+t.alarmTime+'</span>':'';
-    var zb=t.zoneName?'<span class="badge zbadge" style="border-left-color:'+t.zoneColor+'">'+t.zoneName+'</span>':'';
+    var zb=t.zoneName?'<span class="badge zbadge" style="border-left-color:'+esc(t.zoneColor)+'">'+esc(t.zoneName)+'</span>':'';
     var repLabel=t.repeat&&t.repeat!=='none'?(
       t.repeat==='interval'?'↺ '+(t.repeatInterval||30)+(t.repeatUnit==='hour'?'год':t.repeatUnit==='day'?'дн':t.repeatUnit==='week'?'тиж':t.repeatUnit==='month'?'міс':'хв'):
       '↺'):'';
     var rb=repLabel?'<span class="badge rep-b">'+repLabel+'</span>':'';
     var noZoneB=(t.type==='zonelinked'&&!t.zoneId)?'<span class="badge" style="background:rgba(226,75,74,.12);color:var(--neg);border:1px solid rgba(226,75,74,.25)" title="Не вказано зону">! зона</span>':'';
-    var tgb=(t.tags||[]).length?'<span class="badge" style="color:var(--z)">#'+t.tags[0]+'</span>':'';
+    var tgb=(t.tags||[]).length?'<span class="badge" style="color:var(--z)">#'+esc(t.tags[0])+'</span>':'';
     var _fld=t.folderId?S.folders.find(function(f){return f.id===t.folderId;}):null;
     // лише емодзі папки (без назви) — компактно; нема папки — нема бейджа
-    var fb2=_fld?'<span class="badge" style="background:var(--s2)" title="'+_fld.nm+'">'+(_fld.ico||'📁')+'</span>':'';
+    var fb2=_fld?'<span class="badge" style="background:var(--s2)" title="'+esc(_fld.nm)+'">'+(_fld.ico||'📁')+'</span>':'';
     var negB=isNeg?'<span class="badge" style="background:rgba(226,75,74,.12);color:var(--neg)">−'+(t.negXp||5)+' досвіду</span>':'';
     var xpS=isNeg?('<span style="font-size:10px;color:var(--neg);font-family:\'Space Mono\',monospace;flex-shrink:0">−'+(t.negXp||5)+'</span>'):('<span style="font-size:10px;color:var(--xp);font-family:\'Space Mono\',monospace;flex-shrink:0">+'+(TXP[t.type]||10)+'</span>');
-    return '<div class="tc '+(t.done?'done-t':'')+' '+(isNeg?'neg-tc':'')+' '+(_prio.indexOf(t.id)>=0?'prio-task':'')+'" style="border-left-color:'+(t.zoneColor||'transparent')+'">'+
+    return '<div class="tc '+(t.done?'done-t':'')+' '+(isNeg?'neg-tc':'')+' '+(_prio.indexOf(t.id)>=0?'prio-task':'')+'" style="border-left-color:'+esc(t.zoneColor||'transparent')+'">'+
       '<div class="th">'+
         '<button class="ck '+(t.done&&!isNeg?'on':'')+' '+(isNeg?'neg-ck':'')+'" onclick="togTask('+t.id+')" style="margin-top:2px;flex-shrink:0">'+(!isNeg&&t.done?'✓':'')+'</button>'+
         '<div style="flex:1;min-width:0">'+
-          '<div class="tt" onclick="'+(hb?'togExp('+t.id+')':'void(0)')+'">'+t.title+'</div>'+
+          '<div class="tt" onclick="'+(hb?'togExp('+t.id+')':'void(0)')+'">'+esc(t.title)+'</div>'+
         '</div>'+
         (hb?'<button class="ab ghost" id="exp-'+t.id+'" onclick="togExp('+t.id+')" style="flex-shrink:0;margin-top:1px">'+(t.expanded?'▲':'▼')+'</button>':'')+
       '</div>'+
@@ -2293,9 +2303,9 @@ function renderSlots(){
   var el=document.getElementById('slots-c');if(!el)return;
   el.innerHTML=slotRows.map(function(sl,i){
     return '<div class="slot-row">'+
-      '<input type="time" value="'+sl.s+'" oninput="setSlotS('+i+',this.value)">'+
+      '<input type="time" value="'+esc(sl.s)+'" oninput="setSlotS('+i+',this.value)">'+
       '<label>—</label>'+
-      '<input type="time" value="'+sl.e+'" oninput="setSlotE('+i+',this.value)">'+
+      '<input type="time" value="'+esc(sl.e)+'" oninput="setSlotE('+i+',this.value)">'+
       (slotRows.length>1?'<button class="srm" onclick="rmSlot('+i+')">✕</button>':'')+
     '</div>';
   }).join('');
@@ -2317,13 +2327,13 @@ function renderZones(){
   var pl=['','Фон','Нарада','Критичне'];
   el.innerHTML=S.zones.map(function(z){
     var linked=S.tasks.filter(function(t){return t.type==='zonelinked'&&t.zoneId===z.id;});
-    return '<div class="zrow" style="border-left-color:'+z.color+'">'+
-      '<div class="zdot" style="background:'+z.color+'"></div>'+
-      '<div class="zri"><div class="znm">'+z.nm+'</div>'+
-      '<div class="zslots">'+z.slots.map(function(sl){return '<span class="zslot">'+sl.s+'–'+sl.e+'</span>';}).join('')+'</div>'+
+    return '<div class="zrow" style="border-left-color:'+esc(z.color)+'">'+
+      '<div class="zdot" style="background:'+esc(z.color)+'"></div>'+
+      '<div class="zri"><div class="znm">'+esc(z.nm)+'</div>'+
+      '<div class="zslots">'+z.slots.map(function(sl){return '<span class="zslot">'+esc(sl.s)+'–'+esc(sl.e)+'</span>';}).join('')+'</div>'+
       '<span class="zprio zp'+z.prio+'">'+(pl[z.prio]||'')+'</span>'+
-      (z.desc?'<div class="zdesc">'+z.desc+'</div>':'')+
-      (linked.length?'<div class="zdesc" style="color:var(--z)">🔗 '+linked.map(function(t){return t.title;}).join(', ')+'</div>':'')+
+      (z.desc?'<div class="zdesc">'+esc(z.desc)+'</div>':'')+
+      (linked.length?'<div class="zdesc" style="color:var(--z)">🔗 '+linked.map(function(t){return esc(t.title);}).join(', ')+'</div>':'')+
       '</div><button class="zdel" onclick="delZone('+z.id+')">✕</button></div>';
   }).join('');
 }
@@ -2354,7 +2364,7 @@ function renderFolderTabs(){
     var html='<div class="ftab '+(curFolder==='all'?'act':'')+'" onclick="setFolder(\'all\')">Всі</div>';
     S.folders.forEach(function(f){
       html+='<div class="ftab '+(curFolder===f.id?'act':'')+'" onclick="setFolder(\''+f.id+'\')">'+
-        (f.ico||'📁')+' '+f.nm+
+        (f.ico||'📁')+' '+esc(f.nm)+
         ' <span onclick="event.stopPropagation();delFolder(\''+f.id+'\')" title="Видалити папку" style="font-size:9px;color:var(--t3);cursor:pointer;padding:0 2px;border-radius:3px">✕</span>'+
       '</div>';
     });
@@ -2363,7 +2373,7 @@ function renderFolderTabs(){
   var sel=document.getElementById('qn-fsel');
   if(sel){
     var cur=sel.value;
-    sel.innerHTML=S.folders.map(function(f){return '<option value="'+f.id+'">'+(f.ico||'📁')+' '+f.nm+'</option>';}).join('');
+    sel.innerHTML=S.folders.map(function(f){return '<option value="'+f.id+'">'+(f.ico||'📁')+' '+esc(f.nm)+'</option>';}).join('');
     if(cur&&S.folders.some(function(f){return f.id===cur;})) sel.value=cur;
   }
   // чіпи-фільтри у вкладці Задачі живуть тими ж папками
@@ -2397,7 +2407,7 @@ function renderEfFolders(){
   var sel=document.getElementById('ef-folder'); if(!sel) return;
   var cur=sel.value;
   sel.innerHTML='<option value="">— без папки —</option>'+
-    S.folders.map(function(f){return '<option value="'+f.id+'">'+(f.ico||'📁')+' '+f.nm+'</option>';}).join('');
+    S.folders.map(function(f){return '<option value="'+f.id+'">'+(f.ico||'📁')+' '+esc(f.nm)+'</option>';}).join('');
   if(cur) sel.value=cur;
 }
 function efAddFolder(){
@@ -2457,7 +2467,7 @@ function renderQN(){
     return '<div class="qn-row" id="qn-row-'+n.id+'">'+
       '<span class="qn-time">'+n.time+'</span>'+
       '<span class="qn-ico">'+getFIco(n.folder)+'</span>'+
-      '<div class="qn-txt" id="qn-txt-'+n.id+'">'+n.txt+'</div>'+
+      '<div class="qn-txt" id="qn-txt-'+n.id+'">'+esc(n.txt)+'</div>'+
       '<button class="qn-del" onclick="editQN('+n.id+')" style="color:var(--z);margin-right:3px" title="Редагувати">✎</button>'+
       '<button class="qn-del" onclick="delQN('+n.id+')">✕</button></div>';
   }).join('');
@@ -2495,10 +2505,10 @@ function renderWRC(){
     var ul=ULBL[r.unit]||'',step=r.step||USTEP[r.unit]||1;
     var neg=r.neg,nc=neg?'w-rb neg-b':'w-rb';
     if(r.unit==='check')return '<div class="w-rc" style="border-left-color:'+(neg?'var(--neg)':r.color)+'">'+
-      '<div><div class="w-rc-nm">'+r.nm+(neg?' <span class="neg-tag">−'+r.negXp+' досвіду</span>':'')+'</div><div class="w-rc-stat">'+(r.done?'✓ виконано':'не виконано')+'</div></div>'+
+      '<div><div class="w-rc-nm">'+esc(r.nm)+(neg?' <span class="neg-tag">−'+r.negXp+' досвіду</span>':'')+'</div><div class="w-rc-stat">'+(r.done?'✓ виконано':'не виконано')+'</div></div>'+
       '<div class="w-rc-ctrl"><button class="w-rck '+(r.done?'on':'')+'" onclick="rcTogCheck(\''+r.id+'\')">'+(r.done?'✓':'Виконати')+'</button></div></div>';
     return '<div class="w-rc" style="border-left-color:'+(neg?'var(--neg)':r.color)+'">'+
-      '<div><div class="w-rc-nm">'+r.nm+(neg?' <span class="neg-tag">−'+r.negXp+' досвіду</span>':'')+'</div><div class="w-rc-stat">'+r.val+' '+ul+'</div></div>'+
+      '<div><div class="w-rc-nm">'+esc(r.nm)+(neg?' <span class="neg-tag">−'+r.negXp+' досвіду</span>':'')+'</div><div class="w-rc-stat">'+r.val+' '+ul+'</div></div>'+
       '<div class="w-rc-ctrl"><button class="w-rb" onclick="rcDec(\''+r.id+'\')">−</button><span class="w-rv">'+r.val+'</span><button class="'+nc+'" onclick="rcInc(\''+r.id+'\')">+'+step+'</button></div></div>';
   }).join('');
 }
@@ -2515,9 +2525,9 @@ function renderWTasks(){
     return '<div class="w-tk '+(t.done&&!isNeg?'done-w':'')+'" style="border-left-color:'+(t.zoneColor||'transparent')+'">'+
       '<div class="w-th">'+
       '<button class="w-ck '+(t.done&&!isNeg?'on':'')+'" onclick="togTask('+t.id+')">'+(!isNeg&&t.done?'✓':'')+'</button>'+
-      '<div style="flex:1;min-width:0"><div class="w-tt">'+(isNeg?'⚠ ':'')+t.title+'</div>'+
+      '<div style="flex:1;min-width:0"><div class="w-tt">'+(isNeg?'⚠ ':'')+esc(t.title)+'</div>'+
         '<div class="w-meta">'+
-          (t.zoneName?'<span style="color:'+(t.zoneColor||'#888')+'">'+t.zoneName+'</span>':'')+'<span>'+(TL[t.type]||'')+'</span>'+
+          (t.zoneName?'<span style="color:'+esc(t.zoneColor||'#888')+'">'+esc(t.zoneName)+'</span>':'')+'<span>'+(TL[t.type]||'')+'</span>'+
           (t.alarmTime?'<span style="color:var(--xp)">⏰'+t.alarmTime+'</span>':'')+
         '</div>'+
       '</div>'+
@@ -2530,10 +2540,10 @@ function renderWTasks(){
 function togWBody(id){var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;t.wExpanded=!t.wExpanded;var b=document.getElementById('wtb-'+id);if(b)b.classList.toggle('open',t.wExpanded);var btn=document.getElementById('wexp-'+id);if(btn)btn.textContent=t.wExpanded?'▲':'▼';}
 function renderWBody(t){
   var h='';
-  if(t.type==='check'){h+='<div class="bl">Пункти</div>';(t.items||[]).forEach(function(it,i){h+='<div class="ci '+(it.done?'cid':'')+'" id="wci-'+t.id+'-'+i+'"><input type="checkbox" '+(it.done?'checked':'')+' onchange="togWCI('+t.id+','+i+')"><span>'+it.text+'</span></div>';});}
+  if(t.type==='check'){h+='<div class="bl">Пункти</div>';(t.items||[]).forEach(function(it,i){h+='<div class="ci '+(it.done?'cid':'')+'" id="wci-'+t.id+'-'+i+'"><input type="checkbox" '+(it.done?'checked':'')+' onchange="togWCI('+t.id+','+i+')"><span>'+esc(it.text)+'</span></div>';});}
   if(t.type==='scale')h+='<div class="bl">Прогрес: <span id="wsv-'+t.id+'">'+t.scale+'%</span></div><div class="sw"><input type="range" min="0" max="100" value="'+t.scale+'" oninput="wUpdScale('+t.id+',this.value)"></div>';
   if(t.type==='counter')h+='<div class="bl">Лічильник</div><div class="cw"><button class="cbtn" onclick="wChgCnt('+t.id+',-1)">−</button><span class="cvv" id="wcv-'+t.id+'">'+t.counter+'</span><button class="cbtn" onclick="wChgCnt('+t.id+',1)">+</button></div>';
-  if(t.type==='note')h+='<div class="bl">Нотатка</div><textarea class="tnote" oninput="updNote('+t.id+',this.value)">'+(t.note||'')+'</textarea>';
+  if(t.type==='note')h+='<div class="bl">Нотатка</div><textarea class="tnote" oninput="updNote('+t.id+',this.value)">'+esc(t.note||'')+'</textarea>';
   if(t.type==='alarm')h+='<div class="bl">Час</div><div class="aw"><input type="time" value="'+(t.alarmTime||'')+'" onchange="updAlarm('+t.id+',this.value)"></div>';
   if(t.type==='pomodoro'){var s=t.pomSecs||0;h+='<div class="w-pom" style="display:flex;align-items:center;gap:7px;margin-top:5px"><div style="font-family:\'Space Mono\',monospace;font-size:20px;font-weight:700;color:var(--z)" id="wpt-'+t.id+'">'+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')+'</div><span style="font-size:10px;color:var(--t3)">'+(t.pomMode==='work'?'🔴':'🟢')+' '+(t.pomSessions||0)+'сес.</span><button class="w-mb '+(t.pomRunning?'act':'')+'" onclick="wTogPom('+t.id+')">'+(t.pomRunning?'⏸':'▶')+'</button><button class="w-mb" onclick="rstPom('+t.id+')">↺</button></div>';}
   if(t.type==='habit'){h+='<div class="bl">Тиждень</div><div class="habit-week" style="margin-top:4px">';(t.habitDays||[]).forEach(function(d,i){h+='<div class="hday '+(d?'on':'')+'" onclick="togHabit('+t.id+','+i+')"><div>'+WD[i]+'</div><div>'+(d?'✓':'')+'</div></div>';});h+='</div>';}
@@ -2552,7 +2562,7 @@ function renderWQN(){
   if(!notes.length){el.innerHTML='<div class="empty">Нотаток немає</div>';return;}
   el.innerHTML=notes.map(function(n){
     return '<div class="w-qn"><span class="w-qn-t">'+n.time+'</span><span style="font-size:11px;flex-shrink:0">'+getFIco(n.folder)+'</span>'+
-      '<span style="flex:1;font-size:12px;color:var(--t1);line-height:1.5">'+n.txt+'</span>'+
+      '<span style="flex:1;font-size:12px;color:var(--t1);line-height:1.5">'+esc(n.txt)+'</span>'+
       '<button class="w-qn-del" onclick="delQN('+n.id+')">✕</button></div>';
   }).join('');
 }
@@ -2599,7 +2609,7 @@ function renderRare(){
   if(!S.rareEvents.length){el.innerHTML='<div style="font-size:11px;color:var(--t3);text-align:center;padding:10px">Немає подій — натисни +</div>';return;}
   el.innerHTML=S.rareEvents.map(function(r){
     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--b1)">'+
-      '<span style="flex:1;font-size:13px">'+r.nm+'</span>'+
+      '<span style="flex:1;font-size:13px">'+esc(r.nm)+'</span>'+
       '<button class="rc-btn" onclick="chgRare('+r.id+',-1)" style="background:none;border:1px solid var(--b2);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:14px;color:var(--t2)">−</button>'+
       '<span id="rare-v-'+r.id+'" style="min-width:28px;text-align:center;font-size:15px;font-weight:700;color:var(--z)">'+r.val+'</span>'+
       '<button class="rc-btn" onclick="chgRare('+r.id+',1)" style="background:none;border:1px solid var(--b2);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:14px;color:var(--t2)">+</button>'+
@@ -3007,7 +3017,7 @@ function kbdOpen(ctx) {
   if(fsel){
     if(ctx.folderSel){
       fsel.innerHTML = S.folders.map(function(f){
-        return '<option value="'+f.id+'" '+(f.id===ctx.folderSel?'selected':'')+'>'+(f.ico||'')+' '+f.nm+'</option>';
+        return '<option value="'+f.id+'" '+(f.id===ctx.folderSel?'selected':'')+'>'+(f.ico||'')+' '+esc(f.nm)+'</option>';
       }).join('');
       fsel.style.display='inline-block';
     } else fsel.style.display='none';
@@ -3157,9 +3167,9 @@ function renderZefSlots() {
   var el=document.getElementById('zef-slots');if(!el)return;
   el.innerHTML = zefSlots.map(function(sl,i){
     return '<div class="slot-row">'+
-      '<input type="time" value="'+sl.s+'" oninput="setZefSlotS('+i+',this.value)">'+
+      '<input type="time" value="'+esc(sl.s)+'" oninput="setZefSlotS('+i+',this.value)">'+
       '<label>—</label>'+
-      '<input type="time" value="'+sl.e+'" oninput="setZefSlotE('+i+',this.value)">'+
+      '<input type="time" value="'+esc(sl.e)+'" oninput="setZefSlotE('+i+',this.value)">'+
       (zefSlots.length>1?'<button class="srm" onclick="zefRmSlot('+i+')">✕</button>':'')+
     '</div>';
   }).join('');
@@ -3216,16 +3226,16 @@ renderZones = function() {
   inact.sort(function(a,b){ var la=(_zUse[a.id]||{}).lastDs||'', lb=(_zUse[b.id]||{}).lastDs||''; return la>lb?-1:la<lb?1:(a.nm<b.nm?-1:1); });
   function zrow(z, off){
     var linked = S.tasks.filter(function(t){ return t.type==='zonelinked'&&t.zoneId===z.id; });
-    return '<div class="zrow'+(off?' zrow-off':'')+'" style="border-left-color:'+z.color+'">'+
-      '<div class="zdot" style="background:'+z.color+'"></div>'+
-      '<div class="zri"><div class="znm">'+z.nm+'</div>'+
-      '<div class="zslots">'+(z.slots||[]).map(function(sl){ return '<span class="zslot">'+sl.s+'–'+sl.e+'</span>'; }).join('')+'</div>'+
+    return '<div class="zrow'+(off?' zrow-off':'')+'" style="border-left-color:'+esc(z.color)+'">'+
+      '<div class="zdot" style="background:'+esc(z.color)+'"></div>'+
+      '<div class="zri"><div class="znm">'+esc(z.nm)+'</div>'+
+      '<div class="zslots">'+(z.slots||[]).map(function(sl){ return '<span class="zslot">'+esc(sl.s)+'–'+esc(sl.e)+'</span>'; }).join('')+'</div>'+
       '<span class="zprio zp'+z.prio+'">'+(pl[z.prio]||'')+'</span>'+
-      (z.desc?'<div class="zdesc">'+z.desc+'</div>':'')+
+      (z.desc?'<div class="zdesc">'+esc(z.desc)+'</div>':'')+
       _zoneModeHtml(z)+
       (off&&z.off?'<div class="zdesc" style="color:var(--t3)">💤 вимкнена вручну</div>':'')+
       (linked.length?'<div class="zdesc" style="color:var(--z)">'+linked.map(function(t){
-        return '🔗 '+t.title+
+        return '🔗 '+esc(t.title)+
           ' <span onclick="openEdit('+t.id+')" title="Редагувати" style="cursor:pointer;padding:0 2px">✎</span>'+
           '<span onclick="delTask('+t.id+');renderZones()" title="Видалити" style="color:var(--t3);cursor:pointer;padding:0 2px">✕</span>';
       }).join('<br>')+'</div>':'')+
@@ -3444,22 +3454,22 @@ function renderPlanDetail(ds){
   if(_dayExplicit&&_dayRule) srcHint='<div style="font-size:10px;color:var(--t3);padding:1px 0 4px">✍ ручні правки · <span onclick="dayResetToRule()" style="color:var(--z);cursor:pointer;text-decoration:underline">повернути графік «'+_dayRule.name+'»</span></div>';
   else if(_dayRule&&dayZones.length) srcHint='<div style="font-size:10px;color:var(--t3);padding:1px 0 4px">📋 за графіком «'+_dayRule.name+'» — правка створить виняток лише для цього дня</div>';
   var _zsort=S.zones.slice().sort(function(a,b){return (a.active===false?1:0)-(b.active===false?1:0);});
-  var zoneOpts='<option value="">— зона —</option>'+_zsort.map(function(z){return '<option value="'+z.id+'">'+z.nm+(z.active===false?' 💤':'')+'</option>';}).join('');
+  var zoneOpts='<option value="">— зона —</option>'+_zsort.map(function(z){return '<option value="'+z.id+'">'+esc(z.nm)+(z.active===false?' 💤':'')+'</option>';}).join('');
   var _dayOffArr=planDayOff[ds]||[];
   // Безстрокові (та піновані) зони — діють цього дня за своїми слотами, якщо не вимкнені на день
   var dailyZ=S.zones.filter(function(z){ return z.active!==false && !(z.bound&&!z.actPin) && (z.slots||[]).length && _dayOffArr.indexOf(z.id)<0; });
   dailyZ.sort(function(a,b){ var ka=zoneSortKey(a),kb=zoneSortKey(b); return ka<kb?-1:1; });
   var dailyHtml=dailyZ.map(function(z){
-    return '<div class="plan-task-row" style="border-left:3px solid '+z.color+'">'+
-      '<span class="plan-task-nm">'+z.nm+' <span style="font-size:9px;color:var(--t3);font-weight:400">∞ щодня</span></span>'+
-      '<span style="font-size:10px;color:var(--t3);font-family:monospace">'+(z.slots||[]).map(function(sl){return sl.s+'–'+sl.e;}).join(' · ')+'</span>'+
+    return '<div class="plan-task-row" style="border-left:3px solid '+esc(z.color)+'">'+
+      '<span class="plan-task-nm">'+esc(z.nm)+' <span style="font-size:9px;color:var(--t3);font-weight:400">∞ щодня</span></span>'+
+      '<span style="font-size:10px;color:var(--t3);font-family:monospace">'+(z.slots||[]).map(function(sl){return esc(sl.s)+'–'+esc(sl.e);}).join(' · ')+'</span>'+
       '<button class="plan-rm" title="Змінити час лише цього дня" onclick="dayEditDaily('+z.id+')">✎</button>'+
       '<button class="plan-rm" title="Вимкнути лише цього дня" onclick="dayOffDaily('+z.id+')">&#10005;</button>'+
     '</div>';
   }).join('');
   var offHtml=_dayOffArr.map(function(zid){
     var z=S.zones.find(function(z){return z.id===zid;}); if(!z) return '';
-    return '<div style="font-size:10px;color:var(--t3);padding:2px 0 2px 8px">💤 '+z.nm+' вимкнена цього дня · <span onclick="dayRestoreDaily('+zid+')" style="color:var(--z);cursor:pointer;text-decoration:underline">повернути</span></div>';
+    return '<div style="font-size:10px;color:var(--t3);padding:2px 0 2px 8px">💤 '+esc(z.nm)+' вимкнена цього дня · <span onclick="dayRestoreDaily('+zid+')" style="color:var(--z);cursor:pointer;text-decoration:underline">повернути</span></div>';
   }).join('');
   var zonesHtml='<div style="margin:4px 0 8px">'+
     '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">🕐 Часові зони дня</div>'+
@@ -3487,7 +3497,7 @@ function renderPlanDetail(ds){
     '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">📋 Шаблони дня</div>'+
     (tpls.length?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px">'+
       tpls.map(function(tp){
-        return '<span class="ptype" onclick="applyDayTemplate(\''+tp.id+'\')" title="Застосувати зони цього шаблону до дня">'+tp.name+' ('+(tp.blocks||[]).length+')'+
+        return '<span class="ptype" onclick="applyDayTemplate(\''+tp.id+'\')" title="Застосувати зони цього шаблону до дня">'+esc(tp.name)+' ('+(tp.blocks||[]).length+')'+
           ' <span onclick="event.stopPropagation();delDayTemplate(\''+tp.id+'\')" style="color:var(--t3);cursor:pointer;padding:0 3px">✕</span>'+
         '</span>';
       }).join('')+'</div>':'<div style="font-size:10px;color:var(--t3);margin-bottom:5px">Ще немає шаблонів — додай зони дня і збережи</div>')+
@@ -3499,7 +3509,7 @@ function renderPlanDetail(ds){
   var dayTasksHtml=dayTasks.map(function(t){
     return '<div class="plan-task-row">'+
       '<button class="plan-ck '+(t.done?'on':'')+'" onclick="togTask('+t.id+');renderPlanDetail(\''+ds+'\')">'+(t.done?'&#10003;':'')+'</button>'+
-      '<span class="plan-task-nm" style="'+(t.done?'text-decoration:line-through;opacity:.5':'')+'">'+t.title+'</span>'+
+      '<span class="plan-task-nm" style="'+(t.done?'text-decoration:line-through;opacity:.5':'')+'">'+esc(t.title)+'</span>'+
       (t.schedTime?'<span style="font-size:10px;color:var(--z);font-family:monospace">'+t.schedTime+'</span>':'')+
       '<button class="plan-rm" onclick="delTask('+t.id+');renderPlanDetail(\''+ds+'\')">&#10005;</button>'+
     '</div>';
@@ -3644,7 +3654,7 @@ function renderWeekCtor(){
   if(!wkcOpen){ el.innerHTML=head; return; }
   var list=(S.weekTemplates||[]).map(function(tp){
     var strip=(tp.days||[]).map(function(d){return '<span class="wkc-cell '+(d.rest?'r':'w')+'" title="'+_wkcDayName(d)+'">'+(d.rest?'В':'Р')+'</span>';}).join('');
-    return '<div class="wkc-row"><span class="wkc-nm">'+tp.name+'</span><div class="wkc-strip">'+strip+'</div>'+
+    return '<div class="wkc-row"><span class="wkc-nm">'+esc(tp.name)+'</span><div class="wkc-strip">'+strip+'</div>'+
       '<button class="wkc-btn go" onclick="wkcApply(\''+tp.id+'\')">▶</button>'+
       '<button class="wkc-btn" onclick="wkcEdit(\''+tp.id+'\')">✎</button>'+
       '<button class="wkc-btn" onclick="wkcDel(\''+tp.id+'\')">✕</button></div>';
@@ -3653,7 +3663,7 @@ function renderWeekCtor(){
   var rulesHtml=(planRules||[]).length?
     '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:9px 0 3px">✓ Застосовано</div>'+
     (planRules||[]).map(function(r,i){
-      return '<div class="wkc-row"><span class="wkc-nm">'+r.name+'</span>'+
+      return '<div class="wkc-row"><span class="wkc-nm">'+esc(r.name)+'</span>'+
         '<span style="font-size:10px;color:var(--t2);flex:1">'+fmtDsShort(r.start)+' → '+fmtDsShort(r.end)+'</span>'+
         '<button class="wkc-btn" onclick="wkcRuleDel('+i+')">✕</button></div>';
     }).join(''):'';
@@ -3681,7 +3691,7 @@ function wkcDel(id){
   renderWeekCtor(); queueSave();
 }
 function _wkcEditorHtml(){
-  function tplOpts(sel){ return '<option value="">— без зон —</option>'+(S.dayTemplates||[]).map(function(t){return '<option value="'+t.id+'" '+(sel===t.id?'selected':'')+'>'+t.name+'</option>';}).join(''); }
+  function tplOpts(sel){ return '<option value="">— без зон —</option>'+(S.dayTemplates||[]).map(function(t){return '<option value="'+t.id+'" '+(sel===t.id?'selected':'')+'>'+esc(t.name)+'</option>';}).join(''); }
   return '<div class="wkc-panel"><div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">'+(wkcDraft.id?'✎ Редагування графіка':'＋ Новий графік')+'</div>'+
     '<input type="text" id="wkc-name" value="'+(wkcDraft.name||'').replace(/"/g,'&quot;')+'" placeholder="Назва (напр. 5/2)" style="width:100%;box-sizing:border-box;background:var(--s3);border:1px solid var(--b2);border-radius:6px;color:var(--t1);font-size:12px;padding:6px 8px;font-family:\'Syne\',sans-serif;margin-bottom:7px;outline:none">'+
     wkcDraft.days.map(function(d,i){
@@ -3721,7 +3731,7 @@ function wkcSave(){
 function wkcApply(id){ wkcDraft=null; wkcApplyId=(wkcApplyId===id?null:id); renderWeekCtor(); }
 function _wkcApplyHtml(){
   var tp=(S.weekTemplates||[]).find(function(x){return x.id===wkcApplyId;}); if(!tp) return '';
-  return '<div class="wkc-panel"><div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">▶ Застосувати «'+tp.name+'»</div>'+
+  return '<div class="wkc-panel"><div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">▶ Застосувати «'+esc(tp.name)+'»</div>'+
     '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">'+
       '<span style="font-size:11px;color:var(--t2)">з</span>'+
       '<input type="date" id="wkc-start" value="'+fmtDate(new Date())+'" style="background:var(--s3);border:1px solid var(--b2);border-radius:6px;color:var(--t1);font-size:11px;padding:4px 5px">'+
