@@ -768,6 +768,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 <div id="notes-sec" class="tsec">
   <div class="np-wrap">
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="aiAnalyze()" title="Скопіювати готовий промпт + твої дані для аналізу будь-яким ШІ" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:4px 13px;font-size:11px;color:var(--z);cursor:pointer;font-family:'Syne',sans-serif">🤖 Аналіз ШІ</button>
       <button onclick="exportReadable()" title="Читабельний текст (.md) — для очей, не для імпорту" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:4px 13px;font-size:11px;color:var(--t2);cursor:pointer;font-family:'Syne',sans-serif">📄 Текстом</button>
       <button onclick="exportBackup()" title="Зберегти все у файл (.json)" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:4px 13px;font-size:11px;color:var(--t2);cursor:pointer;font-family:'Syne',sans-serif">↓ Експорт</button>
       <button onclick="document.getElementById('import-file').click()" title="Додати задачі/нотатки з файлу (не замінює наявні)" style="background:none;border:1px solid var(--b2);border-radius:9px;padding:4px 13px;font-size:11px;color:var(--t2);cursor:pointer;font-family:'Syne',sans-serif">↑ Імпорт</button>
@@ -991,6 +992,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
     <div class="rm-s">
       <h3>💾 Експорт / Імпорт</h3>
       <p>У Блокноті: <b>Експорт</b> зберігає все у файл .json. <b>Імпорт</b> ДОДАЄ дані з файлу (не замінює наявні — дублі пропускаються).</p>
+      <p><b style="color:var(--t1)">🤖 Аналіз ШІ:</b> кнопка копіює готовий промпт разом із твоїми задачами, зонами й рутиною. Встав це у ChatGPT, Claude чи інший ШІ — і він підкаже пріоритети, розбивку задач і планування. Нічого нікуди не надсилається автоматично — копіюється лише в буфер, ти сам вирішуєш, куди вставити.</p>
     </div>
     <div class="rm-s">
       <h3>📜 Ліцензія та вихідний код</h3>
@@ -2659,7 +2661,7 @@ function exportBackup(){
 
 // Експорт ЧИТАБЕЛЬНИЙ (Markdown) — для людей, терапевта, переглядання очима.
 // Це не резервна копія: імпорт читає лише JSON.
-function exportReadable(){
+function buildReadableMd(){
   var L=[], today=fmtDate(new Date()), now=new Date();
   L.push('# Потік — експорт '+today+' '+now.toLocaleTimeString('uk',{hour:'2-digit',minute:'2-digit'}));
   L.push('');
@@ -2705,8 +2707,11 @@ function exportReadable(){
     }); L.push(''); }
   if((planRules||[]).length){ L.push('## 🗓 Застосовані графіки');
     planRules.forEach(function(r){ L.push('- '+r.name+': '+r.start+' → '+r.end); }); L.push(''); }
-  var md=L.join('\n');
-  var fname='flow-export-'+today+'.md';
+  return L.join('\n');
+}
+function exportReadable(){
+  var md=buildReadableMd();
+  var fname='flow-export-'+fmtDate(new Date())+'.md';
   if(window.FlowBridge && typeof window.FlowBridge.exportTxt==='function'){
     try { window.FlowBridge.exportTxt(fname, md); return; } catch(e){}
   }
@@ -2716,6 +2721,59 @@ function exportReadable(){
   a.href=url; a.download=fname;
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ══ ПРОМПТ ДЛЯ ШІ ══
+// Готова інструкція + читабельні дані користувача → у буфер обміну.
+// Працює з будь-яким ШІ (ChatGPT, Claude, Gemini тощо) — нічого нікуди не
+// надсилається автоматично; користувач сам вставляє текст куди хоче.
+var AI_PROMPT =
+'Ти — помічник з продуктивності для людини з РДУГ (ADHD). Нижче — експорт її '+
+'застосунку «Потік»: задачі, часові зони дня, рутина, нотатки, пріоритети.\n\n'+
+'Проаналізуй це й допоможи, враховуючи особливості РДУГ (складно почати, '+
+'утримати увагу, відчути час, розставити пріоритети). Зокрема:\n'+
+'1. Що варто робити в першу чергу сьогодні (3–5 пунктів) і чому.\n'+
+'2. Які задачі краще розбити на дрібніші кроки — запропонуй розбивку.\n'+
+'3. Які задачі прив’язати до яких часових зон дня для кращого ритму.\n'+
+'4. Що схоже на дублікати, застаріле або «висить мертвим вантажем» — що прибрати.\n'+
+'5. М’які, конкретні поради без засуджування й без знецінення.\n\n'+
+'Відповідай українською, стисло й по-доброму. Не вигадуй даних, яких немає.';
+function toast(msg){
+  var t=document.getElementById('flow-toast');
+  if(!t){
+    t=document.createElement('div'); t.id='flow-toast';
+    t.style.cssText='position:fixed;left:50%;bottom:78px;transform:translateX(-50%);background:var(--s3);color:var(--t1);border:1px solid var(--b2);border-radius:10px;padding:10px 16px;font-size:12px;font-family:Syne,sans-serif;z-index:400;max-width:88%;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.3);transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._h); t._h=setTimeout(function(){ t.style.opacity='0'; },3500);
+}
+function aiAnalyze(){
+  var text = AI_PROMPT + '\n\n---\n\n' + buildReadableMd();
+  var ok=function(){ toast('🤖 Скопійовано! Встав у ChatGPT, Claude чи інший ШІ.'); };
+  var fail=function(){ aiShowFallback(text); };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(ok, fail);
+    } else fail();
+  }catch(e){ fail(); }
+}
+function aiShowFallback(text){
+  var box=document.createElement('div');
+  box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;flex-direction:column;padding:18px;gap:10px';
+  var lbl=document.createElement('div');
+  lbl.style.cssText='color:#fff;font-size:13px;font-weight:700;font-family:Syne,sans-serif';
+  lbl.textContent='Скопіюй текст і встав у ШІ:';
+  var ta=document.createElement('textarea');
+  ta.style.cssText='flex:1;width:100%;background:var(--s1);color:var(--t1);border:1px solid var(--b2);border-radius:10px;padding:10px;font-size:12px;font-family:monospace';
+  ta.value=text;
+  var btn=document.createElement('button');
+  btn.textContent='Закрити';
+  btn.style.cssText='background:var(--z);border:none;border-radius:8px;padding:11px;color:#fff;font-family:Syne,sans-serif;font-weight:700;cursor:pointer';
+  btn.onclick=function(){ document.body.removeChild(box); };
+  box.appendChild(lbl); box.appendChild(ta); box.appendChild(btn);
+  document.body.appendChild(box);
+  ta.focus(); ta.select();
 }
 
 // Імпорт = ДОДАВАННЯ (merge), а не заміна. Існуючі дані лишаються,
