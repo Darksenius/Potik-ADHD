@@ -1,4 +1,12 @@
 <!DOCTYPE html>
+<!--
+  Потік — застосунок для людей з РДУГ.
+  Copyright (C) 2026 Darksenius
+  Ліцензія: GNU Affero General Public License v3 (AGPL-3.0-only).
+  Вихідний код: https://github.com/Darksenius/Potik-ADHD
+  Це вільне програмне забезпечення, що поширюється БЕЗ ЖОДНИХ ГАРАНТІЙ;
+  повний текст ліцензії — у файлі LICENSE та в довідці застосунку.
+-->
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
@@ -525,6 +533,12 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 .rmd{font-size:11px;color:var(--t2);line-height:1.5}
 .rm-tip{background:color-mix(in srgb,var(--z) 7%,transparent);border:1px solid color-mix(in srgb,var(--z) 18%,transparent);border-radius:7px;padding:8px 11px;margin-top:7px;font-size:12px;color:var(--t2);line-height:1.6}
 .rm-tip b{color:var(--t1)}
+#oss-page{position:fixed;inset:0;background:var(--bg);z-index:120;overflow-y:auto;display:none;padding:14px 14px 40px}
+#oss-page.open{display:block}
+#oss-page h2{font-size:15px;font-weight:800;color:var(--t1)}
+.oss-link{color:var(--z);font-size:12px;word-break:break-all;display:inline-block;margin-bottom:4px}
+.oss-pre{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:11px;font-family:'Space Mono',monospace;font-size:9.5px;line-height:1.45;color:var(--t2);white-space:pre-wrap;word-break:break-word;margin-top:8px}
+.oss-btn{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:7px;padding:9px 11px;color:var(--t1);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-top:7px}
 
 /* ── OVERLAYS ── */
 #xp-pop{position:fixed;top:66px;right:13px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;padding:6px 13px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--xp);z-index:200;opacity:0;transform:translateY(-6px);transition:opacity .25s,transform .25s;pointer-events:none}
@@ -957,6 +971,11 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
     <div class="rm-s">
       <h3>💾 Експорт / Імпорт</h3>
       <p>У Блокноті: <b>Експорт</b> зберігає все у файл .json. <b>Імпорт</b> ДОДАЄ дані з файлу (не замінює наявні — дублі пропускаються).</p>
+    </div>
+    <div class="rm-s">
+      <h3>📜 Ліцензія та вихідний код</h3>
+      <p><b style="color:var(--t1)">Застосунок з ліцензією AGPL v3</b> — вільне програмне забезпечення: код відкритий, його можна вивчати, змінювати й поширювати на умовах тієї ж ліцензії.</p>
+      <button class="oss-btn" onclick="openOSS()">📜 Ліцензія та вихідний код</button>
     </div>
   </div>
 </div>
@@ -4307,6 +4326,29 @@ setTimeout(function(){
     <button class="kbd-send" onclick="kbdSend()">→</button>
   </div>
 </div>
+
+<!-- ═══════ LICENSE & SOURCE PAGE (наповнюється scripts/embed-oss.js при збірці) ═══════ -->
+<div id="oss-page">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <button class="edit-back" onclick="closeOSS()">← Назад</button>
+    <h2>Ліцензія та вихідний код</h2>
+  </div>
+  <p style="font-size:13px;color:var(--t1);font-weight:700;margin-bottom:6px">Застосунок з ліцензією AGPL v3</p>
+  <a class="oss-link" href="https://github.com/Darksenius/Potik-ADHD" target="_blank" rel="noopener">github.com/Darksenius/Potik-ADHD</a>
+  <pre class="oss-pre" id="oss-license"></pre>
+  <pre class="oss-pre" id="oss-source"></pre>
+</div>
+<script>
+function openOSS(){var d=window.__OSS__;
+  document.getElementById('oss-license').textContent=d?d.license:'Текст ліцензії AGPL v3 вшивається автоматично при збірці (scripts/embed-oss.js). Повний текст — у файлі LICENSE в репозиторії.';
+  document.getElementById('oss-source').textContent=d?d.source:'Повний вихідний код вшивається автоматично при збірці (scripts/embed-oss.js). Див. репозиторій на GitHub за посиланням вище.';
+  document.getElementById('oss-page').classList.add('open');
+  document.getElementById('oss-page').scrollTop=0;}
+function closeOSS(){document.getElementById('oss-page').classList.remove('open');
+  document.getElementById('oss-license').textContent='';
+  document.getElementById('oss-source').textContent='';}
+</script>
+<script id="oss-data">window.__OSS__=null;</script>
 
 </body>
 </html>

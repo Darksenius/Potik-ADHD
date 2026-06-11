@@ -4,11 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "embed-oss": "node scripts/embed-oss.js",
+    "embed-oss:clean": "node scripts/embed-oss.js --clean",
+    "sync": "node scripts/embed-oss.js && npx cap sync android"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Darksenius",
+  "license": "AGPL-3.0-only",
   "type": "commonjs",
   "dependencies": {
     "@capacitor/android": "^8.4.0",

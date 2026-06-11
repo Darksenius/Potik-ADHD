@@ -20,6 +20,7 @@
 
 ```bash
 npm ci
+node scripts/embed-oss.js   # вшити ліцензію та вихідний код у довідку (AGPL)
 npx cap sync android
 cd android && ./gradlew assembleDebug
 # APK: android/app/build/outputs/apk/debug/app-debug.apk
@@ -36,3 +37,8 @@ cd android && ./gradlew assembleDebug
 Це означає: можна вільно використовувати, вивчати, змінювати й поширювати застосунок,
 але будь-яка похідна робота — **включно з мережевими сервісами на її основі** — мусить
 бути відкрита під цією ж ліцензією.
+
+При збірці скрипт [`scripts/embed-oss.js`](scripts/embed-oss.js) автоматично вшиває
+повний текст ліцензії та весь вихідний код у застосунок: Довідка → кнопка
+«📜 Ліцензія та вихідний код». Якщо додаєш або перейменовуєш файли коду — онови
+списки `SOURCE_FILES` / `SOURCE_DIRS` у цьому скрипті.

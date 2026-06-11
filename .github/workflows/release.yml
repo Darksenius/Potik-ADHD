@@ -24,6 +24,10 @@ jobs:
       - name: Install web deps
         run: npm ci --no-audit --no-fund
 
+      # AGPL: вшити текст ліцензії та повний вихідний код у довідку застосунку
+      - name: Embed license and source code
+        run: node scripts/embed-oss.js
+
       - name: Sync Capacitor
         run: npx cap sync android
 
