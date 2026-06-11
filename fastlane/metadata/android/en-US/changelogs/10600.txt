@@ -1,0 +1,3 @@
+• Help: "License & source code" button — full AGPL v3 text and complete source code embedded in the app
+• Task folder filters
+• Honest import with id mapping, zone fixes

@@ -1,0 +1,21 @@
+Potik ("Flow" in Ukrainian) is not yet another to-do list — it is an external executive-function support system for people with ADHD. Instead of asking "what should I do?", it answers "what is best right now?".
+
+Works fully offline. All data stays on your device. No ads, no trackers, no accounts.
+
+<b>Three pillars:</b>
+• <b>Day zones</b> — the day is split into colored time zones (Sleep / Morning / Work / Lunch / Evening…); the UI changes color and tasks are ranked by the current zone
+• <b>Hyperfocus tracking</b> — log where your attention actually is, with switch times and durations
+• <b>Impulse capture</b> — caught a thought? Dump it into the notebook and get back to what you were doing
+
+<b>Features:</b>
+• Many task types: simple, checklists, counters, alarms, scheduled, habits, Pomodoro, kids' tasks
+• Week builder — 5/2, 2/2, 3/3 and custom schedules, day templates
+• Persistent notification with the current zone and tasks — with ✓ / snooze / note actions
+• Quick notes with folders, free-form notebook, "someday" ideas
+• Routine, energy and water — gentle tracking without self-criticism
+• XP, levels, day streaks, achievements — a short distance between action and reward
+• JSON export/import, automatic on-disk backup, Markdown notes export
+
+The interface is currently in Ukrainian only.
+
+Free software licensed under AGPL-3.0. The full license text and complete source code are embedded right in the app's help section.

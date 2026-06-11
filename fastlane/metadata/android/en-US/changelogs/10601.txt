@@ -1,0 +1,2 @@
+• Fonts are now bundled with the app — no more Google Fonts requests, fully offline
+• F-Droid release preparation
