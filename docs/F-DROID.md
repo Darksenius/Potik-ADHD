@@ -33,40 +33,50 @@
 
 ## Подача через RFP — покроково
 
-1. Зайди на https://gitlab.com/fdroid/rfp/-/issues (потрібен акаунт GitLab).
-2. Натисни **New issue**. У полі вибору шаблону (Description template) обери
-   **Submission** — GitLab сам підставить заготовку з полями.
-3. Заголовок issue: `Потік (Potik) — offline ADHD organizer`.
-4. Заповни поля шаблону (формулювання полів можуть трохи відрізнятись — шаблон
-   часом оновлюють, але суть та сама). Готові відповіді:
-
-   | Поле шаблону | Що вставити |
-   |---|---|
-   | Repo URL / Link to source code | `https://github.com/Darksenius/Potik-ADHD` |
-   | Binaries / APK | `https://github.com/Darksenius/Potik-ADHD/releases` |
-   | License | `AGPL-3.0-only` |
-   | Categories | `Time` |
-   | Summary | `Offline ADHD-friendly organizer: tasks, day zones, routines, hyperfocus` |
-   | Description | можна не дублювати: `See fastlane/metadata/android/en-US/full_description.txt in the repo` |
-
-5. У полі типу «Relevant info / additional notes» встав це (важливо для пакувальників):
+1. Зайди на https://gitlab.com/fdroid/rfp/-/issues (потрібен акаунт GitLab) →
+   **New issue**. Заголовок: `Потік (Potik) — offline ADHD organizer`.
+2. Чекбокси шаблону — позначити перші три (Donated — лише якщо реально донатив):
+   - [x] The app complies with the inclusion criteria — FOSS, без трекерів і
+     пропрієтарних залежностей
+   - [x] The app is not already listed in the repo or issue tracker — перед
+     подачею пошукай "Potik" по issues для певності
+   - [x] The original app author has been notified (and does not oppose the
+     inclusion) — ти і є автор
+   - [ ] Donated to support the maintenance of this app in F-Droid
+3. Поля — вставити як є:
 
    ```
-   - Capacitor (webview) app. Build steps: `npm ci`, `node scripts/embed-oss.js`
-     (embeds AGPL license text + full source code into the in-app help, required
-     by the maintainer), `npx cap sync android`, then standard gradle
-     `assembleRelease` in `android/app`.
-   - A draft fdroiddata recipe is available in `docs/F-DROID.md` in the repo.
-   - Fully offline: no trackers, no network calls, fonts bundled (OFL-1.1).
-   - Fastlane metadata (uk + en-US) is in the repo, icon included.
-   - Releases are tagged `v*`; versionCode = MAJOR*10000 + MINOR*100 + PATCH.
-   - UI language: Ukrainian (English description provided).
+   Link to the source code: https://github.com/Darksenius/Potik-ADHD
+
+   Link to app in another app store: https://github.com/Darksenius/Potik-ADHD/releases (GitHub Releases only, not on Google Play)
+
+   License used: AGPL-3.0-only
+
+   Category: Time
+
+   Summary: Offline ADHD-friendly organizer: tasks, day zones, routines, hyperfocus
+
+   Description:
+   Potik ("Flow" in Ukrainian) is an external executive-function support system
+   for people with ADHD. Instead of asking "what should I do?", it answers
+   "what is best right now?". The day is split into colored time zones, tasks
+   are ranked by the current zone; hyperfocus tracking, impulse capture into a
+   notebook, routines, XP/levels, persistent notification with task actions.
+   Works fully offline, all data stays on the device, no ads, no trackers,
+   no accounts. UI is currently Ukrainian only.
+
+   Additional notes for packagers:
+   - Capacitor (webview) app. Build: `npm ci`, `node scripts/embed-oss.js`
+     (embeds the AGPL license text and full source code into the in-app help),
+     `npx cap sync android`, then standard gradle `assembleRelease` in `android/app`.
+   - Draft fdroiddata recipe: see `docs/F-DROID.md` in the repo.
+   - Fastlane metadata (uk + en-US) with icon and changelogs is in the repo.
+   - Releases are tagged `v*`, versionCode = MAJOR*10000 + MINOR*100 + PATCH
+     (suggested: AutoUpdateMode: Version, UpdateCheckMode: Tags ^v[0-9.]+$).
+   - Fully offline: no network calls, fonts bundled (OFL-1.1).
    ```
 
-6. У шаблоні є чекбокси (підтвердження, що застосунок FOSS, збирається з джерел,
-   нема пропрієтарних залежностей, ти пошукав дублікати RFP) — проставити всі,
-   у нас все це правда.
-7. Надіслати і чекати. Чергу RFP розбирають волонтери — може тривати тижні або
+4. Надіслати і чекати. Чергу RFP розбирають волонтери — може тривати тижні або
    місяці. Якщо хочеться швидше — паралельно можна зробити MR у fdroiddata
    самому (див. нижче), тоді в RFP-issue додай посилання на свій MR.
 
