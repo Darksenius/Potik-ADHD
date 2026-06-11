@@ -971,7 +971,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
         <span class="rmk">+N Лічильник</span><span class="rmd">Числовий лічильник з ціллю</span>
         <span class="rmk">✎ З нотаткою</span><span class="rmd">Задача + текстове поле</span>
         <span class="rmk">⏰ Будильник</span><span class="rmd">Окреме сповіщення у вказаний час</span>
-        <span class="rmk">📅 Запланована</span><span class="rmd">На дату+час, окреме сповіщення</span>
+        <span class="rmk">📅 Запланована</span><span class="rmd">На дату+час, окреме сповіщення + автонагадування напередодні о 12:00</span>
         <span class="rmk">⏱ Pomodoro</span><span class="rmd">25/5 хв, +15 досвіду за сесію</span>
         <span class="rmk">◉ Звичка</span><span class="rmd">Трекер по днях тижня</span>
         <span class="rmk">★ Дитяча</span><span class="rmd">Зірочки + нагорода</span>
@@ -2115,6 +2115,7 @@ function doSaveEdit(){
       var _d=new Date(); _d.setDate(_d.getDate()+1); t.schedDate=fmtDate(_d);
     }
     t.firedSched=false;
+    t.firedPre=false; // дата змінилась → передвісник «за день» має зведитись знову
   }
   // Time-window task fields
   if(t.type==='timewin'){
@@ -4016,6 +4017,20 @@ function fgNotifText(){
     try { dueMs = new Date(t.schedDate+'T'+t.schedTime+':00').getTime(); } catch(e){}
     return { id:t.id, title:t.title, dueMs:dueMs, fired:!!t.firedSched };
   });
+  // ── Автонагадування «за день до події о 12:00» ──
+  // Окреме сповіщення-передвісник для датованих задач. Не показується у
+  // планувальнику — існує лише у знімку для AlarmManager. Додаємо, тільки якщо
+  // полудень напередодні ще НЕ минув (інакше нагадувати «завтра» вже нема сенсу).
+  var _now = Date.now();
+  S.tasks.filter(function(t){
+    return t.type==='sched' && !t.done && !t.trashed && t.schedDate && t.schedTime && !t.firedPre;
+  }).forEach(function(t){
+    var preMs = 0;
+    try { var pd=new Date(t.schedDate+'T12:00:00'); pd.setDate(pd.getDate()-1); preMs=pd.getTime(); } catch(e){}
+    if(preMs > _now){
+      schedList.push({ id:t.id+'_pre', title:'Завтра '+t.schedTime+': '+t.title, dueMs:preMs, fired:false });
+    }
+  });
   // + задачі-будильники (щоденний час) → окреме сповіщення у свій час, навіть коли апка закрита
   S.tasks.filter(function(t){
     return t.type==='alarm' && t.alarmTime && !t.done && !t.trashed;
@@ -4351,8 +4366,15 @@ function handleNativeEvent(event) {
     changed = true;
   } else if(event.indexOf('sched_fired:') === 0) {
     var fid = event.slice(12);
-    var ft = S.tasks.find(function(t){ return String(t.id) === String(fid); });
-    if(ft){ ft.firedSched = true; ft.alarmFired = true; changed = true; }
+    if(fid.slice(-4) === '_pre'){
+      // спрацював передвісник «за день до події» — більше не повторювати
+      var pid = fid.slice(0,-4);
+      var pt = S.tasks.find(function(t){ return String(t.id) === String(pid); });
+      if(pt){ pt.firedPre = true; changed = true; }
+    } else {
+      var ft = S.tasks.find(function(t){ return String(t.id) === String(fid); });
+      if(ft){ ft.firedSched = true; ft.alarmFired = true; changed = true; }
+    }
   } else if(event.indexOf('task_remind:') === 0) {
     // Відкладена задача нагадала про себе — оновлюємо список
     renderTasks(); changed = true;
