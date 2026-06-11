@@ -27,6 +27,12 @@
 :root{--z:#4f8ef7;--bg:#0d0f14;--s1:#141720;--s2:#1c2030;--s3:#232840;
   --b1:rgba(255,255,255,.07);--b2:rgba(255,255,255,.13);
   --t1:#e8eaf2;--t2:#8b91a8;--t3:#555c78;--r:14px;--rs:8px;--xp:#f5c542;--neg:#e24b4a}
+/* Світла тема — перевизначає лише палітру; акцент --z далі задається зоною дня */
+html[data-theme="light"]{--bg:#eef1f7;--s1:#ffffff;--s2:#f1f4fa;--s3:#e4e9f3;
+  --b1:rgba(15,23,42,.10);--b2:rgba(15,23,42,.18);
+  --t1:#161b26;--t2:#4d566b;--t3:#8a92a6;--xp:#c98a00;--neg:#d23b3a}
+html{transition:background .3s}
+body,#edit-page,#oss-page{transition:background .3s,color .3s}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{font-size:15px}
 body{background:var(--bg);color:var(--t1);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden}
@@ -901,6 +907,10 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 <!-- ═══════ README PAGE ═══════ -->
 <div id="readme-page" class="page">
   <div id="rm-hdr"><h1>Потік · Довідка</h1><p>Застосунок для людей з РДУГ <span id="app-version" style="color:var(--t3)"></span></p></div>
+  <div style="background:var(--s1);border:1px solid var(--b2);border-radius:var(--r);padding:13px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div style="font-size:12px;font-weight:700;color:var(--t1)">🎨 Оформлення</div>
+    <button id="theme-toggle" onclick="toggleTheme()" style="background:var(--s3);border:1px solid var(--b2);border-radius:8px;padding:8px 13px;color:var(--t1);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer">🌙 Темна тема</button>
+  </div>
   <div style="background:var(--s1);border:1px solid var(--b2);border-radius:var(--r);padding:13px;margin:0 0 12px">
     <div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:6px">📌 Сповіщення на пристрої</div>
     <p style="font-size:11px;color:var(--t2);line-height:1.5">Постійне сповіщення з поточною зоною, задачами та рутиною з'являється <b>автоматично</b> при запуску — навіть коли застосунок згорнутий. Оновлюється щохвилини. Термінові, заплановані та відкладені задачі прилітають окремими сповіщеннями.</p>
@@ -1168,6 +1178,18 @@ function esc(s){
   return String(s==null?'':s).replace(/[&<>"']/g,function(c){
     return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&#39;';
   });
+}
+// ── ТЕМА (темна за замовчуванням / світла) ──
+function applyTheme(){
+  var light = S.theme === 'light';
+  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+  var btn = document.getElementById('theme-toggle');
+  if(btn) btn.textContent = light ? '☀️ Світла тема' : '🌙 Темна тема';
+}
+function toggleTheme(){
+  S.theme = (S.theme === 'light') ? 'dark' : 'light';
+  applyTheme();
+  queueSave();
 }
 // ══════════════════════════════════════════════════
 // СТАН
@@ -4165,6 +4187,7 @@ function collectState() {
     weekTemplates: S.weekTemplates||[],
     weekTplSeeded: !!S.weekTplSeeded,
     notepad: S.notepad||'',
+    theme: S.theme||'dark',
     saveDate: new Date().toDateString(),
   };
 }
@@ -4210,6 +4233,7 @@ function applyState(d) {
   if(Array.isArray(d.focusLog))      S.focusLog = d.focusLog;
   if(typeof d.currentFocus === 'string') S.currentFocus = d.currentFocus;
   if(typeof d.notepad === 'string')  S.notepad = d.notepad;
+  if(d.theme === 'light' || d.theme === 'dark') S.theme = d.theme;
   if(Array.isArray(d.rareEvents))    S.rareEvents = d.rareEvents;
   if(Array.isArray(d.dayTemplates))  S.dayTemplates = d.dayTemplates;
   if(Array.isArray(d.weekTemplates)) S.weekTemplates = d.weekTemplates;
@@ -4317,6 +4341,7 @@ if(_stateLoaded) {
 if(dailyResetIfNeeded(_loadedSaveDate)){ saveState(); console.log('FLOW: новий день — лічильники скинуто'); }
 // Зразкові графіки тижня (5/2, 2/2, 3/3) — одноразово; активність зон з плану
 seedWeekTemplates();
+applyTheme();
 updateZoneActive();
 renderFocusChips();
 renderZones();
