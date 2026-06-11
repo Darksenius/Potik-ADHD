@@ -1,0 +1,4 @@
+• Security: fixed an XSS vulnerability — user data is now safely escaped (important when importing files from others)
+• Light theme — Help → Appearance (dark stays the default)
+• "🤖 AI analysis" button in the Notebook — copies a ready prompt with your data for ChatGPT/Claude
+• Automatic reminder for scheduled events at 12:00 the day before
