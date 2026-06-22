@@ -47,6 +47,10 @@ public class FlowBridge {
         return s != null ? s : "";
     }
 
+    // id останньої прочитаної події — щоб clearEvents() видаляв лише її і старіші,
+    // а не події, що прилетіли вже після читання (інакше нотатка зі шторки губиться)
+    private volatile long lastReadEventId = 0;
+
     /** window.FlowBridge.getEvents() — повертає JSON-масив подій */
     @JavascriptInterface
     public String getEvents() {
@@ -54,16 +58,20 @@ public class FlowBridge {
         if (events.isEmpty()) return "[]";
         // org.json коректно екранує \n, \t, лапки тощо — на відміну від ручного склеювання
         org.json.JSONArray arr = new org.json.JSONArray();
+        long maxId = lastReadEventId;
         for (PendingEvent e : events) {
             arr.put(e.event != null ? e.event : "");
+            if (e.id > maxId) maxId = e.id;
         }
+        lastReadEventId = maxId;
         return arr.toString();
     }
 
-    /** window.FlowBridge.clearEvents() */
+    /** window.FlowBridge.clearEvents() — лише прочитані (до lastReadEventId) */
     @JavascriptInterface
     public void clearEvents() {
-        dao.clearEvents();
+        if (lastReadEventId > 0) dao.clearEventsUpTo(lastReadEventId);
+        else dao.clearEvents();
     }
 
     /** Викликається з Java-коду (не JS) */

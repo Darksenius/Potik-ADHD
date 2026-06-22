@@ -1,0 +1,1 @@
+• Fixed losing notes from the notification quick-input: an event arriving exactly during a refresh is no longer dropped

@@ -26,4 +26,9 @@ public interface FlowDao {
 
     @Query("DELETE FROM pending_events")
     void clearEvents();
+
+    /** Видалити лише вже прочитані події (id <= maxId) — щоб не втратити ті, що
+     *  прилетіли між читанням і очищенням (напр. нотатка зі шторки). */
+    @Query("DELETE FROM pending_events WHERE id <= :maxId")
+    void clearEventsUpTo(long maxId);
 }
