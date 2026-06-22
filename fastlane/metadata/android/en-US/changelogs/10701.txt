@@ -1,0 +1,2 @@
+• Repeating tasks now actually reset the next day (previously they stayed done forever)
+• Alarms no longer fire immediately when their time has already passed today — they ring next at the right time

@@ -2933,6 +2933,37 @@ document.getElementById('w-inbox').classList.add('hidden');
 // Дата, на яку були збережені дані (для коректного денного скиду)
 var _loadedSaveDate='';
 // Скидає денні лічильники, якщо збережена дата ≠ сьогодні. Повертає true якщо скинуто.
+// ── ПОВТОРЮВАНІ ЗАДАЧІ ──────────────────────────────────────────────
+// Чи активна (має бути виконана) повторювана задача в конкретний день.
+// Індекси днів — як у WD: 0=Пн … 6=Нд.
+function repeatDueOn(t, dt){
+  var r = t && t.repeat;
+  if(!r || r==='none' || r==='everyzone') return false;
+  var wd = (dt.getDay()+6)%7;
+  if(r==='daily')    return true;
+  if(r==='weekdays') return wd<=4;
+  if(r==='weekend')  return wd>=5;
+  if(r==='custom')   return !!(t.repeatDays && t.repeatDays[wd]);
+  if(r==='weekly'){ var c=t.created?new Date(t.created):null; return c ? ((c.getDay()+6)%7===wd) : true; }
+  if(r==='interval') return true; // час-базоване — принаймні зводимо щодня
+  return false;
+}
+// Зводить виконані повторювані задачі назад до невиконаного стану, якщо вони
+// мають повторитись у вказаний день. Ідемпотентно (захист по doneDate),
+// тож безпечно викликати і на старті, і при зміні доби.
+function resetRepeatingTasksFor(dt){
+  var ds = fmtDate(dt);
+  S.tasks.forEach(function(t){
+    if(!t.done || t.trashed) return;
+    if(!t.repeat || t.repeat==='none' || t.repeat==='everyzone') return;
+    if(t.doneDate === ds) return;        // вже виконано саме сьогодні — не чіпати
+    if(!repeatDueOn(t, dt)) return;      // сьогодні не за графіком — лишити як є
+    t.done=false; t.doneDate=''; t.doneAt=null;
+    if(Array.isArray(t.items)) t.items.forEach(function(it){ it.done=false; });
+    if(t.type==='counter') t.counter=0;
+    if(t.type==='scale')   t.scale=0;
+  });
+}
 function dailyResetIfNeeded(savedDate){
   var today=new Date().toDateString();
   if(savedDate && savedDate!==today){
@@ -2943,6 +2974,7 @@ function dailyResetIfNeeded(savedDate){
       if(t.type==='sched') t.firedSched=false;
       if(t.type==='alarm') t.alarmFired=false;
     });
+    resetRepeatingTasksFor(new Date());
     if(typeof firedA!=='undefined' && firedA.clear) firedA.clear();
     return true;
   }
@@ -3066,6 +3098,7 @@ function checkDailyReset(){
     if(t.type==='sched') t.firedSched=false;
     if(t.type==='alarm') t.alarmFired=false; // щоденний будильник знову спрацює
   });
+  resetRepeatingTasksFor(new Date());
   firedA.clear();
   renderTasks(); renderRecur(); queueSave(); updateForegroundService();
   console.log('FLOW: daily reset (фоновий)');
@@ -4036,7 +4069,13 @@ function fgNotifText(){
     return t.type==='alarm' && t.alarmTime && !t.done && !t.trashed;
   }).forEach(function(t){
     var dueMs = 0;
-    try { var p=t.alarmTime.split(':'); var d=new Date(); d.setHours(parseInt(p[0],10),parseInt(p[1],10),0,0); dueMs=d.getTime(); } catch(e){}
+    try {
+      var p=t.alarmTime.split(':'); var d=new Date(); d.setHours(parseInt(p[0],10),parseInt(p[1],10),0,0);
+      // якщо час сьогодні вже минув — будильник має дзвонити завтра, а не зараз
+      // (інакше нативний checkSched бачить due<=now і фаєрить негайно)
+      if(d.getTime() <= Date.now()) d.setDate(d.getDate()+1);
+      dueMs=d.getTime();
+    } catch(e){}
     schedList.push({ id:t.id, title:t.title, dueMs:dueMs, fired:!!t.alarmFired });
   });
   // ── Таймлайн зон на СЬОГОДНІ: нативний сервіс сам рахує поточну зону щохвилини,
@@ -4421,6 +4460,7 @@ if(_stateLoaded) {
 if(dailyResetIfNeeded(_loadedSaveDate)){ saveState(); console.log('FLOW: новий день — лічильники скинуто'); }
 // Зразкові графіки тижня (5/2, 2/2, 3/3) — одноразово; активність зон з плану
 seedWeekTemplates();
+resetRepeatingTasksFor(new Date()); // прибрати «завислі виконаними» повторювані задачі минулих днів
 applyTheme();
 updateZoneActive();
 renderFocusChips();
