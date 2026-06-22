@@ -174,12 +174,15 @@ public class FlowNotifService extends Service {
                 energy    = j.optInt("energy", energy);
                 zoneColor = j.optString("zoneColor", "");
 
-                // ── Поточна зона з таймлайна (zoneTimeline) ──
-                // Знімок міг бути збережений давно; зона в ньому застаріває. Якщо JS передав
-                // розклад зон на сьогодні — рахуємо актуальну зону прямо тут, щохвилини.
-                JSONArray tl = j.optJSONArray("zoneTimeline");
+                // ── Поточна зона + задачі під неї, перераховані щохвилини ──
+                // Знімок міг бути збережений давно; зона в ньому застаріває. tlDate==сьогодні
+                // → беремо повний таймлайн (із денними винятками плану); інакше (після
+                // опівночі, апку не відкривали) → базовий таймлайн зон, що повторюються щодня.
                 String tlDate = j.optString("tlDate", "");
-                if (tl != null && todayStr().equals(tlDate)) {
+                boolean fresh = todayStr().equals(tlDate);
+                JSONArray tl = fresh ? j.optJSONArray("zoneTimeline") : j.optJSONArray("zoneBaseline");
+                if (tl == null) tl = j.optJSONArray("zoneTimeline"); // запасний варіант
+                if (tl != null) {
                     java.util.Calendar cal = java.util.Calendar.getInstance();
                     int cur = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60
                             + cal.get(java.util.Calendar.MINUTE);
@@ -206,11 +209,40 @@ public class FlowNotifService extends Service {
                     time = String.format(java.util.Locale.US, "%02d:%02d",
                             cal.get(java.util.Calendar.HOUR_OF_DAY),
                             cal.get(java.util.Calendar.MINUTE));
+
+                    // Перебудувати список задач під поточну зону: термінові + задачі
+                    // цієї зони + позазональні (до 7). Працює і при закритій апці.
+                    JSONObject ztb = j.optJSONObject("zoneTasksById");
+                    JSONArray  zl  = j.optJSONArray("zonelessTasks");
+                    JSONArray  ur  = j.optJSONArray("urgentTasks");
+                    if (ztb != null || zl != null || ur != null) {
+                        StringBuilder sb = new StringBuilder();
+                        int[] n = {0};
+                        appendTasks(sb, ur, n);
+                        if (best != null) {
+                            int zid = best.optInt("id", 0);
+                            if (zid != 0 && ztb != null) appendTasks(sb, ztb.optJSONArray(String.valueOf(zid)), n);
+                        }
+                        appendTasks(sb, zl, n);
+                        tasks = sb.toString();
+                    }
                 }
             } catch (Exception ignored) {}
         }
         lastZoneColor = parseZoneColor(zoneColor);
         buildMain(zone, slots, desc, tasks, routine, body, time, done, total, energy);
+    }
+
+    /** Додає назви задач із масиву до '|'-списку, не більше 7 загалом (n[0] — лічильник) */
+    private void appendTasks(StringBuilder sb, JSONArray arr, int[] n) {
+        if (arr == null) return;
+        for (int i = 0; i < arr.length() && n[0] < 7; i++) {
+            String t = arr.optString(i, "");
+            if (t == null || t.trim().isEmpty()) continue;
+            if (sb.length() > 0) sb.append("|");
+            sb.append(t);
+            n[0]++;
+        }
     }
 
     /** "HH:MM" → хвилини доби; -1 якщо не парситься */

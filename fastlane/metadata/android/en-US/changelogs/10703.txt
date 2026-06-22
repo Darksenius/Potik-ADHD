@@ -1,0 +1,2 @@
+• The notification now keeps tasks in sync with the current day-zone even when the app is closed (previously the zone changed but tasks stayed stale)
+• The notification's zone now updates correctly after midnight without opening the app

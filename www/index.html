@@ -4080,17 +4080,32 @@ function fgNotifText(){
   });
   // ── Таймлайн зон на СЬОГОДНІ: нативний сервіс сам рахує поточну зону щохвилини,
   //    тож сповіщення більше не висить зі старою зоною до наступного збереження. ──
-  var zoneTimeline=[];
+  // zoneBaseline — повторювані базові зони (без денних винятків), придатні щодня.
+  // Нативний сервіс використовує його після опівночі, коли tlDate застарів і
+  // знімок ще не перегенеровано (інакше зона «замерзала» до відкриття апки).
+  var zoneBaseline=[];
   var _dayOffT=(typeof planDayOff!=='undefined'&&planDayOff[todayStr])||[];
   S.zones.forEach(function(z){
     if(z.active===false) return;
     if(z.bound&&!z.actPin) return;            // прив'язана — лише через план дня
     if(_dayOffT.indexOf(z.id)>=0) return;     // вимкнена саме на сьогодні
-    (z.slots||[]).forEach(function(sl){ zoneTimeline.push({s:sl.s,e:sl.e,nm:z.nm,desc:z.desc||'',color:z.color,prio:z.prio||1}); });
+    (z.slots||[]).forEach(function(sl){ zoneBaseline.push({id:z.id,s:sl.s,e:sl.e,nm:z.nm,desc:z.desc||'',color:z.color,prio:z.prio||1}); });
   });
+  // zoneTimeline — базові зони + денні винятки плану (актуальні лише на сьогодні)
+  var zoneTimeline=zoneBaseline.slice();
   if(typeof dayBlocks==='function') dayBlocks(todayStr).forEach(function(b){
     var z=S.zones.find(function(zz){return zz.id===b.zoneId;}); if(!z) return;
-    zoneTimeline.push({s:b.s,e:b.e,nm:z.nm,desc:z.desc||'',color:z.color,prio:(z.prio||1)+10});
+    zoneTimeline.push({id:z.id,s:b.s,e:b.e,nm:z.nm,desc:z.desc||'',color:z.color,prio:(z.prio||1)+10});
+  });
+  // Задачі за зонами — щоб нативний сервіс перебудовував список під ПОТОЧНУ зону,
+  // навіть коли апку закрито (інакше зона мінялась, а задачі лишались старі).
+  var zoneTasksById={}, zonelessTasks=[], urgentTasks=[];
+  undoneTasks.forEach(function(t){
+    if(prioIds.indexOf(t.id)>=0) return;
+    var fired=(t.type==='alarm'&&t.alarmFired)||(t.type==='sched'&&t.firedSched);
+    if(fired){ urgentTasks.push(t.title); return; }
+    if(t.zoneId){ (zoneTasksById[t.zoneId]=zoneTasksById[t.zoneId]||[]).push(t.title); }
+    else zonelessTasks.push(t.title);
   });
   // Focus
   var focus = (S.currentFocus && S.currentFocus !== pz.nm) ? S.currentFocus : '';
@@ -4099,6 +4114,10 @@ function fgNotifText(){
     zone:    (zoneDots?zoneDots+' ':'')+pz.nm,
     zoneColor: pz.color||'#4f8ef7',
     zoneTimeline: zoneTimeline,
+    zoneBaseline: zoneBaseline,
+    zoneTasksById: zoneTasksById,
+    zonelessTasks: zonelessTasks,
+    urgentTasks: urgentTasks,
     tlDate:  todayStr,
     slots:   slots,
     desc:    desc,
