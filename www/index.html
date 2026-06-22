@@ -584,16 +584,14 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 .modal-row{display:flex;gap:6px}
 .mbtn{flex:1;border:none;border-radius:7px;padding:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;cursor:pointer}
 .mbtn.cancel{background:var(--s3);color:var(--t2)}.mbtn.ok{background:var(--z);color:#fff}
-/* inbox float */
-#inbox-float{position:fixed;bottom:70px;right:13px;z-index:90}
-#inbox-btn{width:42px;height:42px;border-radius:50%;background:var(--z);border:none;color:#fff;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.4);transition:background 1.4s,transform .15s}
-#inbox-btn:active{transform:scale(.88)}
-#inbox-pop{position:absolute;bottom:50px;right:0;width:235px;background:var(--s2);border:1px solid var(--b2);border-radius:11px;padding:9px;display:none}
-#inbox-pop.open{display:block;animation:tin .18s ease}
 @keyframes tin{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-.inbox-cat{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:7px;padding:6px 9px;color:var(--t2);font-family:'Syne',sans-serif;font-size:12px;outline:none;margin-bottom:5px;cursor:pointer}
-#ii{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:7px;padding:7px 9px;color:var(--t1);font-family:'Syne',sans-serif;font-size:12px;outline:none;margin-bottom:5px}
-#ii:focus{border-color:var(--z)}
+/* Широка кнопка «+» — відкриває редактор нової задачі */
+#add-fab{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--z);border:none;border-radius:var(--r);padding:14px;color:#fff;font-family:'Syne',sans-serif;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px color-mix(in srgb,var(--z) 35%,transparent);transition:transform .12s,filter .15s;margin-bottom:10px}
+#add-fab:active{transform:scale(.98);filter:brightness(.95)}
+#add-fab .plus{font-size:22px;line-height:1}
+/* Великий «+» збереження у редакторі */
+.edit-save-big{background:var(--z);border:none;border-radius:11px;width:46px;height:38px;color:#fff;font-size:24px;font-weight:800;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px color-mix(in srgb,var(--z) 35%,transparent)}
+.edit-save-big:active{transform:scale(.94)}
 .inbox-save{width:100%;background:var(--z);border:none;border-radius:6px;padding:7px;color:#fff;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:background 1.4s}
 /* task picker */
 .tp-search{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:7px;padding:7px 10px;color:var(--t1);font-family:'Syne',sans-serif;font-size:12px;outline:none;margin-bottom:8px}
@@ -715,28 +713,8 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
   </div>
   <!-- Фільтр задач за ПАПКАМИ (спільні з нотатками) + шкідливі. Рендериться динамічно. -->
   <div class="ctx-filter" id="task-folder-chips"></div>
-  <!-- Add task -->
-  <div id="add-bar">
-    <input type="text" id="ti" placeholder="Нова задача..." onkeydown="if(event.key==='Enter')doAddTask()">
-    <select class="bsel" id="ttype" onchange="onTypeChangeQuick()">
-      <option value="simple">☑ Проста</option>
-      <option value="check">≡ Чекліст</option>
-      <option value="counter">+N Лічильник</option>
-      <option value="note">✎ З нотаткою</option>
-      <option value="alarm">⏰ Будильник</option>
-      <option value="sched">📅 Запланована</option>
-      <option value="timewin">⏱ Вікно часу</option>
-      <option value="pomodoro">⏱ Pomodoro</option>
-      <option value="habit">◉ Звичка</option>
-      <option value="kid">★ Дитяча</option>
-      <option value="ctx">◎ Контекст</option>
-      <option value="negative">⚠ Шкідлива</option>
-      <option value="zonelinked">🔗 До зони</option>
-    </select>
-    <input type="time" id="alarm-quick" placeholder="10:00">
-    <select class="bsel" id="tzsel"><option value="">— зона</option></select>
-    <button id="add-btn" onclick="doAddTask()">+</button>
-  </div>
+  <!-- Add task — широка кнопка відкриває повний редактор нової задачі -->
+  <button id="add-fab" onclick="openEdit(null)"><span class="plus">＋</span> Нова задача</button>
   <div id="tasks-list"></div>
 </div>
 
@@ -841,22 +819,6 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
   </div>
 </div>
 </div><!-- /app -->
-
-<!-- INBOX FLOAT -->
-<div id="inbox-float">
-  <button id="inbox-btn" onclick="togInbox()">⚡</button>
-  <div id="inbox-pop">
-    <select id="inbox-cat" class="inbox-cat">
-      <option value="impulse">⚡ Імпульс (думка вискочила)</option>
-      <option value="thought">💭 Думка (обміркована)</option>
-      <option value="general">📝 Загальне</option>
-      <option value="work">💼 Робота</option>
-      <option value="kid">👶 Дитина</option>
-    </select>
-    <input type="text" id="ii" placeholder="Думка зловлена..." onkeydown="if(event.key==='Enter')saveInbox()">
-    <button class="inbox-save" onclick="saveInbox()">→ Блокнот</button>
-  </div>
-</div>
 
 </div><!-- /main-page -->
 
@@ -986,8 +948,8 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
     </div>
     <div class="rm-s">
       <h3>⚡ Захоплення імпульсів</h3>
-      <p>Думку зловив — вивантажив у Блокнот і повернувся до справи. Папки сортують нотатки (Імпульс, Думка, Терапія…). Кнопка ⚡ доступна на головній і в шторці.</p>
-      <p><b>Три крапки:</b> у швидкому полі «...Назва» створює задачу; самі «...» відкривають вікно нової задачі.</p>
+      <p>Думку зловив — вивантажив у Блокнот і повернувся до справи. Папки сортують нотатки (Імпульс, Думка, Терапія…). Швидку нотатку можна додати у вкладці «Блокнот», у віджеті та просто зі шторки сповіщення.</p>
+      <p><b>Три крапки:</b> у полі швидкої нотатки «...Назва» створює задачу; самі «...» відкривають вікно нової задачі.</p>
     </div>
     <div class="rm-s">
       <h3>💾 Експорт / Імпорт</h3>
@@ -1007,7 +969,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
   <div id="edit-header">
     <button class="edit-back" onclick="closeEdit()">← Назад</button>
     <h2 id="edit-title">Редагування</h2>
-    <button class="edit-save" onclick="doSaveEdit()">Зберегти</button>
+    <button class="edit-save-big" onclick="doSaveEdit()" title="Зберегти задачу" aria-label="Зберегти">＋</button>
   </div>
   <div id="edit-body">
     <div class="ef"><label class="el">Назва</label><input type="text" class="ei" id="ef-title"></div>
@@ -1015,6 +977,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
       <select class="ei" id="ef-type" onchange="togEditFields()">
         <option value="simple">☑ Проста</option><option value="check">≡ Чекліст</option><option value="counter">+N Лічильник</option>
         <option value="note">✎ З нотаткою</option><option value="alarm">⏰ Будильник</option>
+        <option value="sched">📅 Запланована</option><option value="timewin">⏱ Вікно часу</option>
         <option value="pomodoro">⏱ Pomodoro</option><option value="habit">◉ Звичка</option>
         <option value="kid">★ Дитяча</option><option value="ctx">◎ Контекст</option>
         <option value="negative">⚠ Шкідлива</option><option value="zonelinked">🔗 До зони</option>
@@ -1079,6 +1042,21 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
     <div class="ef" id="ef-alarm-wrap" style="display:none">
       <label class="el">Час будильника</label>
       <input type="time" class="ei" id="ef-alarm" style="font-family:'Space Mono',monospace">
+    </div>
+    <div class="ef" id="ef-sched-wrap" style="display:none">
+      <label class="el">Дата і час події</label>
+      <div style="display:flex;gap:6px">
+        <input type="date" class="ei" id="ef-sched-date" style="flex:1">
+        <input type="time" class="ei" id="ef-sched-time" style="flex:1;font-family:'Space Mono',monospace">
+      </div>
+    </div>
+    <div class="ef" id="ef-timewin-wrap" style="display:none">
+      <label class="el">Вікно часу (від — до)</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="time" class="ei" id="ef-win-start" style="flex:1;font-family:'Space Mono',monospace">
+        <span style="color:var(--t3)">—</span>
+        <input type="time" class="ei" id="ef-win-end" style="flex:1;font-family:'Space Mono',monospace">
+      </div>
     </div>
     <div class="ef" id="ef-note-wrap" style="display:none">
       <label class="el">Нотатка</label>
@@ -1255,8 +1233,8 @@ var planDayOff={};
 var planRules=[];
 
 // ── CONSTANTS ──
-var TL={simple:'Проста',check:'Чекліст',counter:'Лічильник',note:'Нотатка',alarm:'Будильник',sched:'Заплановано',timewin:'Вікно часу',habit:'Звичка',kid:'Дитяча',negative:'Шкідлива',zonelinked:'До зони'};
-var TXP={simple:10,check:10,counter:2,note:5,alarm:10,sched:10,timewin:5,habit:8,kid:10,ctx:8,negative:0,zonelinked:8};
+var TL={simple:'Проста',check:'Чекліст',counter:'Лічильник',note:'Нотатка',alarm:'Будильник',sched:'Заплановано',timewin:'Вікно часу',pomodoro:'Pomodoro',habit:'Звичка',kid:'Дитяча',ctx:'Контекст',negative:'Шкідлива',zonelinked:'До зони'};
+var TXP={simple:10,check:10,counter:2,note:5,alarm:10,sched:10,timewin:5,pomodoro:10,habit:8,kid:10,ctx:8,negative:0,zonelinked:8};
 var ULBL={check:'',count:'раз',ml:'мл',min:'хв',kcal:'ккал'};
 var USTEP={check:1,count:1,ml:100,min:1,kcal:50};
 var REP={none:'Без повторення',daily:'Щодня',weekly:'Щотижня',weekdays:'Пн–Пт',weekend:'Вихідні',everyzone:'Кожна зона',interval:'Через X',custom:'Свій'};
@@ -1288,7 +1266,6 @@ function showPage(name,btn){
   document.getElementById(name+'-page').classList.add('active');
   document.querySelectorAll('.nb').forEach(function(b){b.classList.remove('act');});
   btn.classList.add('act');
-  document.getElementById('inbox-float').style.display=name==='main'?'block':'none';
   var wi=document.getElementById('w-inbox');
   if(name==='widget'){wi.classList.remove('hidden');renderWidget();}else{wi.classList.add('hidden');}
   if(shadeOpen){toggleShade();}
@@ -1821,12 +1798,6 @@ function doSaveRecur(isNeg){
 }
 
 // ══ TYPE CHANGE ══
-function onTypeChangeQuick(){
-  var t=document.getElementById('ttype').value;
-  var aq=document.getElementById('alarm-quick');
-  if(aq)aq.classList.toggle('show',t==='alarm');
-}
-
 // ══ TASKS ══
 function updZoneSel(){
   // активні зони спершу, неактивні (💤) — у кінці списку
@@ -1857,11 +1828,12 @@ function mkTask(title,type,zid,alarmTime){
     zoneId:zid,zoneColor:zone?zone.color:null,zoneName:zone?zone.nm:null,
     expanded:false,created:new Date().toISOString(),
     items:type==='check'?[]:undefined,
-    scale:type==='scale'?50:undefined,
     counter:(type==='counter'||type==='negative')?0:undefined,counterTarget:type==='counter'?10:undefined,
     negXp:type==='negative'?5:undefined,
     note:type==='note'?'':undefined,
     alarmTime:type==='alarm'?(alarmTime||''):undefined,alarmFired:false,
+    schedDate:type==='sched'?'':undefined,schedTime:type==='sched'?'':undefined,firedSched:type==='sched'?false:undefined,firedPre:type==='sched'?false:undefined,
+    windowStart:type==='timewin'?'07:00':undefined,windowEnd:type==='timewin'?'09:00':undefined,completedToday:type==='timewin'?false:undefined,
     pomSecs:type==='pomodoro'?25*60:undefined,pomMode:type==='pomodoro'?'work':undefined,pomSessions:type==='pomodoro'?0:undefined,pomRunning:type==='pomodoro'?false:undefined,
     habitDays:type==='habit'?[false,false,false,false,false,false,false]:undefined,
     kidStars:type==='kid'?0:undefined,kidDiff:type==='kid'?'mid':undefined,kidReward:type==='kid'?'':undefined,
@@ -1869,37 +1841,6 @@ function mkTask(title,type,zid,alarmTime){
     zoneDoneToday:type==='zonelinked'?false:undefined,
     repeat:'none',repeatDays:[false,false,false,false,false,false,false],tags:[]};
 }
-function doAddTask(){
-  var inp=document.getElementById('ti'),type=document.getElementById('ttype').value;
-  var zid=parseInt(document.getElementById('tzsel').value)||null;
-  var alarmTime='';
-  if(type==='alarm'){var aq=document.getElementById('alarm-quick');alarmTime=aq?aq.value:'';}
-  var title=inp.value.trim();if(!title){inp.focus();return;}
-  // Zone-linked: auto-attach to current zone if none selected
-  if(type==='zonelinked' && !zid){
-    var curZones=getZones(nowHM());
-    if(curZones[0]&&curZones[0].id!==0) zid=curZones[0].id;
-  }
-  S.tasks.unshift(mkTask(title,type,zid,alarmTime));
-  inp.value='';
-  if(type==='alarm'){var aq=document.getElementById('alarm-quick');if(aq)aq.value='';}
-  renderTasks();renderPrios();
-  document.getElementById('st-total').textContent=S.tasks.length;
-  queueSave();
-  // Auto-open checklist and focus on item input
-  if(type==='check'){
-    var newTask=S.tasks[0];
-    if(newTask){
-      newTask.expanded=true;
-      renderTasks();
-      setTimeout(function(){
-        var ciInp=document.getElementById('ci-i-'+newTask.id);
-        if(ciInp){ciInp.focus();ciInp.scrollIntoView({behavior:'smooth',block:'nearest'});}
-      },120);
-    }
-  }
-}
-
 // SOMEDAY
 function toSomeday(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
@@ -2043,10 +1984,13 @@ function openEdit(id){
 }
 function togEditFields(){
   var t=document.getElementById('ef-type').value;
-  document.getElementById('ef-alarm-wrap').style.display=t==='alarm'?'block':'none';
-  document.getElementById('ef-note-wrap').style.display=t==='note'?'block':'none';
-  document.getElementById('ef-cnt-wrap').style.display=t==='counter'?'block':'none';
-  document.getElementById('ef-neg-xp-wrap').style.display=t==='negative'?'block':'none';
+  var show=function(id,on){var el=document.getElementById(id);if(el)el.style.display=on?'block':'none';};
+  show('ef-alarm-wrap',   t==='alarm');
+  show('ef-note-wrap',    t==='note');
+  show('ef-cnt-wrap',     t==='counter');
+  show('ef-neg-xp-wrap',  t==='negative');
+  show('ef-sched-wrap',   t==='sched');
+  show('ef-timewin-wrap', t==='timewin');
 }
 function closeEdit(){document.getElementById('edit-page').classList.remove('open');}
 function togEfDays(){
@@ -2055,28 +1999,17 @@ function togEfDays(){
   var iw=document.getElementById('ef-interval-wrap');
   if(iw)iw.style.display=v==='interval'?'block':'none';
 }
-function onTypeChange(){
-  var v=document.getElementById('ef-type').value;
-  var aw=document.getElementById('ef-alarm-wrap');
-  if(aw)aw.style.display=v==='alarm'?'block':'none';
-  var sw=document.getElementById('ef-sched-wrap');
-  if(sw)sw.style.display=v==='sched'?'block':'none';
-  var tw=document.getElementById('ef-timewin-wrap');
-  if(tw)tw.style.display=v==='timewin'?'block':'none';
-}
 function renderEfDays(){document.querySelectorAll('#ef-days .rd').forEach(function(el,i){el.classList.toggle('on',!!editRepDays[i]);});}
 function togEfDay(i){editRepDays[i]=!editRepDays[i];renderEfDays();}
 function doSaveEdit(){
-  // Режим нової задачі (editId===null)
-  if(editId == null){
+  // Режим нової задачі (editId===null). Порожню назву не зберігаємо.
+  var isNewTask = (editId == null);
+  if(isNewTask){
     var title=document.getElementById('ef-title').value.trim();
     if(!title){closeEdit();return;}
-    var nt=document.getElementById('ef-type').value;
-    var newT=mkTask(title,nt,null,'');
-    // Заповнюємо поля з форми
-    editId=newT.id; // тимчасово
+    var nt0=document.getElementById('ef-type').value;
+    var newT=mkTask(title,nt0,null,'');
     S.tasks.unshift(newT);
-    // Тепер застосуємо решту полів через той самий код нижче
     editId=newT.id;
   }
   var t=S.tasks.find(function(t){return t.id===editId;});if(!t){closeEdit();return;}
@@ -2085,7 +2018,6 @@ function doSaveEdit(){
   if(nt!==t.type){
     t.type=nt;
     if(nt==='check'&&!t.items)t.items=[];
-    if(nt==='scale'&&t.scale===undefined)t.scale=50;
     if(nt==='counter'&&t.counter===undefined){t.counter=0;t.counterTarget=10;}
     if(nt==='alarm'&&!t.alarmTime)t.alarmTime='';
     if(nt==='note'&&!t.note)t.note='';
@@ -2097,6 +2029,11 @@ function doSaveEdit(){
     if(nt==='zonelinked')t.zoneDoneToday=false;
   }
   var zid=parseInt(document.getElementById('ef-zone').value)||null;
+  // «До зони» без обраної зони → автоприв'язка до поточної активної зони
+  if(t.type==='zonelinked' && !zid){
+    var _cz=getZones(nowHM());
+    if(_cz[0] && _cz[0].id!==0) zid=_cz[0].id;
+  }
   var zone=zid?S.zones.find(function(z){return z.id===zid;}):null;
   t.zoneId=zid;t.zoneColor=zone?zone.color:null;t.zoneName=zone?zone.nm:null;
   var fsel=document.getElementById('ef-folder'); t.folderId=fsel&&fsel.value?fsel.value:null;
@@ -2140,7 +2077,13 @@ function doSaveEdit(){
   if(t.type==='negative')t.negXp=parseInt(document.getElementById('ef-neg-xp').value)||5;
   var tv=document.getElementById('ef-tags').value;
   t.tags=tv.split(',').map(function(s){return s.trim();}).filter(Boolean);
-  closeEdit();renderTasks();renderPrios();
+  closeEdit();renderTasks();renderPrios();queueSave();
+  var _stt=document.getElementById('st-total'); if(_stt) _stt.textContent=S.tasks.length;
+  // Нова задача-чекліст → одразу розкрити й сфокусувати поле пункту
+  if(isNewTask && t.type==='check'){
+    t.expanded=true; renderTasks();
+    setTimeout(function(){ var ci=document.getElementById('ci-i-'+t.id); if(ci){ci.focus();ci.scrollIntoView({behavior:'smooth',block:'nearest'});} },120);
+  }
 }
 
 // RENDER BODY
@@ -2153,7 +2096,6 @@ function renderBody(t){
     });
     h+='<div class="ci-add"><input type="text" id="ci-i-'+t.id+'" placeholder="Новий пункт..." onkeydown="if(event.key===\'Enter\')addCI('+t.id+')"><button onclick="addCI('+t.id+')">+</button></div>';
   }
-  if(t.type==='scale')h+='<div class="bl">Прогрес</div><div class="sw"><input type="range" min="0" max="100" value="'+t.scale+'" oninput="updScale('+t.id+',this.value)"><span class="svv" id="sv-'+t.id+'">'+t.scale+'%</span></div>';
   if(t.type==='counter')h+='<div class="bl">Лічильник</div><div class="cw"><button class="cbtn" onclick="chgCnt('+t.id+',-1)">−</button><span class="cvv" id="cv-'+t.id+'">'+t.counter+'</span><button class="cbtn" onclick="chgCnt('+t.id+',1)">+</button><span style="font-size:11px;color:var(--t3)">/ <input class="ct-inp" type="number" value="'+(t.counterTarget||10)+'" min="1" onchange="updCntTgt('+t.id+',this.value)"></span></div>';
   if(t.type==='note')h+='<div class="bl">Нотатка</div><textarea class="tnote" oninput="updNote('+t.id+',this.value)">'+esc(t.note||'')+'</textarea>';
   if(t.type==='alarm')h+='<div class="bl">Час будильника</div><div class="aw"><input type="time" value="'+(t.alarmTime||'')+'" onchange="updAlarm('+t.id+',this.value)"><span class="aw-st">'+(t.alarmFired?'✓ спрацював':t.alarmTime?'⏳ очікує':'— не задано')+'</span></div>';
@@ -2298,7 +2240,6 @@ function renderTasks(){
 // task interactions
 function togCI(tid,i){var t=S.tasks.find(function(t){return t.id===tid;});if(!t)return;t.items[i].done=!t.items[i].done;var el=document.getElementById('ci-'+tid+'-'+i);if(el)el.classList.toggle('cid',t.items[i].done);if(t.items[i].done)award(3);}
 function addCI(tid){var inp=document.getElementById('ci-i-'+tid);var txt=inp.value.trim();if(!txt)return;var t=S.tasks.find(function(t){return t.id===tid;});if(!t)return;t.items.push({text:txt,done:false});inp.value='';queueSave();var b=document.getElementById('tbb-'+tid);if(b){b.innerHTML=renderBody(t);b.classList.add('open');}setTimeout(function(){var ni=document.getElementById('ci-i-'+tid);if(ni)ni.focus();},60);}
-function updScale(tid,v){var t=S.tasks.find(function(t){return t.id===tid;});if(t)t.scale=parseInt(v);var el=document.getElementById('sv-'+tid);if(el)el.textContent=v+'%';}
 function chgCnt(tid,d){var t=S.tasks.find(function(t){return t.id===tid;});if(!t)return;t.counter=Math.max(0,t.counter+d);var el=document.getElementById('cv-'+tid);if(el)el.textContent=t.counter;if(d>0)award(2);if(t.counter>=(t.counterTarget||10)&&!t.cntHit){t.cntHit=true;award(15);}}
 function updCntTgt(tid,v){var t=S.tasks.find(function(t){return t.id===tid;});if(t)t.counterTarget=parseInt(v)||10;}
 function updNote(tid,v){var t=S.tasks.find(function(t){return t.id===tid;});if(t)t.note=v;}
@@ -2566,7 +2507,6 @@ function togWBody(id){var t=S.tasks.find(function(t){return t.id===id;});if(!t)r
 function renderWBody(t){
   var h='';
   if(t.type==='check'){h+='<div class="bl">Пункти</div>';(t.items||[]).forEach(function(it,i){h+='<div class="ci '+(it.done?'cid':'')+'" id="wci-'+t.id+'-'+i+'"><input type="checkbox" '+(it.done?'checked':'')+' onchange="togWCI('+t.id+','+i+')"><span>'+esc(it.text)+'</span></div>';});}
-  if(t.type==='scale')h+='<div class="bl">Прогрес: <span id="wsv-'+t.id+'">'+t.scale+'%</span></div><div class="sw"><input type="range" min="0" max="100" value="'+t.scale+'" oninput="wUpdScale('+t.id+',this.value)"></div>';
   if(t.type==='counter')h+='<div class="bl">Лічильник</div><div class="cw"><button class="cbtn" onclick="wChgCnt('+t.id+',-1)">−</button><span class="cvv" id="wcv-'+t.id+'">'+t.counter+'</span><button class="cbtn" onclick="wChgCnt('+t.id+',1)">+</button></div>';
   if(t.type==='note')h+='<div class="bl">Нотатка</div><textarea class="tnote" oninput="updNote('+t.id+',this.value)">'+esc(t.note||'')+'</textarea>';
   if(t.type==='alarm')h+='<div class="bl">Час</div><div class="aw"><input type="time" value="'+(t.alarmTime||'')+'" onchange="updAlarm('+t.id+',this.value)"></div>';
@@ -2577,7 +2517,6 @@ function renderWBody(t){
   return h;
 }
 function togWCI(tid,i){var t=S.tasks.find(function(t){return t.id===tid;});if(!t)return;t.items[i].done=!t.items[i].done;var el=document.getElementById('wci-'+tid+'-'+i);if(el)el.classList.toggle('cid',t.items[i].done);if(t.items[i].done)award(3);}
-function wUpdScale(tid,v){var t=S.tasks.find(function(t){return t.id===tid;});if(t)t.scale=parseInt(v);var el=document.getElementById('wsv-'+tid);if(el)el.textContent=v+'%';}
 function wChgCnt(tid,d){var t=S.tasks.find(function(t){return t.id===tid;});if(!t)return;t.counter=Math.max(0,t.counter+d);var el=document.getElementById('wcv-'+tid);if(el)el.textContent=t.counter;if(d>0)award(2);}
 function wTogPom(tid){var t=S.tasks.find(function(t){return t.id===tid;});if(!t)return;if(t.pomRunning){clearInterval(pomTimers[tid]);t.pomRunning=false;}else{t.pomRunning=true;pomTimers[tid]=setInterval(function(){tickWPom(tid);},1000);}var b=document.getElementById('wtb-'+tid);if(b){b.innerHTML=renderWBody(t);b.classList.add('open');}}
 function tickWPom(tid){var t=S.tasks.find(function(t){return t.id===tid;});if(!t||!t.pomRunning)return;t.pomSecs--;var el=document.getElementById('wpt-'+tid);if(el)el.textContent=String(Math.floor(t.pomSecs/60)).padStart(2,'0')+':'+String(t.pomSecs%60).padStart(2,'0');if(t.pomSecs<=0){clearInterval(pomTimers[tid]);t.pomRunning=false;if(t.pomMode==='work'){t.pomSessions++;t.pomMode='break';t.pomSecs=PB;award(15);}else{t.pomMode='work';t.pomSecs=PW;}var b=document.getElementById('wtb-'+tid);if(b){b.innerHTML=renderWBody(t);b.classList.add('open');}}}
@@ -2961,7 +2900,6 @@ function resetRepeatingTasksFor(dt){
     t.done=false; t.doneDate=''; t.doneAt=null;
     if(Array.isArray(t.items)) t.items.forEach(function(it){ it.done=false; });
     if(t.type==='counter') t.counter=0;
-    if(t.type==='scale')   t.scale=0;
   });
 }
 function dailyResetIfNeeded(savedDate){
@@ -4211,8 +4149,10 @@ window.addEventListener('load', function(){
 document.addEventListener('foregroundServiceButtonClicked', function(e){
   if(!e || !e.detail) return;
   if(e.detail.id === 1){
-    // Кнопка ⚡ — відкрити швидку нотатку
-    togInbox();
+    // Кнопка ⚡ — відкрити швидку нотатку (оверлей клавіатури)
+    if(typeof goToMain==='function') goToMain();
+    kbdOpen({hint:'⚡ Швидка нотатка', placeholder:'Думка зловлена...', showTaskHint:true, folderSel:'impulse',
+      onSend:function(txt, folder){ if(txt && txt.trim()){ S.qnotes.unshift(mkNote(txt.trim(), folder||'impulse')); renderQN(); if(typeof renderWQN==='function') renderWQN(); award(1); queueSave(); } }});
   } else if(e.detail.id === 2){
     // Кнопка ☑ — виконати першу активну задачу
     var first = S.tasks.find(function(t){ return !t.done && !t.someday; });

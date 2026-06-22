@@ -1,0 +1,4 @@
+• Simpler task creation: one wide "＋ New task" button opens the full editor; save with the big "＋" on top (empty tasks are discarded)
+• Removed the redundant lightning button from the main screen
+• The editor now supports ALL task types (added "Scheduled" and "Time window" with date/time fields)
+• Task types audited, fixed and synchronized; legacy code removed
