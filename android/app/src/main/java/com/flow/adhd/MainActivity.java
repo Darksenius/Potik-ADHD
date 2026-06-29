@@ -63,15 +63,15 @@ public class MainActivity extends BridgeActivity {
     };
 
     private void checkPendingEvents() {
-        String eventsJson = flowBridge.getEvents();
-        if (eventsJson.equals("[]")) return;
-        flowBridge.clearEvents();
-        // Передаємо події в JS
-        String js = "if(typeof handleNativeEvent==='function'){" +
-                    "var evts=" + eventsJson + ";" +
-                    "evts.forEach(function(e){handleNativeEvent(e);});" +
-                    "}";
-        getBridge().getWebView().evaluateJavascript(js, null);
+        // Делегуємо вичитування в JS-дренаж (FP.drainEvents): він читає чергу Room
+        // і очищає її атомарно та ЛИШЕ коли JS уже готовий. Раніше тут чергу
+        // очищали ДО готовності JS (на холодному старті) — і нотатки зі шторки
+        // зникали. Якщо JS ще не готовий, __flowDrainEvents відсутній → подія
+        // лишається в Room до наступного тіку.
+        try {
+            getBridge().getWebView().evaluateJavascript(
+                "window.__flowDrainEvents && window.__flowDrainEvents()", null);
+        } catch (Exception ignored) {}
     }
 
     @Override

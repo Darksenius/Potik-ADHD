@@ -1,0 +1,3 @@
+• Fixed losing notes from the notification quick-input (more reliable queue draining when the app opens)
+• Day note — a free-text diary for each day; you can record a memory even for a past day; included in the text export
+• The save button in the task editor moved to the bottom and became wide: ＋ for a new task, ✎ when editing

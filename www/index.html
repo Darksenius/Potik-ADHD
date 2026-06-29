@@ -589,9 +589,10 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 #add-fab{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--z);border:none;border-radius:var(--r);padding:14px;color:#fff;font-family:'Syne',sans-serif;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px color-mix(in srgb,var(--z) 35%,transparent);transition:transform .12s,filter .15s;margin-bottom:10px}
 #add-fab:active{transform:scale(.98);filter:brightness(.95)}
 #add-fab .plus{font-size:22px;line-height:1}
-/* Великий «+» збереження у редакторі */
-.edit-save-big{background:var(--z);border:none;border-radius:11px;width:46px;height:38px;color:#fff;font-size:24px;font-weight:800;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px color-mix(in srgb,var(--z) 35%,transparent)}
-.edit-save-big:active{transform:scale(.94)}
+/* Широка кнопка збереження у редакторі — під формою, того ж розміру, що «Нова задача» */
+#edit-save-fab{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--z);border:none;border-radius:var(--r);padding:14px;color:#fff;font-family:'Syne',sans-serif;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px color-mix(in srgb,var(--z) 35%,transparent);transition:transform .12s,filter .15s;margin-top:6px}
+#edit-save-fab:active{transform:scale(.98);filter:brightness(.95)}
+#edit-save-fab .plus{font-size:22px;line-height:1}
 .inbox-save{width:100%;background:var(--z);border:none;border-radius:6px;padding:7px;color:#fff;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:background 1.4s}
 /* task picker */
 .tp-search{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:7px;padding:7px 10px;color:var(--t1);font-family:'Syne',sans-serif;font-size:12px;outline:none;margin-bottom:8px}
@@ -918,6 +919,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
       <p><b style="color:var(--t1)">Аналіз дня:</b> скільки задач виконано, нотаток додано, переключень гіперфокусу, рівень енергії та рутина — з реальних дій.</p>
       <p><b style="color:var(--t1)">Планування наперед:</b> «+ Задача» створює справжню задачу на обраний день (з часом «10:00 Назва» стане будильником). «🕐 Зона» призначає часову зону під день.</p>
       <p><b style="color:var(--t1)">Шаблони дня:</b> збережи набір зон як іменований шаблон і застосовуй до будь-якого дня одним дотиком.</p>
+      <p><b style="color:var(--t1)">Примітка дня:</b> вільний текст-щоденник під кожен день — можна записати спогад навіть про минулий день. Потрапляє в текстовий експорт.</p>
     </div>
     <div class="rm-s">
       <h3>🫀 Стан</h3>
@@ -969,7 +971,6 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
   <div id="edit-header">
     <button class="edit-back" onclick="closeEdit()">← Назад</button>
     <h2 id="edit-title">Редагування</h2>
-    <button class="edit-save-big" onclick="doSaveEdit()" title="Зберегти задачу" aria-label="Зберегти">＋</button>
   </div>
   <div id="edit-body">
     <div class="ef"><label class="el">Назва</label><input type="text" class="ei" id="ef-title"></div>
@@ -1070,6 +1071,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
       <label class="el">Теги (через кому)</label>
       <input type="text" class="ei" id="ef-tags" placeholder="робота, важливо">
     </div>
+    <button id="edit-save-fab" onclick="doSaveEdit()"><span class="plus" id="edit-save-ico">＋</span> <span id="edit-save-lbl">Створити задачу</span></button>
   </div>
 </div>
 
@@ -1980,6 +1982,9 @@ function openEdit(id){
   document.getElementById('ef-neg-xp').value=t?(t.negXp||5):5;
   togEfDays(); renderEfDays();
   document.getElementById('edit-title').textContent = isNew ? '+ Нова задача' : (t ? t.title : '');
+  // Кнопка збереження внизу: ＋ «Створити» для нової, ✎ «Зберегти» при редагуванні
+  var _ico=document.getElementById('edit-save-ico'); if(_ico) _ico.textContent = isNew ? '＋' : '✎';
+  var _lbl=document.getElementById('edit-save-lbl'); if(_lbl) _lbl.textContent = isNew ? 'Створити задачу' : 'Зберегти зміни';
   document.getElementById('edit-page').classList.add('open');
 }
 function togEditFields(){
@@ -2640,6 +2645,10 @@ function buildReadableMd(){
   }
   // Вільний блокнот
   if(S.notepad&&S.notepad.trim()){ L.push('## 🗒 Блокнот'); L.push(S.notepad.trim()); L.push(''); }
+  // Примітки днів (щоденник) — за датою
+  var _dn=Object.keys(planDayLog||{}).filter(function(k){return planDayLog[k]&&planDayLog[k].note&&String(planDayLog[k].note).trim();}).sort();
+  if(_dn.length){ L.push('## 📝 Примітки днів');
+    _dn.forEach(function(k){ L.push('### '+k); L.push(String(planDayLog[k].note).trim()); L.push(''); }); }
   // Зони і графіки
   if((S.zones||[]).length){ L.push('## 🕐 Зони');
     S.zones.forEach(function(z){
@@ -3497,6 +3506,12 @@ function renderPlanDetail(ds){
       return '<div class="jrow"><span class="jtime">'+(e.tm||'·')+'</span><span class="jic">'+e.ic+'</span><span class="jtxt">'+e.tx+'</span></div>';
     }).join('') : (_jrRight.length?'':'<div style="font-size:11px;color:var(--t3);padding:4px 0 4px 11px">Поки порожньо — виконуй задачі, лови нотатки, відмічай фокус.</div>'))+
   '</div>';
+  // ── ПРИМІТКА ДНЯ (вільний текст-щоденник; працює і для минулих днів) ──
+  var _dayNote=(planDayLog[ds]&&planDayLog[ds].note)||'';
+  var dayNoteHtml='<div style="margin:4px 0 9px">'+
+    '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">📝 Примітка дня</div>'+
+    '<textarea oninput="setDayNote(\''+ds+'\',this.value)" placeholder="Запиши, що згадав про цей день…" style="width:100%;min-height:70px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;padding:9px 11px;color:var(--t1);font-family:\'Syne\',sans-serif;font-size:12px;line-height:1.55;resize:vertical;outline:none">'+esc(_dayNote)+'</textarea>'+
+  '</div>';
 
   // ── ЧАСОВІ ЗОНИ ДНЯ (повна розкладка: щоденні + планові/за правилом) ──
   var dayZones=dayBlocks(ds);
@@ -3575,6 +3590,7 @@ function renderPlanDetail(ds){
     '</div></div>'+
     histHtml+
     journalHtml+
+    dayNoteHtml+
     '<div class="rest-toggle" onclick="planTogRest()"><span>🌙</span><span class="rt-lbl">Вихідний день</span>'+
     '<div class="rt-sw '+(isRest?'on':'')+'" ></div></div>'+
     (isRest?'<div style="font-size:11px;color:rgba(189,16,224,.7);padding:3px 0 6px">📋 Нагадування: заплануй тиждень</div>':templHtml+zonesHtml+templatesHtml)+
@@ -3590,6 +3606,13 @@ function renderPlanDetail(ds){
     }).join(''):'')+
     ((dayTasks.length||items.length)?'':'<div class="plan-empty">Порожньо — додай задачу, зону або подію</div>');
   } catch(e){ console.log('renderPlanDetail error:', String(e)); }
+}
+// Примітка дня (щоденник): зберігаємо у planDayLog[ds].note, працює для будь-якої дати
+function setDayNote(ds,val){
+  if(!ds) return;
+  if(!planDayLog[ds]) planDayLog[ds]={focus:[],energy:0,routineDone:{},priorities:[],tasksDone:0};
+  planDayLog[ds].note=val;
+  queueSave();
 }
 function saveDayZone(){
   var ds=planSelectedDay; if(!ds) return;
@@ -4134,6 +4157,8 @@ document.addEventListener('deviceready', function(){
       if(typeof window.__flowDrainEvents === 'function') window.__flowDrainEvents();
     });
   }
+  // Обробити чергу, що накопичилась поки апку було закрито (нотатки/виконання зі шторки)
+  setTimeout(function(){ if(typeof window.__flowDrainEvents === 'function') window.__flowDrainEvents(); }, 1000);
 }, false);
 
 // Fallback: якщо deviceready не спрацював (деякі версії Capacitor)
