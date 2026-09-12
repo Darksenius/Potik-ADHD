@@ -16,6 +16,7 @@ import PlannerTab from './components/planner/PlannerTab';
 import ReadmePage from './components/oss/ReadmePage';
 import Toast from './components/common/Toast';
 import BackupBanner from './components/common/BackupBanner';
+import KbdOverlay from './components/common/KbdOverlay';
 import { usePomodoroTick } from './hooks/usePomodoroTick';
 
 /** applyTheme() — рядки 1165–1170: data-theme на <html> тепер ефект, не імперативний виклик. */
@@ -77,6 +78,7 @@ export default function App() {
       <TaskEditor />
       <Toast />
       <BackupBanner />
+      <KbdOverlay />
     </>
   );
 }

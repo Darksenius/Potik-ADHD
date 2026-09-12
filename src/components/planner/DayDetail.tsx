@@ -22,6 +22,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
   const removePlanItem = useStore((s) => s.removePlanItem);
   const addPlanItem = useStore((s) => s.addPlanItem);
   const addPlanEvent = useStore((s) => s.addPlanEvent);
+  const openKbdOverlay = useStore((s) => s.openKbdOverlay);
 
   const [noteText, setNoteText] = useState(planDayLog[ds]?.note || '');
 
@@ -43,8 +44,12 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
             className="pdd-add"
             style={{ background: 'var(--s3)', color: 'var(--t2)', border: '1px solid var(--b2)' }}
             onClick={() => {
-              const v = window.prompt('Задача на цей день (можна почати з "ГГ:ХХ Назва"):');
-              if (v && v.trim()) addPlanItem(ds, v.trim());
+              openKbdOverlay({
+                hint: '+ Задача на ' + fmtHuman(new Date(ds + 'T12:00:00')),
+                placeholder: 'напр. "10:00 Подзвонити" або просто назва',
+                showTaskHint: false,
+                onSend: (txt) => addPlanItem(ds, txt),
+              });
             }}
           >
             + Задача
@@ -52,8 +57,12 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
           <button
             className="pdd-add"
             onClick={() => {
-              const v = window.prompt('Подія (можна почати з "ГГ:ХХ Назва"):');
-              if (v && v.trim()) addPlanEvent(ds, v.trim());
+              openKbdOverlay({
+                hint: '🎉 Подія на ' + fmtHuman(new Date(ds + 'T12:00:00')),
+                placeholder: 'напр. ДН Оленки, Похід в кіно...',
+                showTaskHint: false,
+                onSend: (txt) => addPlanEvent(ds, txt),
+              });
             }}
           >
             🎉 Подія

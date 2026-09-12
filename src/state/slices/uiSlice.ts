@@ -71,6 +71,22 @@ export interface UiSlice {
   backupBanner: { taskCount: number; saveDate: string; data: unknown } | 'unreadable' | null;
   setBackupBanner: (v: UiSlice['backupBanner']) => void;
   dismissBackupBanner: () => void;
+
+  /**
+   * kbdOverlay — плаваючий оверлей клавіатури (kbdOpen()/kbdClose(), рядки 3064–3120).
+   */
+  kbdOverlay: KbdOverlayContext | null;
+  openKbdOverlay: (ctx: KbdOverlayContext) => void;
+  closeKbdOverlay: () => void;
+}
+
+export interface KbdOverlayContext {
+  hint: string;
+  placeholder: string;
+  initialValue?: string;
+  showTaskHint?: boolean;
+  folderSel?: string;
+  onSend: (text: string, folder?: string | null) => void;
 }
 
 export const createUiSlice: AppSlice<UiSlice> = (set) => ({
@@ -89,6 +105,7 @@ export const createUiSlice: AppSlice<UiSlice> = (set) => ({
   editorTaskId: null,
   toastMessage: null,
   backupBanner: null,
+  kbdOverlay: null,
 
   // toggleTheme() — рядки 1171–1175. Застосування data-theme до <html> —
   // тепер робота useEffect у App.tsx, що читає це поле (див. App.tsx).
@@ -107,4 +124,6 @@ export const createUiSlice: AppSlice<UiSlice> = (set) => ({
   dismissToast: () => set({ toastMessage: null }),
   setBackupBanner: (v) => set({ backupBanner: v }),
   dismissBackupBanner: () => set({ backupBanner: null }),
+  openKbdOverlay: (ctx) => set({ kbdOverlay: ctx }),
+  closeKbdOverlay: () => set({ kbdOverlay: null }),
 });
