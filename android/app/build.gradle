@@ -12,6 +12,7 @@ apply plugin: 'com.android.application'
 def versionMajor = 1
 def versionMinor = 7
 def versionPatch = 5
+def versionSuffix = ".r1"
 
 android {
     namespace = "com.flow.adhd"
@@ -21,7 +22,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode versionMajor * 10000 + versionMinor * 100 + versionPatch
-        versionName "${versionMajor}.${versionMinor}.${versionPatch}"
+        versionName "${versionMajor}.${versionMinor}.${versionPatch}${versionSuffix}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

@@ -24,7 +24,13 @@ jobs:
       - name: Install web deps
         run: npm ci --no-audit --no-fund
 
+      # ЗМІНА: раніше www/index.html був джерелом і комітився в git.
+      # Тепер це артефакт Vite-збірки — будуємо ЙОГО ПЕРШИМ, до embed-oss.
+      - name: Build web app (Vite)
+        run: npm run build
+
       # AGPL: вшити текст ліцензії та повний вихідний код у довідку застосунку
+      # (працює з src/ + конфігами, вшиває у ЩОЙНО зібраний www/index.html)
       - name: Embed license and source code
         run: node scripts/embed-oss.js
 

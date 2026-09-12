@@ -1,6 +1,17 @@
 # Node
 node_modules/
 
+# ЗМІНА: www/ тепер артефакт `vite build` (генерується з src/ + кореневого
+# index.html), більше не редагується вручну — тому більше НЕ комітиться.
+www/
+
+# Vite
+.vite/
+dist/
+
+# TypeScript build info
+*.tsbuildinfo
+
 # Android / Gradle — збірочні артефакти
 android/.gradle/
 android/build/

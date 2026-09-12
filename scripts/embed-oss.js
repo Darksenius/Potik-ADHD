@@ -3,27 +3,43 @@
  * embed-oss.js — вшиває текст ліцензії (LICENSE) та ПОВНИЙ вихідний код
  * у www/index.html (Довідка → «Ліцензія та вихідний код»), як вимагає AGPL v3.
  *
+ * ⚠ ЗМІНА ПРОТИ ПОПЕРЕДНЬОЇ ВЕРСІЇ: www/index.html тепер ЗГЕНЕРОВАНИЙ
+ *   `vite build` файл (не комітиться в git), тому цей скрипт МУСИТЬ
+ *   запускатись ПІСЛЯ збірки, не до неї:
+ *
+ *     npm run build              — vite build → www/
+ *     node scripts/embed-oss.js  — вшити ліцензію+код у ЩОЙНО зібраний www/index.html
+ *     npx cap sync android
+ *
+ *   (саме такий порядок вже прописаний у package.json → "sync" та в
+ *   .github/workflows/release.yml)
+ *
  * Запуск:
- *   node scripts/embed-oss.js          — вшити (перед `npx cap sync android`)
+ *   node scripts/embed-oss.js          — вшити (після `npm run build`)
  *   node scripts/embed-oss.js --clean  — прибрати вшите, повернути плейсхолдер
  *
  * Скрипт ідемпотентний: повторний запуск дає той самий результат.
- * У вшитому коді index.html завжди йде у "чистому" вигляді (з порожнім
- * плейсхолдером), тобто рівно те, що лежить у репозиторії.
  *
  * ⚠ ЯКЩО ДОДАЄШ / ПЕРЕЙМЕНОВУЄШ / ВИДАЛЯЄШ ФАЙЛИ КОДУ —
  *   онови списки SOURCE_FILES та SOURCE_DIRS нижче.
  */
-'use strict';
-const fs = require('fs');
-const path = require('path');
+// package.json тепер "type":"module" (сучасний Vite-стиль), тому ESM-синтаксис,
+// не CommonJS require() — інакше падає з "require is not defined in ES module scope".
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const GITHUB_URL = 'https://github.com/Darksenius/Potik-ADHD';
 
-// Окремі файли вихідного коду (шляхи відносно кореня репозиторію)
+// Окремі файли вихідного коду (шляхи відносно кореня репозиторію).
+// www/index.html БІЛЬШЕ НЕ ТУТ — це згенерований build-артефакт, не джерело.
+// Натомість джерело — кореневий index.html (вхідна точка Vite).
 const SOURCE_FILES = [
-  'www/index.html',
+  'index.html',
+  'vite.config.ts',
+  'tsconfig.json',
   'capacitor.config.json',
   'package.json',
   'android/app/src/main/AndroidManifest.xml',
@@ -32,6 +48,7 @@ const SOURCE_FILES = [
 
 // Теки, з яких рекурсивно беруться всі файли з указаними розширеннями
 const SOURCE_DIRS = [
+  { dir: 'src', exts: ['.ts', '.tsx', '.css'] },
   { dir: 'android/app/src/main/java', exts: ['.java'] },
 ];
 
@@ -68,12 +85,23 @@ function relUnix(p) {
 function main() {
   const clean = process.argv.includes('--clean');
 
-  const html = fs.readFileSync(TARGET, 'utf8');
-  if (!OSS_TAG_RE.test(html)) {
-    console.error('ПОМИЛКА: у www/index.html не знайдено <script id="oss-data"> — плейсхолдер видалили?');
+  if (!fs.existsSync(TARGET)) {
+    console.error(
+      'ПОМИЛКА: www/index.html не знайдено. Він тепер генерується збіркою — ' +
+      'спершу запусти `npm run build` (vite build), а вже потім embed-oss.js.'
+    );
     process.exit(1);
   }
-  // нормалізуємо до чистого стану (як у репозиторії)
+
+  const html = fs.readFileSync(TARGET, 'utf8');
+  if (!OSS_TAG_RE.test(html)) {
+    console.error(
+      'ПОМИЛКА: у www/index.html не знайдено <script id="oss-data"> — ' +
+      'плейсхолдер видалили з кореневого index.html (вхідної точки Vite)?'
+    );
+    process.exit(1);
+  }
+  // нормалізуємо до чистого стану (як одразу після `vite build`, без вшитих даних)
   const pristine = html.replace(OSS_TAG_RE, PLACEHOLDER);
 
   if (clean) {
@@ -89,12 +117,12 @@ function main() {
   const sections = [];
   for (const absPath of files) {
     const rel = relUnix(absPath);
-    const content = rel === 'www/index.html' ? pristine : fs.readFileSync(absPath, 'utf8');
+    const content = fs.readFileSync(absPath, 'utf8');
     sections.push('## ' + rel + '\n\n' + content.split('\n').map(l => '\t' + l).join('\n') + '\n');
   }
   const source = '# Потік — повний вихідний код\n\n' + GITHUB_URL + '\n\n' + sections.join('\n');
 
-  // «<» → <, щоб жоден </script> чи <!-- усередині даних не зламав HTML;
+  // «<» → \u003c, щоб жоден </script> чи <!-- усередині даних не зламав HTML;
   // U+2028/U+2029 → escape, бо вони ламають JS-рядки у старих парсерах.
   // Після парсингу рушієм текст повертається 1:1.
   const payload = JSON.stringify({ github: GITHUB_URL, license: license, source: source })
@@ -109,7 +137,7 @@ function main() {
   fs.writeFileSync(TARGET, injected);
   const kb = n => (n / 1024).toFixed(1) + ' КБ';
   console.log('Вшито: ліцензія ' + kb(license.length) + ', вихідний код ' + kb(source.length) +
-    ' (' + files.length + ' файлів). index.html тепер: ' + kb(injected.length));
+    ' (' + files.length + ' файлів). www/index.html тепер: ' + kb(injected.length));
 }
 
 main();
