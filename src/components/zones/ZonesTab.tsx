@@ -1,4 +1,6 @@
 import { useStore } from '../../state/store';
+import { useState } from 'react';
+import ZoneEditor from './ZoneEditor';
 
 const PRIO_LABELS = ['', 'Фон', 'Нарада', 'Критичне'];
 
@@ -7,6 +9,9 @@ export default function ZonesTab() {
   const tasks = useStore((s) => s.tasks);
   const deleteZone = useStore((s) => s.deleteZone);
   const addZone = useStore((s) => s.addZone);
+  const toggleZoneOff = useStore((s) => s.toggleZoneOff);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const editing = zones.find(z => z.id === editingId);
 
   return (
     <div id="zones-sec" className="tsec active">
@@ -14,7 +19,7 @@ export default function ZonesTab() {
         id="add-fab"
         onClick={() => {
           const name = window.prompt('Назва нової зони:');
-          if (name && name.trim()) addZone(name.trim());
+          if (name && name.trim()) setEditingId(addZone(name.trim()));
         }}
       >
         <span className="plus">＋</span> Нова зона
@@ -27,7 +32,7 @@ export default function ZonesTab() {
           </div>
         ) : (
           zones.map((z) => {
-            const linked = tasks.filter((t) => t.type === 'zonelinked' && t.zoneId === z.id);
+            const linked = tasks.filter((t) => !t.trashed && t.type === 'zonelinked' && t.zoneId === z.id);
             return (
               <div className="zrow" key={z.id} style={{ borderLeftColor: z.color }}>
                 <div className="zdot" style={{ background: z.color }} />
@@ -46,12 +51,15 @@ export default function ZonesTab() {
                     </div>
                   )}
                 </div>
-                <button className="zdel" onClick={() => deleteZone(z.id)}>✕</button>
+                <button className="ab" aria-label={'Редагувати зону ' + z.nm} onClick={() => setEditingId(z.id)}>✎</button>
+                <button className="ab" aria-label={(z.active === false ? 'Увімкнути ' : 'Вимкнути ') + z.nm} onClick={() => toggleZoneOff(z.id)}>{z.active === false ? '○' : '●'}</button>
+                <button className="zdel" aria-label={'Видалити зону ' + z.nm} onClick={() => { if (window.confirm('Видалити зону «' + z.nm + '»?')) deleteZone(z.id); }}>✕</button>
               </div>
             );
           })
         )}
       </div>
+      {editing && <ZoneEditor key={editing.id} zone={editing} onClose={() => setEditingId(null)} />}
     </div>
   );
 }

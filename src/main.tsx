@@ -9,13 +9,16 @@ import { useStore } from './state/store';
 import { loadState, saveState, queueSave, checkBackupRecovery } from './services/persistence';
 import { setupNativeBridge, updateForegroundService } from './bridge/nativeBridge';
 import { checkNotificationPermissionOnBoot, refreshWebNotificationIfGranted } from './services/webNotifications';
+import { fmtDate } from './utils/date';
+import { startAutosave } from './services/autosave';
+import { checkReminders } from './services/reminders';
 
 /**
  * Bootstrap — відповідник "хвоста" www/index.html, рядки 2867–3062, 4434–4462.
  * Порядок навмисно той самий: спершу завантажити стан, ПОТІМ рендерити.
  */
 function bootstrap() {
-  useStore.setState({ planSelectedDay: new Date().toISOString().slice(0, 10) });
+  useStore.setState({ planSelectedDay: fmtDate(new Date()) });
 
   // loadState() тепер повертає saveDate завантажених даних (або null, якщо
   // даних не було) — точний відповідник _loadedSaveDate з оригіналу.
@@ -41,6 +44,9 @@ function bootstrap() {
   } else if (backupResult.kind === 'valid') {
     useStore.getState().setBackupBanner({ data: backupResult.data, taskCount: backupResult.taskCount, saveDate: backupResult.saveDate });
   }
+  startAutosave();
+  checkReminders();
+  setInterval(checkReminders, 1000);
 
   // Хвилинний тік — рядки 3053-3061: щоденний скид + Android-сповіщення +
   // веб-сповіщення, якщо дозволено. (updateClock() тут не потрібен — час
@@ -62,9 +68,13 @@ function bootstrap() {
   });
 
   // Автозбереження щохвилини (рядок 4455)
-  setInterval(saveState, 60000);
+  setInterval(() => {
+    if (!useStore.getState().backupBanner) saveState();
+  }, 60000);
   // Свіжий snapshot одразу після завантаження (рядки 4456–4462)
-  setTimeout(saveState, 1500);
+  setTimeout(() => {
+    if (!useStore.getState().backupBanner) saveState();
+  }, 1500);
 }
 
 bootstrap();

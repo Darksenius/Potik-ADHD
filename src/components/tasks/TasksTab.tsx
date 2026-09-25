@@ -5,6 +5,7 @@ import { fmtDate, toMinutes } from '../../utils/date';
 import type { Task } from '../../types';
 import TaskItem from './TaskItem';
 import ZoneTasksBanner from '../zones/ZoneTasksBanner';
+import TrashSection from './TrashSection';
 
 /** _appRank(t) — рядки 2179–2190. Ранжування (версія Клод). */
 function appRank(t: Task, priorityIds: number[], zoneId: number): number {
@@ -112,6 +113,7 @@ export default function TasksTab() {
           visible.map((t) => <TaskItem key={t.id} t={t} isPriority={prioIds.indexOf(t.id) >= 0} />)
         )}
       </div>
+      <TrashSection />
     </div>
   );
 }

@@ -73,14 +73,14 @@ export default function NotesTab() {
           onChange={(e) => setQnText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
           placeholder="Швидка нотатка..."
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 0 }}
         />
-        <select value={qnFolder} onChange={(e) => setQnFolder(e.target.value)}>
+        <select aria-label="Папка нотатки" style={{ maxWidth: '40%', minWidth: 0 }} value={qnFolder} onChange={(e) => setQnFolder(e.target.value)}>
           {folders.map((f) => (
             <option value={f.id} key={f.id}>{f.ico || '📁'} {f.nm}</option>
           ))}
         </select>
-        <button onClick={send}>➤</button>
+        <button aria-label="Додати нотатку" onClick={send}>➤</button>
       </div>
 
       <div id="qn-list">

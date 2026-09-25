@@ -26,6 +26,7 @@ export interface FlowBridgeNative {
 }
 
 export interface FlowNotifPlugin {
+  addListener?: (event: 'flowEvent', listener: () => void) => Promise<{ remove: () => Promise<void> }>;
   start(): Promise<void>;
   update(): Promise<void>;
   stop(): Promise<void>;
@@ -49,6 +50,8 @@ declare global {
     };
     /** Викликається нативним broadcast-сигналом "перевір чергу подій" (рядок 4136) */
     __flowDrainEvents?: () => void;
+    /** MainActivity's existing notification navigation callback. */
+    swTab?: (tab: string, element?: unknown) => void;
     /** Вшивається scripts/embed-oss.js у ЗІБРАНИЙ www/index.html (AGPL), рядок 4500 */
     __OSS__?: { github: string; license: string; source: string } | null;
   }
@@ -238,9 +241,22 @@ export function setupNativeBridge(onChanged: () => void): void {
   if (typeof window === 'undefined') return;
 
   window.__flowDrainEvents = () => drainNativeEvents(onChanged);
+  window.swTab = (tab) => {
+    if (tab !== 'tasks') return;
+    useStore.getState().showPage('main');
+    useStore.getState().switchTab('tasks');
+  };
 
-  document.addEventListener('deviceready', () => {
+  let connected = false;
+  const connect = () => {
+    const fp = flowNotif();
+    if (!fp || connected) return;
+    connected = true;
     setTimeout(() => startForegroundService(), 800);
-    // TODO: підписка на broadcast кнопок сповіщення — рядок 4150+
-  });
+    fp.addListener?.('flowEvent', () => drainNativeEvents(onChanged)).catch(e => console.log('FLOW event listener:', e));
+    setTimeout(() => drainNativeEvents(onChanged), 1000);
+  };
+  document.addEventListener('deviceready', connect);
+  // Capacitor may already be ready when the module script is evaluated.
+  if (isCapacitor()) connect();
 }

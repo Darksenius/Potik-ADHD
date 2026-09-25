@@ -19,6 +19,7 @@ export type PageId = 'main' | 'widget' | 'readme';
 export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state';
 
 export interface UiSlice {
+  alarmTaskIds: number[];
   theme: 'light' | 'dark';
   currentPage: PageId;
   currentTab: TabId;
@@ -90,6 +91,7 @@ export interface KbdOverlayContext {
 }
 
 export const createUiSlice: AppSlice<UiSlice> = (set) => ({
+  alarmTaskIds: [],
   theme: 'dark',
   currentPage: 'main',
   currentTab: 'tasks',

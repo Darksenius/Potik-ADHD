@@ -64,6 +64,7 @@ export interface ZonesSlice {
   zoneSlotRange: (zone: Zone, hm: { h: number; m: number }) => string;
   /** planNewZone() — рядки 3852–3859, без DOM/select-фокусу (те — робота компонента) */
   addZone: (name: string) => number;
+  updateZone: (id: number, patch: Pick<Zone, 'nm' | 'color' | 'desc' | 'prio' | 'slots'>) => void;
   /** delZone(id) — видалення зони (тіло не інспектовано детально; типова реалізація — filter + перерахунок) */
   deleteZone: (id: number) => void;
 }
@@ -240,6 +241,14 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
     const zone: Zone = { id, nm: name, color: ZONE_PALETTE[id % ZONE_PALETTE.length], slots: [], desc: '', prio: 1, active: true };
     set((s) => ({ zones: [...s.zones, zone] }));
     return id;
+  },
+
+  updateZone: (id, patch) => {
+    set(s => ({
+      zones: s.zones.map(z => z.id === id ? { ...z, ...patch } : z),
+      tasks: s.tasks.map(t => t.zoneId === id ? { ...t, zoneName: patch.nm, zoneColor: patch.color } : t),
+    }));
+    get().recalculateZoneUsage();
   },
 
   deleteZone: (id) => {

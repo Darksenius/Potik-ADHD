@@ -13,6 +13,7 @@ export default function WeekGrid() {
   useStore((s) => s.planDayZones);
   useStore((s) => s.planRules);
   useStore((s) => s.dayTemplates);
+  useStore((s) => s.planRestDays);
   const dayBlocks = useStore((s) => s.dayBlocks);
   const dayIsRest = useStore((s) => s.dayIsRest);
 

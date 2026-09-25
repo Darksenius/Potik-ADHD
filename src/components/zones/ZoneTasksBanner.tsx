@@ -12,7 +12,7 @@ export default function ZoneTasksBanner() {
   const requestEditTask = useStore((s) => s.requestEditTask);
   const deleteTask = useStore((s) => s.deleteTask);
 
-  const linked = tasks.filter((t) => t.type === 'zonelinked' && t.zoneId === pz.id);
+  const linked = tasks.filter((t) => !t.trashed && !t.someday && t.type === 'zonelinked' && t.zoneId === pz.id);
   if (!linked.length || pz.id === 0) return null;
 
   return (

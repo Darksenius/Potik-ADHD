@@ -3,6 +3,7 @@ import { useStore } from '../../state/store';
 import { ULBL } from '../../state/slices/routineSlice';
 import { ENERGY_LABELS } from '../../constants';
 import PriorityPicker from '../tasks/PriorityPicker';
+import RoutineEditor from './RoutineEditor';
 
 function PrioritySlot({ index }: { index: number }) {
   const tasks = useStore((s) => s.tasks);
@@ -47,6 +48,7 @@ function PrioritySlot({ index }: { index: number }) {
 }
 
 function RoutineList() {
+  const [editing, setEditing] = useState<boolean | null>(null);
   const recur = useStore((s) => s.recur);
   const incRecur = useStore((s) => s.incRecur);
   const decRecur = useStore((s) => s.decRecur);
@@ -62,8 +64,7 @@ function RoutineList() {
           <button
             className="rb-add"
             onClick={() => {
-              const nm = window.prompt('Назва корисної звички:');
-              if (nm && nm.trim()) addRecur(nm, 'count', '#7ed321', false);
+              setEditing(false);
             }}
           >
             + Корисна
@@ -71,14 +72,14 @@ function RoutineList() {
           <button
             className="rb-add neg"
             onClick={() => {
-              const nm = window.prompt('Назва шкідливої звички:');
-              if (nm && nm.trim()) addRecur(nm, 'count', '#e24b4a', true, 5);
+              setEditing(true);
             }}
           >
             − Шкідлива
           </button>
         </div>
       </div>
+      {editing !== null && <RoutineEditor negative={editing} onClose={() => setEditing(null)} />}
       <div className="rc-list">
         {recur.map((r) => {
           const ul = ULBL[r.unit] || '';

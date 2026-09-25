@@ -17,6 +17,7 @@ import ReadmePage from './components/oss/ReadmePage';
 import Toast from './components/common/Toast';
 import BackupBanner from './components/common/BackupBanner';
 import KbdOverlay from './components/common/KbdOverlay';
+import AlarmBanner from './components/common/AlarmBanner';
 import { usePomodoroTick } from './hooks/usePomodoroTick';
 
 /** applyTheme() — рядки 1165–1170: data-theme на <html> тепер ефект, не імперативний виклик. */
@@ -40,6 +41,7 @@ export default function App() {
   usePomodoroTick();
   const currentPage = useStore((s) => s.currentPage);
   const currentTab = useStore((s) => s.currentTab);
+  const editorTaskId = useStore((s) => s.editorTaskId);
 
   return (
     <>
@@ -75,7 +77,8 @@ export default function App() {
         </div>
       )}
 
-      <TaskEditor />
+      {editorTaskId !== null && <TaskEditor key={editorTaskId} />}
+      <AlarmBanner />
       <Toast />
       <BackupBanner />
       <KbdOverlay />

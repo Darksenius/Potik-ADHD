@@ -24,7 +24,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
   const addPlanEvent = useStore((s) => s.addPlanEvent);
   const openKbdOverlay = useStore((s) => s.openKbdOverlay);
 
-  const [noteText, setNoteText] = useState(planDayLog[ds]?.note || '');
+  const noteText = planDayLog[ds]?.note || '';
 
   const today = new Date();
   const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -80,7 +80,6 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
         <textarea
           value={noteText}
           onChange={(e) => {
-            setNoteText(e.target.value);
             setDayNote(ds, e.target.value);
           }}
           placeholder="Запиши, що згадав про цей день…"

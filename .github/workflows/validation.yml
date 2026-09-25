@@ -1,0 +1,33 @@
+name: Migration validation
+on:
+  pull_request:
+  push:
+    branches: [main, refactor/vite-react-migration, 'audit/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run embed-oss
+      - run: npm test
+        env:
+          PLAYWRIGHT_CHANNEL: chromium
+          TEST_PRODUCTION: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: migration-validation-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

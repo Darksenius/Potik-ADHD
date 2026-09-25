@@ -44,3 +44,7 @@ s*.png
 
 # Локальні налаштування Claude Code
 .claude/
+
+# Automated validation artifacts
+test-results/
+playwright-report/
