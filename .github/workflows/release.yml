@@ -57,7 +57,13 @@ jobs:
           ./gradlew assembleRelease
 
       - name: Rename APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk Potik-${{ github.ref_name }}.apk
+        run: |
+          VERSION=$(node -p "require('./package.json').version.replace('-r', '.r')")
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo "Tag does not match package version: $GITHUB_REF_NAME vs v$VERSION"
+            exit 1
+          fi
+          cp android/app/build/outputs/apk/release/app-release.apk "Potik-v${VERSION}.apk"
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -65,6 +71,8 @@ jobs:
         with:
           files: Potik-*.apk
           generate_release_notes: true
+          # Publish only after the signed APK has passed the device smoke test.
+          draft: true
 
       # При ручному запуску (без тега) — просто прикріпити APK як артефакт
       - name: Upload artifact (manual run)

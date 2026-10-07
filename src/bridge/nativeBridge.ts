@@ -25,8 +25,14 @@ export interface FlowBridgeNative {
   exportTxt(filename: string, content: string): void;
 }
 
+interface NativeListenerHandle {
+  remove: () => Promise<void>;
+}
+
 export interface FlowNotifPlugin {
-  addListener?: (event: 'flowEvent', listener: () => void) => Promise<{ remove: () => Promise<void> }>;
+  // Capacitor's injected legacy Plugins API returns a handle synchronously.
+  // Promise-based wrappers are also supported.
+  addListener?: (event: 'flowEvent', listener: () => void) => NativeListenerHandle | Promise<NativeListenerHandle>;
   start(): Promise<void>;
   update(): Promise<void>;
   stop(): Promise<void>;
@@ -232,10 +238,7 @@ export function stopForegroundService(): void {
  * Підключає нативний міст: слухач 'deviceready' + expose window.__flowDrainEvents.
  * Викликати ОДИН РАЗ із src/main.tsx при старті застосунку.
  *
- * TODO: startForegroundService()/updateForegroundService() (рядки 3922–4189,
- * fgNotifText() зокрема) ще не перенесені — це найбільша частина цього
- * модуля, що лишилась. onChanged тут відповідає лише за
- * queueSave()+saveState()+FlowNotif.update() (рядки 4422–4426).
+ * onChanged зберігає зміни після обробки події та оновлює сповіщення.
  */
 export function setupNativeBridge(onChanged: () => void): void {
   if (typeof window === 'undefined') return;
@@ -253,7 +256,14 @@ export function setupNativeBridge(onChanged: () => void): void {
     if (!fp || connected) return;
     connected = true;
     setTimeout(() => startForegroundService(), 800);
-    fp.addListener?.('flowEvent', () => drainNativeEvents(onChanged)).catch(e => console.log('FLOW event listener:', e));
+    try {
+      Promise.resolve(fp.addListener?.('flowEvent', () => drainNativeEvents(onChanged)))
+        .catch(e => console.log('FLOW event listener:', e));
+    } catch (e) {
+      // A listener failure must not prevent React from mounting. MainActivity's
+      // polling and the initial drain below still process queued native events.
+      console.log('FLOW event listener:', e);
+    }
     setTimeout(() => drainNativeEvents(onChanged), 1000);
   };
   document.addEventListener('deviceready', connect);
