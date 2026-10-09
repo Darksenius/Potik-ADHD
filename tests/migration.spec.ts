@@ -14,7 +14,7 @@ async function boot(page: Page, data: object = {}) {
 const task = (id: number, title: string, extra = {}) => ({
   id, title, type: 'simple', done: false, someday: false, repeat: 'none',
   repeatDays: [false, false, false, false, false, false, false], tags: [],
-  created: '2026-09-16T09:00:00.000Z', ...extra,
+  created: '2026-09-16T09:00:00.000Z', planDate: '2026-09-16', ...extra,
 });
 
 test('editor loads the selected task and clears cancelled drafts', async ({ page }) => {
@@ -75,9 +75,9 @@ test('all sections remain reachable through the four primary tabs and render wit
   expect(errors).toEqual([]);
 });
 
-test('all 13 task types can be created in separate editor sessions', async ({ page }) => {
+test('all 10 supported task types can be created in separate editor sessions', async ({ page }) => {
   await boot(page);
-  const types = ['simple', 'check', 'counter', 'note', 'alarm', 'sched', 'timewin', 'pomodoro', 'habit', 'kid', 'ctx', 'negative', 'zonelinked'];
+  const types = ['simple', 'check', 'counter', 'note', 'alarm', 'sched', 'timewin', 'ctx', 'negative', 'zonelinked'];
   for (const type of types) {
     await page.locator('#add-fab').click();
     await expect(page.locator('#edit-body input').first()).toHaveValue('');
@@ -212,22 +212,19 @@ test('5/2 schedule applies for two weeks and a manual exception affects only one
   expect(data.planRestDays).toEqual({ '2026-09-16': true });
 });
 
-test('checklist, counter and Pomodoro actions award experience and persist', async ({ page }) => {
+test('checklist and counter actions award experience and persist', async ({ page }) => {
   await boot(page, { tasks: [
     task(401, 'Чекліст', { type: 'check', expanded: true, items: [{ text: 'Пункт', done: false }] }),
     task(402, 'Лічильник', { type: 'counter', expanded: true, counter: 0, counterTarget: 2 }),
-    task(403, 'Таймер', { type: 'pomodoro', expanded: true, pomSecs: 2, pomMode: 'work', pomRunning: false, pomSessions: 0 }),
   ] });
   await page.locator('.ci input').check();
   await page.locator('.cw').getByRole('button', { name: '+', exact: true }).click();
   await page.locator('.cw').getByRole('button', { name: '+', exact: true }).click();
-  await page.getByRole('button', { name: '▶ Старт', exact: true }).click();
   await page.clock.runFor(3000);
   const data = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(data.tasks[0].items[0].done).toBe(true);
   expect(data.tasks[1]).toMatchObject({ counter: 2, cntHit: true });
-  expect(data.tasks[2]).toMatchObject({ pomMode: 'break', pomSessions: 1, pomRunning: false });
-  expect(data.xpTotal).toBe(37);
+  expect(data.xpTotal).toBe(22);
 });
 
 test('scheduled reminders fire once and trashed alarms stay silent', async ({ page }) => {

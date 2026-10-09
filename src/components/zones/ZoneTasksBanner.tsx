@@ -1,6 +1,7 @@
 import { useStore } from '../../state/store';
 import { useClock } from '../../hooks/useClock';
 import { REPEAT_LABELS } from '../../constants';
+import { isTaskAvailable } from '../../utils/taskSchedule';
 
 export default function ZoneTasksBanner() {
   const hm = useClock();
@@ -12,7 +13,7 @@ export default function ZoneTasksBanner() {
   const requestEditTask = useStore((s) => s.requestEditTask);
   const deleteTask = useStore((s) => s.deleteTask);
 
-  const linked = tasks.filter((t) => !t.trashed && !t.someday && t.type === 'zonelinked' && t.zoneId === pz.id);
+  const linked = tasks.filter((t) => !t.done && isTaskAvailable(t) && t.type === 'zonelinked' && t.zoneId === pz.id);
   if (!linked.length || pz.id === 0) return null;
 
   return (

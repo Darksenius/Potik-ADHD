@@ -26,6 +26,42 @@ import org.junit.runner.RunWith;
 public class FlowWebViewTest {
     private static final long UI_TIMEOUT_MS = 45000;
 
+    @Test public void inboxCaptureNeedsAnExplicitDayBeforeAppearingToday() throws Exception {
+        String title = "Android r2 Inbox " + UUID.randomUUID();
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitReady(scenario);
+            click(scenario, "#tabs button:nth-child(3)");
+            await(scenario, "document.querySelector('#quick-task') !== null", "Inbox opens");
+            input(scenario, "#quick-task", title);
+            click(scenario, ".quick-capture button");
+            JSONObject captured = awaitTask(scenario, title, null);
+            long id = captured.getLong("id");
+            assertFalse("Capture must not silently assign today", captured.has("planDate"));
+            click(scenario, "#tabs button:nth-child(1)");
+            await(scenario, "document.querySelector('#tasks-list') !== null", "Today opens");
+            assertFalse(value(scenario, "return document.querySelector('#tasks-list').textContent.indexOf("
+                + JSONObject.quote(title) + ") >= 0;").getBoolean("value"));
+            click(scenario, "#tabs button:nth-child(3)");
+            value(scenario, "var button=Array.prototype.find.call(document.querySelectorAll('#inbox-sec .tt'),"
+                + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";});"
+                + "if(!button)throw new Error('Inbox task missing');button.click();return true;");
+            await(scenario, "document.querySelector('#task-date') !== null", "Title opens editor");
+            click(scenario, ".editor-actions button:nth-child(2)"); // Explicit Today
+            String day = value(scenario, "return document.querySelector('#task-date').value;").getString("value");
+            assertTrue(day.matches("\\d{4}-\\d{2}-\\d{2}"));
+            click(scenario, "#edit-save-fab");
+            await(scenario, "document.querySelector('#edit-page') === null", "Planning saves");
+            JSONObject planned = awaitTask(scenario, title, null);
+            assertEquals(id, planned.getLong("id"));
+            assertEquals(day, planned.getString("planDate"));
+            scenario.recreate();
+            awaitReady(scenario);
+            await(scenario, "document.querySelector('#tasks-list').textContent.indexOf(" + JSONObject.quote(title)
+                + ") >= 0", "Planned capture appears Today after recreation");
+            assertEquals(id, awaitTask(scenario, title, null).getLong("id"));
+        }
+    }
+
     @Test public void simpleTaskSurvivesActivityRecreationWithSameId() throws Exception {
         String title = "Android smoke simple " + UUID.randomUUID();
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {

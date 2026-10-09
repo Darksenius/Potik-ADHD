@@ -48,6 +48,49 @@ test('malformed backup cannot partially mutate data or replace rollback copy', (
   }
 });
 
+test('removed task types reject the entire import without changing current tasks or rollback', () => {
+  useStore.setState({ notepad: 'Зберегти', tasks: [task(400)] });
+  values.set(IMPORT_ROLLBACK_KEY, 'existing rollback');
+  const before = collectState();
+  for (const type of ['pomodoro', 'habit', 'kid']) {
+    expect(() => importState({ tasks: [task(5), { ...task(6), type }] }, 'restore')).toThrow();
+    expect(collectState()).toEqual(before);
+    expect(values.get(IMPORT_ROLLBACK_KEY)).toBe('existing rollback');
+  }
+});
+
+test('Inbox capture is excluded from Android daily snapshot until planned, simple tasks never schedule alarms', () => {
+  const captured = useStore.getState().createTask('Купити батарейки', 'simple');
+  useStore.getState().addQuickTaskFromShade('Думка зі шторки');
+  expect(buildForegroundNotifPayload().taskList).toHaveLength(0);
+  useStore.getState().saveTask(captured.id, { title: captured.title, type: 'simple', planDate: fmtDate(new Date()) });
+  expect(buildForegroundNotifPayload().taskList.map(t => t.id)).toEqual([captured.id]);
+  expect(buildForegroundNotifPayload().schedList).toHaveLength(0);
+});
+
+test('native capture, Today priority and moving day share the same eligibility without implicit completion', () => {
+  expect(handleNativeEvent('note:...Зателефонувати майстру')).toBe(true);
+  const captured = useStore.getState().tasks[0];
+  useStore.getState().setPriority(0, captured.id);
+  expect(useStore.getState().priorities).toEqual([null, null, null]);
+  expect(handleNativeEvent('done_first')).toBe(false);
+  expect(useStore.getState().tasks[0].done).toBe(false);
+  expect(buildForegroundNotifPayload().taskList).toHaveLength(0);
+  useStore.getState().saveTask(captured.id, { title: captured.title, type: 'simple', planDate: fmtDate(new Date()) });
+  useStore.getState().setPriority(0, captured.id);
+  useStore.getState().setPriority(1, captured.id);
+  expect(useStore.getState().priorities).toEqual([null, captured.id, null]);
+  const payload = buildForegroundNotifPayload();
+  expect(payload.taskList[0].id).toBe(captured.id);
+  expect(payload.urgentTasks).toContain(captured.title);
+  expect(payload.body).toContain('🎯 1');
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  useStore.getState().saveTask(captured.id, { title: captured.title, type: 'simple', planDate: fmtDate(tomorrow) });
+  expect(buildForegroundNotifPayload().taskList).toHaveLength(0);
+  expect(buildForegroundNotifPayload().body).not.toContain('🎯');
+  expect(useStore.getState().tasks[0]).toMatchObject({ id: captured.id, planDate: fmtDate(tomorrow), done: false });
+});
+
 test('same-title tasks on different days survive merge and reimport adds no duplicates', () => {
   const raw = { tasks: [task(100, { type: 'sched', schedDate: '2026-10-09', schedTime: '10:00' }), task(101, { type: 'sched', schedDate: '2026-10-10', schedTime: '10:00' })] };
   expect(importState(raw, 'merge')).toBe(2);

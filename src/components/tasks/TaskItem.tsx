@@ -7,7 +7,7 @@ import { fmtDate } from '../../utils/date';
 
 const TXP: Record<string, number> = {
   simple: 10, check: 10, counter: 2, note: 5, alarm: 10, sched: 10,
-  timewin: 5, pomodoro: 10, habit: 8, kid: 10, ctx: 8, negative: 0, zonelinked: 8,
+  timewin: 5, ctx: 8, negative: 0, zonelinked: 8,
 };
 
 function repeatLabel(t: Task): string {
@@ -19,7 +19,7 @@ function repeatLabel(t: Task): string {
   return '↺';
 }
 
-export default function TaskItem({ t, isPriority, allowMove = true }: { t: Task; isPriority: boolean; allowMove?: boolean }) {
+export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }: { t: Task; isPriority: boolean; visibleIds: number[]; allowMove?: boolean }) {
   const toggleTask = useStore((s) => s.toggleTask);
   const toggleExpanded = useStore((s) => s.toggleExpanded);
   const moveTask = useStore((s) => s.moveTask);
@@ -51,7 +51,7 @@ export default function TaskItem({ t, isPriority, allowMove = true }: { t: Task;
           {!isNeg && t.done ? '✓' : ''}
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <button className="tt task-title-button" onClick={hasBody ? () => toggleExpanded(t.id) : () => requestEditTask(t.id)}>{t.title}</button>
+          <button className="tt task-title-button" onClick={() => requestEditTask(t.id)}>{t.title}</button>
           <div className="task-schedule-label">
             {t.someday ? 'Колись' : date ? `${date < fmtDate(new Date()) && !t.done ? 'Прострочено · ' : ''}${new Date(date + 'T12:00:00').toLocaleDateString('uk', { day: 'numeric', month: 'short' })}${t.type === 'sched' && t.schedTime ? ' · ' + t.schedTime : ''}` : 'Без дати'}
             {t.snoozeUntil && t.snoozeUntil > Date.now() ? ' · відкладено до ' + new Date(t.snoozeUntil).toLocaleString('uk', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
@@ -81,7 +81,7 @@ export default function TaskItem({ t, isPriority, allowMove = true }: { t: Task;
           <span style={{ fontSize: 10, color: 'var(--xp)', fontFamily: "'Space Mono',monospace", flexShrink: 0 }}>+{TXP[t.type] ?? 10}</span>
         ))}
         <div className="tc-acts">
-          {allowMove && <><button className="ab" onClick={() => moveTask(t.id, -1)} title="Вгору" aria-label={'Підняти: ' + t.title}>↑</button><button className="ab" onClick={() => moveTask(t.id, 1)} title="Вниз" aria-label={'Опустити: ' + t.title}>↓</button></>}
+          {allowMove && <><button className="ab" onClick={() => moveTask(t.id, -1, visibleIds)} title="Вгору" aria-label={'Підняти: ' + t.title}>↑</button><button className="ab" onClick={() => moveTask(t.id, 1, visibleIds)} title="Вниз" aria-label={'Опустити: ' + t.title}>↓</button></>}
           <button className="ab eb" onClick={() => requestEditTask(t.id)} title="Редагувати" aria-label={'Редагувати: ' + t.title}>✎</button>
           <button className="ab" onClick={() => toSomeday(t.id)} title="На колись" aria-label={'На колись: ' + t.title}>📦</button>
           <button className="ab del" onClick={() => deleteTask(t.id)} title="У кошик" aria-label={'У кошик: ' + t.title}>✕</button>

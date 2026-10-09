@@ -11,6 +11,14 @@ export function taskOccursOn(task: Task, day: string): boolean {
   return !task.trashed && !task.someday && taskPlanDate(task) === day;
 }
 
+/** Capturing a thought does not put it on today's plan. Explicit recurring,
+ * time-window and zone rules are separate ways to schedule availability. */
+export function isTaskInInbox(task: Task): boolean {
+  return !task.trashed && !task.someday && !task.done && !taskPlanDate(task) && !task.zoneId
+    && (!task.repeat || task.repeat === 'none')
+    && !['sched', 'alarm', 'timewin', 'zonelinked'].includes(task.type);
+}
+
 export function repeatDueOn(task: Task, date: Date): boolean {
   const day = (date.getDay() + 6) % 7;
   switch (task.repeat) {
@@ -42,6 +50,7 @@ export function isTaskInTimeWindow(task: Task, now: Date): boolean {
 export function isTaskAvailable(task: Task, now = new Date()): boolean {
   if (task.trashed || task.someday) return false;
   if (task.done) return true;
+  if (isTaskInInbox(task)) return false;
   const day = taskPlanDate(task);
   if (day && day > fmtDate(now)) return false;
   if (task.snoozeUntil && task.snoozeUntil > now.getTime()) return false;
@@ -49,6 +58,12 @@ export function isTaskAvailable(task: Task, now = new Date()): boolean {
   if (task.type === 'timewin' && task.completedToday) return false;
   if (task.repeat && !['none', 'interval', 'everyzone'].includes(task.repeat) && !repeatDueOn(task, now)) return false;
   return true;
+}
+
+/** Priorities select actionable tasks from today's plan; selecting one never
+ * assigns a day to an Inbox task or overrides a future schedule. */
+export function canPrioritizeTask(task: Task, now = new Date()): boolean {
+  return !task.done && task.type !== 'negative' && task.type !== 'zonelinked' && isTaskAvailable(task, now);
 }
 
 export function taskPreReminderAt(task: Task, due: number): number | undefined {

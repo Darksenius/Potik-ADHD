@@ -36,13 +36,13 @@ export default function TasksTab({ all = false }: { all?: boolean }) {
   if (sort === 'priority') visible = visible.slice().sort((a, b) => { const ar = priorityIds.indexOf(a.id), br = priorityIds.indexOf(b.id); return (ar < 0 ? 100 : ar) - (br < 0 ? 100 : br); });
   return <section id="tasks-sec" className="tsec active">
     <div className="section-title"><h2>{all ? 'Усі задачі' : 'Сьогодні'}</h2>{!all && <button onClick={() => useStore.getState().switchTab('alltasks')}>Усі задачі</button>}</div>
-    <p className="section-hint">{all ? 'Тут можна знайти також майбутні, відкладені та зональні задачі.' : 'Справи на цей день і задачі без дати. Майбутні — у Плані.'}</p>
+    <p className="section-hint">{all ? 'Тут можна знайти також майбутні, відкладені та зональні задачі.' : 'План на сьогодні та невиконані справи минулих днів. Без дати — у Вхідних.'}</p>
     {!all && <ZoneTasksBanner />}
-    <button id="add-fab" onClick={() => requestNewTaskEditor()}><span className="plus">＋</span> Нова задача</button>
+    <button id="add-fab" onClick={() => requestNewTaskEditor(all ? undefined : today)}><span className="plus">＋</span> Нова задача</button>
     {all && <><label className="sr-only" htmlFor="task-search">Пошук задач</label><input id="task-search" className="ei" value={search} onChange={e => setSearch(e.target.value)} placeholder="Знайти за назвою, нотаткою чи тегом" /><label className="el">Показати<select className="ei" value={scope} onChange={e => setScope(e.target.value)}><option value="all">Усі, включно з виконаними</option><option value="future">Майбутні</option><option value="undated">Без дати</option><option value="overdue">Прострочені</option><option value="someday">Колись</option><option value="done">Виконані</option></select></label></>}
     <div className="list-options"><label>Порядок<select aria-label="Порядок задач" value={sort} onChange={e => setSort(e.target.value as typeof sort)}><option value="manual">Вручну</option><option value="priority">Пріоритети спочатку</option></select></label>{!all && <button onClick={toggleShowDone}>{showDone ? 'Сховати виконані' : `Виконані (${doneCount})`}</button>}</div>
     <label className="task-folder-filter">Папка<select aria-label="Папка задач" value={taskFilter} onChange={e => setTaskFilter(e.target.value)}><option value="all">Усі папки</option>{folders.map(f => <option key={f.id} value={'f:' + f.id}>{f.ico || '📁'} {f.nm}</option>)}<option value="neg">Шкідливі звички</option></select></label>
-    <div id="tasks-list">{visible.length ? visible.map(t => <TaskItem key={t.id} t={t} isPriority={priorityIds.includes(t.id)} allowMove={sort === 'manual'} />) : <p className="empty">{search || taskFilter !== 'all' ? 'За цими умовами задач немає' : 'Задач немає'}</p>}</div>
+    <div id="tasks-list">{visible.length ? visible.map(t => <TaskItem key={t.id} t={t} isPriority={priorityIds.includes(t.id)} visibleIds={visible.map(task => task.id)} allowMove={sort === 'manual'} />) : <p className="empty">{search || taskFilter !== 'all' ? 'За цими умовами задач немає' : 'Задач немає'}</p>}</div>
     <TrashSection />
   </section>;
 }

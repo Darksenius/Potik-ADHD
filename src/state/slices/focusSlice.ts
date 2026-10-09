@@ -1,6 +1,7 @@
 import type { AppSlice } from '../store';
 import type { FocusLogEntry } from '../../types';
 import { fmtDate } from '../../utils/date';
+import { canPrioritizeTask } from '../../utils/taskSchedule';
 
 /**
  * ══ FOCUS TRACKER ══ + ══ PRIORITIES ══  (www/index.html, рядки 1604–1761)
@@ -84,7 +85,9 @@ export const createFocusSlice: AppSlice<FocusSlice> = (set, get) => ({
 
   setPriority: (slot, taskId) => {
     set((s) => {
-      const priorities = s.priorities.slice();
+      const task = s.tasks.find(t => t.id === taskId);
+      if (!task || !canPrioritizeTask(task) || slot < 0 || slot >= s.priorities.length) return s;
+      const priorities = s.priorities.map(id => id === taskId ? null : id);
       priorities[slot] = taskId;
       return { priorities };
     });

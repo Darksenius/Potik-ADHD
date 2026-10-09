@@ -8,11 +8,11 @@ apply plugin: 'com.android.application'
 // versionCode також містить revision (rN), щоб кожен реліз був новішим
 // за попередній для Android/Google Play.
 //   MAJOR*1000000 + MINOR*10000 + PATCH*100 + REVISION
-//   legacy 1.7.5.r1 used 10705; new 1.7.5.r3 → 1070503; 1.7.6.r1 → 1070601
+//   legacy 1.7.5.r1 used 10705; new 1.7.5.r3 → 1070503; 1.7.6.r2 → 1070602
 def versionMajor = 1
 def versionMinor = 7
 def versionPatch = 6
-def versionRevision = 1
+def versionRevision = 2
 def versionSuffix = ".r${versionRevision}"
 
 android {

@@ -30,14 +30,12 @@ const slot = shape({ s: str, e: str }, ['s', 'e']);
 const block = shape({ zoneId: id, s: str, e: str, ov: bool }, ['zoneId', 's', 'e']);
 const ruleDay = shape({ tplId: str, rest: bool }, [], { tplId: '', rest: false });
 const task = shape({
-  id, title: str, type: oneOf(['simple', 'check', 'counter', 'note', 'alarm', 'sched', 'timewin', 'pomodoro', 'habit', 'kid', 'ctx', 'negative', 'zonelinked']),
+  id, title: str, type: oneOf(['simple', 'check', 'counter', 'note', 'alarm', 'sched', 'timewin', 'ctx', 'negative', 'zonelinked']),
   done: bool, someday: bool, zoneId: nullable(id), zoneColor: nullable(str), zoneName: nullable(str), folderId: nullable(str),
   expanded: bool, created: str, trashed: bool, doneDate: str, doneAt: str, snoozeUntil: num,
   items: array(shape({ text: str, done: bool }, ['text'], { done: false })),
   counter: num, counterTarget: num, cntHit: bool, negXp: num, note: str, alarmTime: str, alarmFired: bool,
   schedDate: str, schedTime: str, firedSched: bool, firedPre: bool, reminderEnabled: bool, remindBeforeMinutes: num, windowStart: str, windowEnd: str, completedToday: bool,
-  pomSecs: num, pomMode: oneOf(['work', 'break']), pomSessions: num, pomRunning: bool,
-  habitDays: booleans, kidStars: num, kidDiff: oneOf(['easy', 'mid', 'hard']), kidReward: str,
   ctxTags: strings, zoneDoneToday: bool,
   repeat: oneOf(['none', 'daily', 'weekly', 'weekdays', 'weekend', 'everyzone', 'interval', 'custom']),
   repeatDays: booleans, tags: strings, repeatMs: num, nextRepeatAt: num, repeatInterval: num,

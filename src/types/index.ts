@@ -48,9 +48,6 @@ export type TaskType =
   | 'alarm'       // Будильник (щоденний час)
   | 'sched'       // Заплановано (конкретні дата+час)
   | 'timewin'     // Вікно часу
-  | 'pomodoro'    // Pomodoro
-  | 'habit'       // Звичка
-  | 'kid'         // Дитяча
   | 'ctx'         // Контекст
   | 'negative'    // Шкідлива звичка (віднімає XP)
   | 'zonelinked'; // Прив'язана до зони
@@ -66,7 +63,7 @@ export interface ChecklistItem {
  * undefined), і рендер-функції по всьому коду читають `t.foo` одразу після
  * перевірки `t.type==='foo-type'`. Точне звуження на discriminated union —
  * можлива майбутня чистка (окремо від Кроку 1), але зараз пріоритет —
- * побітова сумісність із existing localStorage/Room-даними користувачів.
+ * проста модель підтримуваних типів; сумісність старих даних не вимагається.
  */
 export interface Task {
   id: number;
@@ -118,20 +115,6 @@ export interface Task {
   windowStart?: string;
   windowEnd?: string;
   completedToday?: boolean;
-
-  // type === 'pomodoro'
-  pomSecs?: number;
-  pomMode?: 'work' | 'break';
-  pomSessions?: number;
-  pomRunning?: boolean;
-
-  // type === 'habit'
-  habitDays?: boolean[]; // 7 елементів, Пн..Нд
-
-  // type === 'kid'
-  kidStars?: number;
-  kidDiff?: 'easy' | 'mid' | 'hard';
-  kidReward?: string;
 
   // type === 'ctx'
   ctxTags?: string[];

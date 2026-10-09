@@ -10,7 +10,7 @@ const nativeRuntime = readFileSync(
 const previousState = {
   saveDate: 'Wed Sep 16 2026',
   tasks: [{ id: 401, title: 'Збережена задача', type: 'simple', done: false,
-    someday: false, repeat: 'none', tags: [], created: '2026-09-16T09:00:00.000Z' }],
+    someday: false, repeat: 'none', tags: [], planDate: '2026-09-16', created: '2026-09-16T09:00:00.000Z' }],
   qnotes: [{ id: 501, txt: 'Збережена нотатка', folder: 'impulse', date: '2026-09-15', time: '09:00' }],
   notepad: 'Мій блокнот', xp: 31, xpTotal: 731, level: 4,
 };

@@ -18,7 +18,6 @@ import Toast from './components/common/Toast';
 import BackupBanner from './components/common/BackupBanner';
 import KbdOverlay from './components/common/KbdOverlay';
 import AlarmBanner from './components/common/AlarmBanner';
-import { usePomodoroTick } from './hooks/usePomodoroTick';
 import MoreTab from './components/layout/MoreTab';
 import SettingsPage from './components/layout/SettingsPage';
 import InboxTab from './components/tasks/InboxTab';
@@ -40,7 +39,6 @@ function useThemeEffect() {
 
 export default function App() {
   useThemeEffect();
-  usePomodoroTick();
   const currentPage = useStore((s) => s.currentPage);
   const currentTab = useStore((s) => s.currentTab);
   const editorTaskId = useStore((s) => s.editorTaskId);

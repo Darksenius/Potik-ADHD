@@ -92,13 +92,9 @@ export function handleNativeEvent(event: string | null | undefined): boolean {
   const store = useStore.getState();
   let changed = false;
 
-  if (event === 'done_first') {
-    const first = store.tasks.find((t) => !t.done && !t.someday);
-    if (first) {
-      store.toggleTask(first.id);
-      changed = true;
-    }
-  } else if (event.indexOf('task_done:') === 0) {
+  // Only explicit task IDs may complete tasks. The obsolete done_first event
+  // cannot safely identify which row the user saw and is deliberately ignored.
+  if (event.indexOf('task_done:') === 0) {
     const tid = event.slice(10);
     const pt = store.tasks.find((t) => String(t.id) === tid);
     if (pt && !pt.done) {
@@ -158,12 +154,12 @@ export function handleNativeEvent(event: string | null | undefined): boolean {
       // Було: setTimeout(() => { goToMain(); openEdit(null); }, 250) — рядок 4411
       setTimeout(() => {
         useStore.getState().showPage('main');
-        useStore.getState().switchTab('tasks');
+        useStore.getState().switchTab('inbox');
         useStore.getState().requestNewTaskEditor();
       }, 250);
     } else if (txt.startsWith('...')) {
       const title = txt.slice(3).trim();
-      if (title) store.addQuickTaskFromShade(title);
+      if (title) { store.addQuickTaskFromShade(title); store.showToast('Додано у Вхідні'); }
     } else {
       store.addQuickNote(txt, 'impulse');
     }

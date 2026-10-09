@@ -3,7 +3,7 @@ import type { TaskType } from './types';
 /** TL — рядок 1238 */
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   simple: 'Проста', check: 'Чекліст', counter: 'Лічильник', note: 'Нотатка', alarm: 'Будильник',
-  sched: 'Заплановано', timewin: 'Вікно часу', pomodoro: 'Pomodoro', habit: 'Звичка', kid: 'Дитяча',
+  sched: 'Заплановано', timewin: 'Вікно часу',
   ctx: 'Контекст', negative: 'Шкідлива', zonelinked: 'До зони',
 };
 

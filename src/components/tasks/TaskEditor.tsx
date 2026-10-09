@@ -3,13 +3,13 @@ import { useStore } from '../../state/store';
 import type { Task, TaskType } from '../../types';
 import { fmtDate, WD } from '../../utils/date';
 import { saveState } from '../../services/persistence';
+import { repeatDueOn } from '../../utils/taskSchedule';
 
 const TYPE_OPTIONS: { value: TaskType; label: string }[] = [
   { value: 'simple', label: 'Проста' }, { value: 'sched', label: 'Запланована' },
   { value: 'check', label: 'Чекліст' }, { value: 'counter', label: 'Лічильник' },
   { value: 'note', label: 'З нотаткою' }, { value: 'alarm', label: 'Будильник' },
-  { value: 'timewin', label: 'Вікно часу' }, { value: 'pomodoro', label: 'Pomodoro' },
-  { value: 'habit', label: 'Звичка' }, { value: 'kid', label: 'Дитяча' },
+  { value: 'timewin', label: 'Вікно часу' },
   { value: 'ctx', label: 'Контекст' }, { value: 'negative', label: 'Шкідлива звичка' },
   { value: 'zonelinked', label: 'До зони' },
 ];
@@ -75,6 +75,10 @@ export default function TaskEditor() {
     if (scheduled && (!date || !time)) { setError('Вибери дату й час запланованої задачі.'); return; }
     if (type === 'alarm' && !alarmTime) { setError('Вибери час будильника.'); return; }
     if (repeat === 'custom' && !repeatDays.some(Boolean)) { setError('Вибери хоча б один день повторення.'); return; }
+    if (date && ['weekdays', 'weekend', 'custom'].includes(repeat)
+      && !repeatDueOn({ repeat, repeatDays } as Task, new Date(date + 'T12:00:00'))) {
+      setError('Вибрана дата не входить у дні повторення. Зміни першу дату або дні повторення.'); return;
+    }
     if (type === 'zonelinked' && !zoneId) { setError('Вибери зону для цієї задачі.'); return; }
     if (pastTime && !keepPast && snooze === undefined) { setError('Цей час уже минув. Залиши його свідомо або зміни дату чи час.'); return; }
     const patch: Partial<Task> & { title: string; type: TaskType } = {
@@ -135,7 +139,9 @@ export default function TaskEditor() {
         {!isNew && <div className="ef"><span className="el">Зберегти зміни й перенести</span><div className="editor-actions">{[15, 60, 180].map(min => <button key={min} type="button" onClick={() => submit(min)}>+{min < 60 ? min + ' хв' : min / 60 + ' год'}</button>)}<button type="button" onClick={() => submit('tomorrow')}>На завтра</button></div></div>}
       </details>
       <div className="schedule-preview" aria-live="polite">
-        {date ? <>У плані: <strong>{dateLabel}{scheduled && time ? ', ' + time : ''}</strong>. </> : <>Без дати — у Вхідних і списку на сьогодні. </>}
+        {date ? <>У плані: <strong>{dateLabel}{scheduled && time ? ', ' + time : ''}</strong>. </> : type === 'simple' && repeat === 'none' && !zoneId ? <>Без дати — у Вхідних. Вибери день, щоб додати у план. </> : <>Показ за додатковими умовами задачі. </>}
+        {scheduled && date && <>У списку на сьогодні — від початку вибраного дня, щоб можна було підготуватися. </>}
+        {type === 'simple' && <>Без сповіщення. Для сигналу на точний час вибери «Запланована». </>}
         {(scheduled || type === 'alarm') && (reminder ? <>Нагадаю {scheduled ? time || 'після вибору часу' : alarmTime || 'після вибору часу'}{advance !== '0' && scheduled ? ' і за ' + advance + ' хв' : ''}. </> : <>Без сповіщення. </>)}
         {repeat !== 'none' && <>{REPEATS.find(r => r.value === repeat)?.label}.</>}
       </div>

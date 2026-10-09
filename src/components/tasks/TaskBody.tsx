@@ -3,7 +3,6 @@ import type { Task } from '../../types';
 import { WD } from '../../utils/date';
 import { REPEAT_LABELS, CONTEXT_TAGS } from '../../constants';
 
-const KID_DIFF_LABELS: Record<string, string> = { easy: 'Легко', mid: 'Норм', hard: 'Важко' };
 
 export default function TaskBody({ t }: { t: Task }) {
   const toggleChecklistItem = useStore((s) => s.toggleChecklistItem);
@@ -12,18 +11,10 @@ export default function TaskBody({ t }: { t: Task }) {
   const updateCounterTarget = useStore((s) => s.updateCounterTarget);
   const updateNote = useStore((s) => s.updateNote);
   const updateAlarm = useStore((s) => s.updateAlarm);
-  const togglePomodoro = useStore((s) => s.togglePomodoro);
-  const resetPomodoro = useStore((s) => s.resetPomodoro);
-  const skipPomodoro = useStore((s) => s.skipPomodoro);
-  const toggleHabitDay = useStore((s) => s.toggleHabitDay);
-  const setKidStars = useStore((s) => s.setKidStars);
-  const setKidDifficulty = useStore((s) => s.setKidDifficulty);
-  const updateKidReward = useStore((s) => s.updateKidReward);
   const toggleCtxTag = useStore((s) => s.toggleCtxTag);
   const toggleTask = useStore((s) => s.toggleTask);
   const removeTag = useStore((s) => s.removeTag);
-  const updateRepeat = useStore((s) => s.updateRepeat);
-  const toggleRepeatDay = useStore((s) => s.toggleRepeatDay);
+  const requestEditTask = useStore((s) => s.requestEditTask);
 
   return (
     <>
@@ -74,64 +65,6 @@ export default function TaskBody({ t }: { t: Task }) {
           <div className="aw">
             <input type="time" defaultValue={t.alarmTime || ''} onChange={(e) => updateAlarm(t.id, e.target.value)} />
             <span className="aw-st">{t.alarmFired ? '✓ спрацював' : t.alarmTime ? '⏳ очікує' : '— не задано'}</span>
-          </div>
-        </>
-      )}
-
-      {t.type === 'pomodoro' && (
-        <div className="pom-wrap">
-          <div className="pom-disp">
-            <div className="pom-time">{String(Math.floor((t.pomSecs || 0) / 60)).padStart(2, '0')}:{String((t.pomSecs || 0) % 60).padStart(2, '0')}</div>
-            <div className="pom-info">{t.pomMode === 'work' ? '🔴 Фокус' : '🟢 Пауза'} · {t.pomSessions || 0} сес.</div>
-          </div>
-          <div className="pom-btns">
-            <button className={'pom-btn' + (t.pomRunning ? ' run' : '')} onClick={() => togglePomodoro(t.id)}>
-              {t.pomRunning ? '⏸ Пауза' : '▶ Старт'}
-            </button>
-            <button className="pom-btn" onClick={() => resetPomodoro(t.id)}>↺ Скинути</button>
-            <button className="pom-btn" onClick={() => skipPomodoro(t.id)}>⏭ Далі</button>
-          </div>
-        </div>
-      )}
-
-      {t.type === 'habit' && (
-        <>
-          <div className="bl">Цей тиждень</div>
-          <div className="habit-week">
-            {(t.habitDays || []).map((d, i) => (
-              <div className={'hday' + (d ? ' on' : '')} key={i} onClick={() => toggleHabitDay(t.id, i)}>
-                <div>{WD[i]}</div>
-                <div>{d ? '✓' : ''}</div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {t.type === 'kid' && (
-        <>
-          <div className="bl">Зірочки</div>
-          <div className="kid-stars">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <span className={'kstar' + ((t.kidStars || 0) >= i ? ' lit' : '')} key={i} onClick={() => setKidStars(t.id, i)}>★</span>
-            ))}
-          </div>
-          <div className="kd-btns">
-            {(['easy', 'mid', 'hard'] as const).map((d) => (
-              <div className={'kd-btn' + (t.kidDiff === d ? ' sel' : '')} key={d} onClick={() => setKidDifficulty(t.id, d)}>
-                {KID_DIFF_LABELS[d]}
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 6, background: 'rgba(245,197,66,.08)', border: '1px solid rgba(245,197,66,.2)', borderRadius: 7, padding: '7px 9px', fontSize: 12, color: 'var(--xp)' }}>
-            🎁{' '}
-            <input
-              type="text"
-              defaultValue={t.kidReward || ''}
-              onBlur={(e) => updateKidReward(t.id, e.target.value)}
-              style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--xp)', fontFamily: "'Syne',sans-serif", fontSize: 12, width: 180, verticalAlign: 'middle' }}
-              placeholder="Нагорода..."
-            />
           </div>
         </>
       )}
@@ -189,21 +122,9 @@ export default function TaskBody({ t }: { t: Task }) {
         <>
           <div className="bl">Повторення</div>
           <div className="rep-row">
-            <select className="rep-sel" value={t.repeat} onChange={(e) => updateRepeat(t.id, e.target.value as Task['repeat'])}>
-              {Object.keys(REPEAT_LABELS).map((k) => (
-                <option value={k} key={k}>{REPEAT_LABELS[k]}</option>
-              ))}
-            </select>
+            <span>{REPEAT_LABELS[t.repeat] || 'Без повторення'}{t.repeat === 'custom' ? ': ' + WD.filter((_, i) => t.repeatDays?.[i]).join(', ') : ''}</span>
+            <button className="ab" onClick={() => requestEditTask(t.id)}>Змінити розклад</button>
           </div>
-          {t.repeat === 'custom' && (
-            <div className="rep-days">
-              {WD.map((d, i) => (
-                <div className={'rd' + ((t.repeatDays || [])[i] ? ' on' : '')} key={i} onClick={() => toggleRepeatDay(t.id, i)}>
-                  {d}
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
     </>

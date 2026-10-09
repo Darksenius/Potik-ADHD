@@ -1,4 +1,4 @@
-import { isTaskAvailable, nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
+import { canPrioritizeTask, isTaskAvailable, nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
 import { useStore } from '../state/store';
 import { nowHM, fmtDate, hmToString } from '../utils/date';
 import type { ForegroundNotifPayload, NotifZoneTimelineItem } from '../types';
@@ -47,11 +47,11 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const undoneTasks = allActive.filter((t) => !t.done);
   const doneCnt = allActive.length - undoneTasks.length;
   const total = allActive.length;
-  const prioIds = s.priorities.filter((x): x is number => !!x);
+  const prioIds = s.priorities.filter((id): id is number => id != null && s.tasks.some(t => t.id === id && canPrioritizeTask(t)));
   const prioCount = prioIds.length;
 
   const notifPool = undoneTasks.filter((t) => {
-    if (prioIds.indexOf(t.id) >= 0) return false;
+    if (prioIds.indexOf(t.id) >= 0) return true;
     const fired = (t.type === 'alarm' && t.alarmFired) || (t.type === 'sched' && t.firedSched);
     if (fired) return true;
     if (t.zoneId) return t.zoneId === pz.id;
@@ -60,8 +60,9 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const notifRank = (t: (typeof notifPool)[number]) => {
     const fired = (t.type === 'alarm' && t.alarmFired) || (t.type === 'sched' && t.firedSched);
     if (fired) return 0;
-    if (pz.id && t.zoneId === pz.id) return 1;
-    return 2;
+    if (prioIds.includes(t.id)) return 1;
+    if (pz.id && t.zoneId === pz.id) return 2;
+    return 3;
   };
   notifPool.sort((a, b) => notifRank(a) - notifRank(b));
   const topN = notifPool.slice(0, 7);
@@ -106,7 +107,7 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const zonelessTasks: string[] = [];
   const urgentTasks: string[] = [];
   undoneTasks.forEach((t) => {
-    if (prioIds.indexOf(t.id) >= 0) return;
+    if (prioIds.indexOf(t.id) >= 0) { urgentTasks.push(t.title); return; }
     const fired = (t.type === 'alarm' && t.alarmFired) || (t.type === 'sched' && t.firedSched);
     if (fired) {
       urgentTasks.push(t.title);

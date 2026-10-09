@@ -58,8 +58,8 @@ export default function ReadmePage() {
           <div className="rm-s">
             <h3>🔀 Вкладки</h3>
             <div className="rm-kb">
-              <span className="rmk">☀ Сьогодні</span><span className="rmd">Справи поточного дня й без дати; Усі задачі відкриває також приховані та майбутні</span>
-              <span className="rmk">↓ Вхідні</span><span className="rmd">Швидке додавання простих задач без умов</span>
+              <span className="rmk">☀ Сьогодні</span><span className="rmd">План на сьогодні й невиконані справи минулих днів; Усі задачі відкриває також приховані та майбутні</span>
+              <span className="rmk">↓ Вхідні</span><span className="rmd">Справи без дня: запиши думку, потім відкрий і признач дату</span>
               <span className="rmk">⋯ Ще</span><span className="rmd">Блокнот, Стан, Зони, Ідеї, Статистика та Налаштування</span>
               <span className="rmk">📝 Блокнот</span><span className="rmd">Швидкі нотатки по папках, вільний блокнот, Експорт/Імпорт</span>
               <span className="rmk">📅 План</span><span className="rmd">Тиждень, аналіз дня, планування задач і зон наперед, шаблони дня</span>
@@ -101,9 +101,6 @@ export default function ReadmePage() {
               <span className="rmk">✎ З нотаткою</span><span className="rmd">Задача + текстове поле</span>
               <span className="rmk">⏰ Будильник</span><span className="rmd">Окреме сповіщення у вказаний час</span>
               <span className="rmk">📅 Запланована</span><span className="rmd">На дату й час; сигнал і нагадування заздалегідь налаштовуються окремо</span>
-              <span className="rmk">⏱ Pomodoro</span><span className="rmd">25/5 хв, +15 досвіду за сесію</span>
-              <span className="rmk">◉ Звичка</span><span className="rmd">Трекер по днях тижня</span>
-              <span className="rmk">★ Дитяча</span><span className="rmd">Зірочки + нагорода</span>
               <span className="rmk">⚠ Шкідлива</span><span className="rmd">Штраф досвіду при тапі</span>
               <span className="rmk">🔗 До зони</span><span className="rmd">Активується при вході в зону</span>
             </div>

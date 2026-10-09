@@ -129,3 +129,117 @@ test('day-only zone edit opens real inputs and cancel keeps original day rules',
   expect(data.planDayZones['2026-10-08'][0].s).toBe('05:00');
   expect(data.zones.find((z: any) => z.id === data.planDayZones['2026-10-08'][0].zoneId).slots[0].s).not.toBe('05:00');
 });
+
+test('capture stays in Inbox until assigned a day, calendar edits the same task, clearing date returns it', async ({ page }, info) => {
+  await boot(page);
+  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByLabel('Нова проста задача').fill('Купити батарейки');
+  await page.getByRole('button', { name: 'Додати', exact: true }).click();
+  const id = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!).tasks[0].id);
+  await page.getByRole('button', { name: '☀ Сьогодні', exact: true }).click();
+  await expect(page.locator('#tasks-list .tc')).toHaveCount(0);
+  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
+  await expect(page.locator('.schedule-preview')).toContainText('Без дати — у Вхідних');
+  await page.getByRole('button', { name: 'Завтра', exact: true }).click();
+  await page.locator('#edit-save-fab').click();
+  await expect(page.locator('#inbox-sec .tc')).toHaveCount(0);
+  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: '9 жовтня 2026 р., є задачі', exact: true }).click();
+  await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
+  await page.locator('#edit-body').getByRole('button', { name: 'Сьогодні', exact: true }).click();
+  await page.locator('#edit-save-fab').click();
+  await page.reload();
+  await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
+  await page.screenshot({ path: info.outputPath('r2-today.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
+  await page.getByRole('button', { name: 'Без дати', exact: true }).click();
+  await page.locator('#edit-save-fab').click();
+  await page.reload();
+  await expect(page.locator('#tasks-list .tc')).toHaveCount(0);
+  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await expect(page.locator('#inbox-sec .tt')).toHaveText('Купити батарейки');
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
+  expect(state.tasks).toHaveLength(1);
+  expect(state.tasks[0].id).toBe(id);
+  expect(state.tasks[0].planDate).toBeUndefined();
+  await page.screenshot({ path: info.outputPath('r2-inbox.png'), fullPage: true, animations: 'disabled' });
+});
+
+test('Today creation assigns today, removed types are absent and title-only save survives reload', async ({ page }) => {
+  await boot(page);
+  await page.locator('#add-fab').click();
+  await expect(page.getByLabel('Дата', { exact: true })).toHaveValue('2026-10-08');
+  await page.getByLabel('Що зробити?').fill('Винести пакунок');
+  await page.getByText('Додаткові можливості', { exact: true }).click();
+  const options = await page.locator('#task-type option').evaluateAll(options => options.map(o => (o as HTMLOptionElement).value));
+  expect(options).toHaveLength(10);
+  for (const type of ['pomodoro', 'habit', 'kid']) expect(options).not.toContain(type);
+  await page.locator('#edit-save-fab').click();
+  await page.reload();
+  await expect(page.locator('#tasks-list .tt')).toHaveText('Винести пакунок');
+});
+
+test('scheduled and simple tasks reject dates outside repeat days, repeat edits use the validated editor', async ({ page }) => {
+  await boot(page);
+  await scheduled(page, 'Перевірити пошту', '2026-10-10', '15:00'); // Saturday
+  await page.getByText('Додаткові можливості', { exact: true }).click();
+  await page.getByLabel('Повторення', { exact: true }).selectOption('weekdays');
+  await page.locator('#edit-save-fab').click();
+  await expect(page.getByRole('alert')).toContainText('Вибрана дата не входить у дні повторення');
+  await page.getByRole('button', { name: 'Проста Без обов’язкового часу' }).click();
+  await page.locator('#edit-save-fab').click();
+  await expect(page.getByRole('alert')).toContainText('Вибрана дата не входить у дні повторення');
+  await page.getByRole('button', { name: 'Запланована На точну дату й час' }).click();
+  await page.getByLabel('Дата *', { exact: true }).fill('2026-10-08');
+  await page.locator('#edit-save-fab').click();
+  await page.getByRole('button', { name: 'Розгорнути: Перевірити пошту', exact: true }).click();
+  await page.getByRole('button', { name: 'Змінити розклад', exact: true }).click();
+  await page.getByText('Додаткові можливості', { exact: true }).click();
+  await page.getByLabel('Повторення', { exact: true }).selectOption('custom');
+  await page.locator('#edit-save-fab').click();
+  await expect(page.getByRole('alert')).toContainText('Вибери хоча б один день');
+  await page.getByRole('button', { name: 'Чт', exact: true }).click();
+  await page.locator('#edit-save-fab').click();
+  await page.reload();
+  await expect(page.locator('#tasks-list .tt')).toHaveText('Перевірити пошту');
+});
+
+test('moving a task reorders visible neighbors across hidden Inbox and future tasks', async ({ page }) => {
+  await boot(page, { tasks: [task(1, 'Перша на сьогодні', { planDate: '2026-10-08' }), task(2, 'Ще не запланована'), task(3, 'На майбутнє', { planDate: '2026-10-12' }), task(4, 'Друга на сьогодні', { planDate: '2026-10-08' })] });
+  await page.getByRole('button', { name: 'Опустити: Перша на сьогодні', exact: true }).click();
+  await expect(page.locator('#tasks-list .tt')).toHaveText(['Друга на сьогодні', 'Перша на сьогодні']);
+  await page.clock.runFor(1000);
+  await page.reload();
+  await expect(page.locator('#tasks-list .tt')).toHaveText(['Друга на сьогодні', 'Перша на сьогодні']);
+  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await expect(page.locator('#inbox-sec .tt')).toHaveText('Ще не запланована');
+});
+
+test('active zone cannot expose future, snoozed or completed tasks in Today banner', async ({ page }) => {
+  const zone = { id: 88, nm: 'Тестова зона', color: '#3388ff', slots: [{ s: '00:00', e: '23:59' }], active: true };
+  await boot(page, { weekTplSeeded: true, zones: [zone], tasks: [
+    task(1, 'Зараз у зоні', { type: 'zonelinked', zoneId: 88, planDate: '2026-10-08' }),
+    task(2, 'Завтра у зоні', { type: 'zonelinked', zoneId: 88, planDate: '2026-10-09' }),
+    task(3, 'Відкладена зона', { type: 'zonelinked', zoneId: 88, snoozeUntil: 2000000000000 }),
+    task(4, 'Виконана зона', { type: 'zonelinked', zoneId: 88, done: true, doneDate: '2026-10-08' }),
+  ] });
+  await expect(page.locator('#zone-tasks-banner .ztb-title')).toHaveText(['Зараз у зоні']);
+});
+
+test('priority picker offers only actionable Today tasks and hides a priority after moving it', async ({ page }) => {
+  await boot(page, { tasks: [task(1, 'Моя справа', { planDate: '2026-10-08' }), task(2, 'Думка у Вхідних'), task(3, 'Майбутня справа', { planDate: '2026-10-10' }), task(4, 'Вже зроблено', { planDate: '2026-10-08', done: true, doneDate: '2026-10-08' })] });
+  await page.getByRole('button', { name: '⋯ Ще', exact: true }).click();
+  await page.getByRole('button', { name: '🫀 Стан', exact: true }).click();
+  await page.locator('.prio-slot').first().click();
+  await expect(page.locator('.tp-item-title')).toHaveText(['Моя справа']);
+  await page.locator('.tp-item').click();
+  await expect(page.locator('.prio-task')).toHaveText('Моя справа');
+  await page.getByRole('button', { name: '☀ Сьогодні', exact: true }).click();
+  await page.getByRole('button', { name: 'Моя справа', exact: true }).click();
+  await page.getByRole('button', { name: 'Завтра', exact: true }).click();
+  await page.locator('#edit-save-fab').click();
+  await page.getByRole('button', { name: '⋯ Ще', exact: true }).click();
+  await page.getByRole('button', { name: '🫀 Стан', exact: true }).click();
+  await expect(page.locator('.prio-task')).toHaveCount(0);
+});
