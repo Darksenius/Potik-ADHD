@@ -1,3 +1,4 @@
+import { isTaskAvailable, nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
 import { useStore } from '../state/store';
 import { nowHM, fmtDate, hmToString } from '../utils/date';
 import type { ForegroundNotifPayload, NotifZoneTimelineItem } from '../types';
@@ -42,13 +43,7 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const slots = pz.slots && pz.slots.length ? pz.slots[0].s + '–' + pz.slots[pz.slots.length - 1].e : '';
 
   const todayStr = fmtDate(new Date());
-  const allActive = s.tasks.filter((t) => {
-    if (t.someday || t.trashed) return false;
-    if (t.planDate && t.planDate > todayStr && !t.done) return false;
-    if (t.done && t.doneDate !== todayStr) return false;
-    if (t.snoozeUntil && Date.now() < t.snoozeUntil && !t.done) return false;
-    return true;
-  });
+  const allActive = s.tasks.filter(t => isTaskAvailable(t) && (!t.done || t.doneDate === todayStr));
   const undoneTasks = allActive.filter((t) => !t.done);
   const doneCnt = allActive.length - undoneTasks.length;
   const total = allActive.length;
@@ -81,48 +76,16 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const routine = routineParts.join('  ·  ');
   const routineList = s.recur.map((r) => ({ id: r.id, nm: r.nm, ico: '', unit: r.unit || '', val: r.val || 0, step: r.step || 1, done: !!r.done }));
 
-  const schedList: { id: number | string; title: string; dueMs: number; fired: boolean }[] = s.tasks
-    .filter((t) => t.type === 'sched' && !t.done && !t.trashed && t.schedDate && t.schedTime)
-    .map((t) => {
-      let dueMs = 0;
-      try {
-        dueMs = new Date(t.schedDate + 'T' + t.schedTime + ':00').getTime();
-      } catch {
-        /* невалідна дата — dueMs лишається 0 */
-      }
-      return { id: t.id, title: t.title, dueMs, fired: !!t.firedSched };
-    });
-
-  const _now = Date.now();
-  s.tasks
-    .filter((t) => t.type === 'sched' && !t.done && !t.trashed && t.schedDate && t.schedTime && !t.firedPre)
-    .forEach((t) => {
-      let preMs = 0;
-      try {
-        const pd = new Date(t.schedDate + 'T12:00:00');
-        pd.setDate(pd.getDate() - 1);
-        preMs = pd.getTime();
-      } catch {
-        /* невалідна дата — пропускаємо передвісник */
-      }
-      if (preMs > _now) schedList.push({ id: t.id + '_pre', title: 'Завтра ' + t.schedTime + ': ' + t.title, dueMs: preMs, fired: false });
-    });
-
-  s.tasks
-    .filter((t) => t.type === 'alarm' && t.alarmTime && !t.done && !t.trashed)
-    .forEach((t) => {
-      let dueMs = 0;
-      try {
-        const p = t.alarmTime!.split(':');
-        const d = new Date();
-        d.setHours(parseInt(p[0], 10), parseInt(p[1], 10), 0, 0);
-        if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
-        dueMs = d.getTime();
-      } catch {
-        /* невалідний час будильника — dueMs лишається 0 */
-      }
-      schedList.push({ id: t.id, title: t.title, dueMs, fired: !!t.alarmFired });
-    });
+  const schedList: { id: number | string; title: string; dueMs: number; fired: boolean }[] = [];
+  for (const task of s.tasks) {
+    const due = nextTaskReminderAt(task);
+    if (due === undefined) continue;
+    schedList.push({ id: task.id, title: task.title, dueMs: due, fired: task.type === 'sched' ? !!task.firedSched : !!task.alarmFired && fmtDate(new Date(due)) === todayStr });
+    const pre = taskPreReminderAt(task, due);
+    // Keep an unacknowledged advance reminder until the main deadline, including
+    // a delayed Android receiver; an autosave must not silently withdraw it.
+    if (pre !== undefined && due > Date.now()) schedList.push({ id: task.id + '_pre', title: 'Незабаром: ' + task.title, dueMs: pre, fired: false });
+  }
 
   const zoneBaseline: NotifZoneTimelineItem[] = [];
   const dayOffT = s.planDayOff[todayStr] || [];

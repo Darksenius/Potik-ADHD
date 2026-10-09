@@ -16,8 +16,8 @@ export default function OssPage({ open, onClose }: { open: boolean; onClose: () 
         <h2>Ліцензія та вихідний код</h2>
       </div>
       <p style={{ fontSize: 13, color: 'var(--t1)', fontWeight: 700, marginBottom: 6 }}>Застосунок з ліцензією AGPL v3</p>
-      <a className="oss-link" href="https://github.com/Darksenius/Potik-ADHD" target="_blank" rel="noopener noreferrer">
-        github.com/Darksenius/Potik-ADHD
+      <a className="oss-link" href={'https://github.com/Darksenius/Potik-ADHD/tree/' + __SOURCE_REVISION__} target="_blank" rel="noopener noreferrer">
+        Код версії на GitHub
       </a>
       <pre className="oss-pre">{license}</pre>
       <pre className="oss-pre">{source}</pre>
@@ -33,5 +33,5 @@ export function useAppVersion(): string {
   } catch {
     /* браузер без Capacitor — тихо ігноруємо */
   }
-  return '';
+  return __APP_VERSION__;
 }

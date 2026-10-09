@@ -20,6 +20,9 @@ export default function Nav() {
       <button className={'nb' + (currentPage === 'readme' ? ' act' : '')} onClick={() => showPage('readme')}>
         <span className="ni">?</span>Довідка
       </button>
+      <button className={'nb' + (currentPage === 'settings' ? ' act' : '')} onClick={() => showPage('settings')}>
+        <span className="ni">⚙</span>Налаштування
+      </button>
     </div>
   );
 }

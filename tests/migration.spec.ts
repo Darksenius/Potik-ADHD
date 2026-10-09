@@ -18,6 +18,7 @@ const task = (id: number, title: string, extra = {}) => ({
 });
 
 test('editor loads the selected task and clears cancelled drafts', async ({ page }) => {
+  page.on('dialog', d => d.accept());
   await boot(page, { tasks: [task(401, 'Перша'), task(402, 'Друга')] });
   await page.locator('.tc').filter({ hasText: 'Перша' }).locator('.eb').click();
   await expect(page.locator('#edit-body input').first()).toHaveValue('Перша');
@@ -63,12 +64,12 @@ test('alarm displays in the app at the configured time', async ({ page }) => {
   await expect(page.getByRole('alert').filter({ hasText: 'Час перерви' })).toBeVisible();
 });
 
-test('all seven tabs render without runtime errors or horizontal page overflow', async ({ page }) => {
+test('all sections remain reachable through the four primary tabs and render without runtime errors or horizontal page overflow', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await boot(page);
-  for (const label of ['✅ Задачі', '📝 Блокнот', '📅 План', '🫀 Стан', '🕐 Зони', '💡 Ідеї', '📊 Стат']) {
-    await page.getByRole('button', { name: label, exact: true }).click();
+  for (const label of ['☀ Сьогодні', '📝 Блокнот', '📅 План', '🫀 Стан', '🕐 Зони', '💡 Ідеї', '📊 Стат']) {
+    await openTab(page, label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label).toBe(true);
   }
   expect(errors).toEqual([]);
@@ -81,7 +82,11 @@ test('all 13 task types can be created in separate editor sessions', async ({ pa
     await page.locator('#add-fab').click();
     await expect(page.locator('#edit-body input').first()).toHaveValue('');
     await page.locator('#edit-body input').first().fill('Тест ' + type);
-    await page.locator('#edit-body select').first().selectOption(type);
+    await page.getByText('Додаткові можливості', { exact: true }).click();
+    await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
+    if (type === 'sched') await page.getByLabel('Час *', { exact: true }).fill('15:30');
+    if (type === 'alarm') await page.getByLabel('Час будильника', { exact: true }).fill('16:00');
+    if (type === 'zonelinked') await page.getByLabel('Зона', { exact: true }).selectOption('3');
     await page.locator('#edit-save-fab').click();
   }
   await page.clock.runFor(2000);
@@ -126,7 +131,7 @@ test('rest-day toggle immediately updates the calendar', async ({ page }) => {
 
 test('zones can be edited and disabled without losing their tasks', async ({ page }) => {
   await boot(page, { weekTplSeeded: true, tasks: [task(401, 'Задача зони', { zoneId: 3, zoneName: 'Робота', zoneColor: '#7ed321' })] });
-  await page.getByRole('button', { name: '🕐 Зони', exact: true }).click();
+  await openTab(page, '🕐 Зони');
   await page.getByRole('button', { name: 'Редагувати зону Робота', exact: true }).click();
   await page.getByLabel('Назва зони').fill('Робочий фокус');
   await page.getByLabel('Початок 1', { exact: true }).fill('10:00');
@@ -249,8 +254,8 @@ test('mobile screens at 320 and 390 pixels remain usable with screenshots', asyn
   await boot(page, { tasks: [task(401, 'Довга назва задачі для перевірки перенесення тексту без втрати кнопок та горизонтального прокручування')] });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const label of ['✅ Задачі', '📝 Блокнот', '📅 План', '🫀 Стан', '🕐 Зони']) {
-      await page.getByRole('button', { name: label, exact: true }).click();
+    for (const label of ['☀ Сьогодні', '📝 Блокнот', '📅 План', '🫀 Стан', '🕐 Зони']) {
+      await openTab(page, label);
       await page.clock.runFor(400);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), width + ' ' + label).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(width + '-' + label.slice(3) + '.png'), fullPage: true });
@@ -271,7 +276,7 @@ test('accidentally deleted tasks can be restored from trash', async ({ page }) =
 
 test('new routine supports millilitres instead of forcing a count', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: '🫀 Стан', exact: true }).click();
+  await openTab(page, '🫀 Стан');
   await page.getByRole('button', { name: '+ Корисна', exact: true }).click();
   await page.getByLabel('Назва звички').fill('Чай');
   await page.getByLabel('Одиниця виміру').selectOption('ml');
@@ -281,3 +286,8 @@ test('new routine supports millilitres instead of forcing a count', async ({ pag
   const data = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(data.recur.find((r: any) => r.nm === 'Чай')).toMatchObject({ unit: 'ml', step: 100, val: 100 });
 });
+
+async function openTab(page: Page, label: string) {
+  if (!['☀ Сьогодні', '📅 План', '↓ Вхідні', '⋯ Ще'].includes(label)) await page.getByRole('button', { name: '⋯ Ще', exact: true }).click();
+  await page.getByRole('button', { name: label, exact: true }).click();
+}

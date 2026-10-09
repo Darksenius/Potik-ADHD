@@ -109,7 +109,10 @@ export interface Task {
   schedDate?: string;   // "YYYY-MM-DD"
   schedTime?: string;   // "HH:MM"
   firedSched?: boolean;
-  firedPre?: boolean;   // передвісник "за день до" вже спрацював
+  firedPre?: boolean;   // додаткове нагадування вже спрацювало
+  reminderEnabled?: boolean;
+  /** Advance reminder in minutes; missing or 0 means no advance reminder. */
+  remindBeforeMinutes?: number;
 
   // type === 'timewin'
   windowStart?: string;
@@ -390,6 +393,12 @@ export interface ForegroundNotifPayload {
   title: string;
 }
 
+export interface Preferences {
+  themeMode?: 'system' | 'light' | 'dark';
+  reduceMotion?: boolean;
+  showGamification?: boolean;
+}
+
 export interface AppState extends PlannerState {
   tasks: Task[];
   recur: RecurItem[];
@@ -424,6 +433,7 @@ export interface AppState extends PlannerState {
 
   notepad: string;
   theme: 'light' | 'dark';
+  preferences?: Preferences;
 
   /** Додається лише при saveState(), не є частиною логічного стану */
   saveDate?: string;

@@ -4,8 +4,7 @@ import OssPage, { useAppVersion } from '../oss/OssPage';
 import { requestAndShowNotification, isNotificationGranted } from '../../services/webNotifications';
 
 export default function ReadmePage() {
-  const theme = useStore((s) => s.theme);
-  const toggleTheme = useStore((s) => s.toggleTheme);
+  const showPage = useStore(s => s.showPage);
   const [ossOpen, setOssOpen] = useState(false);
   const version = useAppVersion();
 
@@ -19,15 +18,7 @@ export default function ReadmePage() {
           </p>
         </div>
 
-        <div style={{ background: 'var(--s1)', border: '1px solid var(--b2)', borderRadius: 'var(--r)', padding: 13, margin: '0 0 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t1)' }}>🎨 Оформлення</div>
-          <button
-            onClick={toggleTheme}
-            style={{ background: 'var(--s3)', border: '1px solid var(--b2)', borderRadius: 8, padding: '8px 13px', color: 'var(--t1)', fontFamily: "'Syne',sans-serif", fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-          >
-            {theme === 'light' ? '☀️ Світла тема' : '🌙 Темна тема'}
-          </button>
-        </div>
+        <button className="secondary-action" onClick={() => showPage('settings')}>Налаштування: тема, сповіщення, резервні копії</button>
 
         <div style={{ background: 'var(--s1)', border: '1px solid var(--b2)', borderRadius: 'var(--r)', padding: 13, margin: '0 0 12px' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t1)', marginBottom: 6 }}>📌 Сповіщення на пристрої</div>
@@ -67,7 +58,9 @@ export default function ReadmePage() {
           <div className="rm-s">
             <h3>🔀 Вкладки</h3>
             <div className="rm-kb">
-              <span className="rmk">✅ Задачі</span><span className="rmd">Список задач, фільтри, додавання, кошик</span>
+              <span className="rmk">☀ Сьогодні</span><span className="rmd">Справи поточного дня й без дати; Усі задачі відкриває також приховані та майбутні</span>
+              <span className="rmk">↓ Вхідні</span><span className="rmd">Швидке додавання простих задач без умов</span>
+              <span className="rmk">⋯ Ще</span><span className="rmd">Блокнот, Стан, Зони, Ідеї, Статистика та Налаштування</span>
               <span className="rmk">📝 Блокнот</span><span className="rmd">Швидкі нотатки по папках, вільний блокнот, Експорт/Імпорт</span>
               <span className="rmk">📅 План</span><span className="rmd">Тиждень, аналіз дня, планування задач і зон наперед, шаблони дня</span>
               <span className="rmk">🫀 Стан</span><span className="rmd">Гіперфокус, пріоритети дня, енергія, рутина</span>
@@ -87,7 +80,7 @@ export default function ReadmePage() {
           <div className="rm-s">
             <h3>📅 План</h3>
             <p><b style={{ color: 'var(--t1)' }}>Аналіз дня:</b> скільки задач виконано, нотаток додано, переключень гіперфокусу, рівень енергії та рутина — з реальних дій.</p>
-            <p><b style={{ color: 'var(--t1)' }}>Планування наперед:</b> «+ Задача» створює справжню задачу на обраний день (з часом «10:00 Назва» стане будильником). «🕐 Зона» призначає часову зону під день.</p>
+            <p><b style={{ color: 'var(--t1)' }}>Планування наперед:</b> «+ Задача» відкриває спільний редактор із вибраним днем. Для точного часу вибери «Запланована». «🕐 Зона» призначає часову зону під день.</p>
             <p><b style={{ color: 'var(--t1)' }}>Шаблони дня:</b> збережи набір зон як іменований шаблон і застосовуй до будь-якого дня одним дотиком.</p>
             <p><b style={{ color: 'var(--t1)' }}>Примітка дня:</b> вільний текст-щоденник під кожен день — можна записати спогад навіть про минулий день. Потрапляє в текстовий експорт.</p>
           </div>
@@ -107,7 +100,7 @@ export default function ReadmePage() {
               <span className="rmk">+N Лічильник</span><span className="rmd">Числовий лічильник з ціллю</span>
               <span className="rmk">✎ З нотаткою</span><span className="rmd">Задача + текстове поле</span>
               <span className="rmk">⏰ Будильник</span><span className="rmd">Окреме сповіщення у вказаний час</span>
-              <span className="rmk">📅 Запланована</span><span className="rmd">На дату+час, окреме сповіщення + автонагадування напередодні о 12:00</span>
+              <span className="rmk">📅 Запланована</span><span className="rmd">На дату й час; сигнал і нагадування заздалегідь налаштовуються окремо</span>
               <span className="rmk">⏱ Pomodoro</span><span className="rmd">25/5 хв, +15 досвіду за сесію</span>
               <span className="rmk">◉ Звичка</span><span className="rmd">Трекер по днях тижня</span>
               <span className="rmk">★ Дитяча</span><span className="rmd">Зірочки + нагорода</span>

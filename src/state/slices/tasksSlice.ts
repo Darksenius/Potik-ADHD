@@ -1,6 +1,6 @@
 import type { AppSlice } from '../store';
 import type { Task, TaskType, ChecklistItem } from '../../types';
-import { fmtDate, nowHM, toMinutes } from '../../utils/date';
+import { fmtDate, nowHM, normalizeTime, hmToString } from '../../utils/date';
 
 /** TXP — рядок 1239: базова нагорода XP за тип задачі при виконанні. */
 const TASK_XP: Record<TaskType, number> = {
@@ -430,22 +430,23 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         next.zoneName = zone ? zone.nm : null;
         next.folderId = patch.folderId ?? null;
         if ('planDate' in patch) next.planDate = patch.planDate || undefined;
+        if (next.type !== t.type || next.planDate !== t.planDate) next.snoozeUntil = 0;
+        if (next.type !== 'sched') { next.schedDate = undefined; next.schedTime = undefined; }
         next.repeat = patch.repeat || 'none';
         next.repeatDays = patch.repeatDays ? patch.repeatDays.slice() : next.repeatDays;
 
         if (next.type === 'sched') {
           next.schedDate = patch.schedDate || '';
-          next.schedTime = patch.schedTime || '';
-          const today = fmtDate(new Date());
-          const nowMin = nowHM().h * 60 + nowHM().m;
-          if (next.schedDate === today && next.schedTime && toMinutes(next.schedTime) <= nowMin) {
-            const d = new Date();
-            d.setDate(d.getDate() + 1);
-            next.schedDate = fmtDate(d);
+          next.schedTime = normalizeTime(patch.schedTime) || '';
+          next.planDate = next.schedDate || undefined;
+          if (next.schedDate !== t.schedDate || next.schedTime !== t.schedTime || (patch.reminderEnabled !== false) !== (t.reminderEnabled !== false) || patch.remindBeforeMinutes !== t.remindBeforeMinutes) {
+            next.firedSched = false;
+            next.firedPre = false;
+            next.snoozeUntil = 0;
           }
-          next.firedSched = false;
-          next.firedPre = false;
         }
+        if ('reminderEnabled' in patch) next.reminderEnabled = patch.reminderEnabled;
+        if ('remindBeforeMinutes' in patch) next.remindBeforeMinutes = patch.remindBeforeMinutes;
         if (next.type === 'timewin') {
           next.windowStart = patch.windowStart || '07:00';
           next.windowEnd = patch.windowEnd || '09:00';
@@ -455,11 +456,11 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           next.repeatInterval = patch.repeatInterval || 30;
           next.repeatUnit = patch.repeatUnit || 'min';
           next.repeatMs = (REPEAT_UNIT_MS[next.repeatUnit] || 60000) * next.repeatInterval;
-          next.nextRepeatAt = 0;
+          if (next.repeatMs !== t.repeatMs || t.repeat !== next.repeat) next.nextRepeatAt = next.done ? Date.now() + next.repeatMs : 0;
         }
         if (next.type === 'alarm') {
-          next.alarmTime = patch.alarmTime || '';
-          next.alarmFired = false;
+          next.alarmTime = normalizeTime(patch.alarmTime) || '';
+          if (next.alarmTime !== t.alarmTime) { next.alarmFired = false; next.snoozeUntil = 0; }
         }
         if (next.type === 'note') next.note = patch.note ?? next.note;
         if (next.type === 'counter') next.counterTarget = patch.counterTarget || 10;
@@ -479,12 +480,16 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set((s) => ({
       tasks: s.tasks.map((t) => {
         if (t.id !== id) return t;
-        if (x === 'tomorrow') {
-          const d = new Date();
-          d.setDate(d.getDate() + 1);
-          return { ...t, planDate: fmtDate(d), snoozeUntil: 0, done: false };
-        }
-        return { ...t, snoozeUntil: Date.now() + x * 60000, planDate: undefined, done: false };
+        // The editor and Android snapshot use minute precision. Round forward
+        // so the saved time is never earlier than the requested delay.
+        const d = new Date(x === 'tomorrow' ? Date.now() : Math.ceil((Date.now() + x * 60000) / 60000) * 60000);
+        if (x === 'tomorrow') d.setDate(d.getDate() + 1);
+        const day = fmtDate(d);
+        const time = x === 'tomorrow' ? normalizeTime(t.type === 'alarm' ? t.alarmTime : t.schedTime) : hmToString({ h: d.getHours(), m: d.getMinutes() });
+        const patch: Partial<Task> = { planDate: day, snoozeUntil: x === 'tomorrow' ? 0 : d.getTime(), done: false, doneDate: undefined, doneAt: undefined, firedSched: false, firedPre: false, alarmFired: false };
+        if (t.type === 'sched') { patch.schedDate = day; patch.schedTime = time || t.schedTime; }
+        if (t.type === 'alarm' && time) patch.alarmTime = time;
+        return { ...t, ...patch };
       }),
       xpPopup: { text: '⏳ Відкладено', tone: 'muted' },
     }));
@@ -500,7 +505,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   },
 
   updateRepeat: (id, repeat) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, repeat } : t)) }));
+    set((s) => ({ tasks: s.tasks.map((t) => t.id === id ? { ...t, repeat, ...(repeat === 'interval' ? { repeatInterval: t.repeatInterval || 30, repeatUnit: t.repeatUnit || 'min', repeatMs: (t.repeatInterval || 30) * (REPEAT_UNIT_MS[t.repeatUnit || 'min'] || 60000), nextRepeatAt: t.done ? Date.now() + (t.repeatInterval || 30) * (REPEAT_UNIT_MS[t.repeatUnit || 'min'] || 60000) : 0 } : {}) } : t) }));
   },
 
   toggleRepeatDay: (id, dayIndex) => {

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Environment;
+import android.util.AtomicFile;
 import android.webkit.JavascriptInterface;
 import androidx.core.content.FileProvider;
 import java.io.File;
@@ -11,6 +12,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.ArrayList;
 
 public class FlowBridge {
 
@@ -25,17 +27,34 @@ public class FlowBridge {
     /** window.FlowBridge.save(json) — зберігає повний стан */
     @JavascriptInterface
     public void save(String json) {
-        String notif = dao.getNotifJson();
-        if (notif == null) notif = "";
-        dao.saveState(new AppState(json, notif));
+        dao.writeState(json);
+    }
+
+    /** Acknowledgement cannot become durable without its resulting state. */
+    @JavascriptInterface
+    public boolean saveWithEvents(String json, String eventIdsJson) {
+        try {
+            new org.json.JSONObject(json); // Reject malformed snapshots before the transaction.
+            org.json.JSONArray values = new org.json.JSONArray(eventIdsJson);
+            List<Long> ids = new ArrayList<>();
+            if (values.length() > 500) return false;
+            for (int i = 0; i < values.length(); i++) {
+                long id = values.getLong(i);
+                if (id <= 0) return false;
+                ids.add(id);
+            }
+            dao.commitEvents(json, ids);
+            return true;
+        } catch (Exception e) {
+            android.util.Log.w("FlowBridge", "Command commit failed", e);
+            return false;
+        }
     }
 
     /** window.FlowBridge.saveNotif(json) — зберігає snapshot для сповіщення */
     @JavascriptInterface
     public void saveNotif(String notifJson) {
-        String state = dao.getStateJson();
-        if (state == null) state = "";
-        dao.saveState(new AppState(state, notifJson));
+        dao.writeNotif(notifJson);
         // знімок оновився → перепланувати точний будильник на найближчу задачу
         try { FlowAlarmReceiver.scheduleNextDue(ctx, this); } catch (Exception ignored) {}
     }
@@ -67,6 +86,22 @@ public class FlowBridge {
         return arr.toString();
     }
 
+    /** New app versions read commands without removing them. Old string API remains compatible. */
+    public String getEventEnvelopes() {
+        org.json.JSONArray arr = new org.json.JSONArray();
+        for (PendingEvent e : dao.getPendingEvents()) {
+            if (arr.length() >= 500) break;
+            try {
+                org.json.JSONObject value = new org.json.JSONObject();
+                value.put("id", e.id);
+                value.put("event", e.event == null ? "" : e.event);
+                value.put("createdAt", e.createdAt);
+                arr.put(value);
+            } catch (org.json.JSONException ignored) {}
+        }
+        return arr.toString();
+    }
+
     /** window.FlowBridge.clearEvents() — лише прочитані (до lastReadEventId) */
     @JavascriptInterface
     public void clearEvents() {
@@ -95,27 +130,43 @@ public class FlowBridge {
      * Пріоритет: Documents/FLOW (публічна, виживає після переустановки)
      * Fallback: getExternalFilesDir (без дозволу, але стирається при деінсталяції)
      */
-    private File getBackupDir() {
+    private File getPublicBackupDir() {
         File pub = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOCUMENTS), "FLOW");
-        if (pub.exists() || pub.mkdirs()) return pub;
-        // fallback
-        File priv = new File(ctx.getExternalFilesDir(null), "FLOW-backup");
-        priv.mkdirs();
-        return priv;
+        return pub;
+    }
+
+    private File getPrivateBackupDir() {
+        File base = ctx.getExternalFilesDir(null);
+        return new File(base != null ? base : ctx.getFilesDir(), "FLOW-backup");
     }
 
     private static final String BACKUP_FILE = "flow_backup.json";
 
     /** window.FlowBridge.writeBackup(json) — записує резервну копію на диск */
     @JavascriptInterface
-    public void writeBackup(String json) {
+    public boolean writeBackup(String json) {
+        synchronized (FlowBridge.class) {
+            // Attempt the private fallback even when a public directory exists but is unwritable.
+            return writeAtomicBackup(getPublicBackupDir(), json)
+                    || writeAtomicBackup(getPrivateBackupDir(), json);
+        }
+    }
+
+    private boolean writeAtomicBackup(File directory, String json) {
+        AtomicFile file = new AtomicFile(new File(directory, BACKUP_FILE));
+        FileOutputStream stream = null;
         try {
-            File f = new File(getBackupDir(), BACKUP_FILE);
-            FileOutputStream fos = new FileOutputStream(f);
-            fos.write(json.getBytes(StandardCharsets.UTF_8));
-            fos.close();
-        } catch (Exception ignored) {}
+            new org.json.JSONObject(json);
+            if (!directory.isDirectory() && !directory.mkdirs()) return false;
+            stream = file.startWrite();
+            stream.write(json.getBytes(StandardCharsets.UTF_8));
+            file.finishWrite(stream);
+            return true;
+        } catch (Exception e) {
+            if (stream != null) file.failWrite(stream);
+            return false;
+        }
     }
 
     /**
@@ -124,22 +175,29 @@ public class FlowBridge {
      */
     @JavascriptInterface
     public String readBackup() {
-        try {
-            File f = new File(getBackupDir(), BACKUP_FILE);
-            if (!f.exists()) return "";
-            FileInputStream fis = new FileInputStream(f);
-            byte[] buf = new byte[(int)f.length()];
-            fis.read(buf);
-            fis.close();
-            return new String(buf, StandardCharsets.UTF_8);
-        } catch (Exception e) { return ""; }
+        synchronized (FlowBridge.class) {
+            File pub = new File(getPublicBackupDir(), BACKUP_FILE);
+            File priv = new File(getPrivateBackupDir(), BACKUP_FILE);
+            File[] candidates = pub.lastModified() >= priv.lastModified()
+                    ? new File[] {pub, priv} : new File[] {priv, pub};
+            String unreadable = "";
+            for (File candidate : candidates) {
+                try {
+                    String json = new String(new AtomicFile(candidate).readFully(), StandardCharsets.UTF_8);
+                    if (unreadable.isEmpty()) unreadable = json;
+                    new org.json.JSONObject(json);
+                    return json;
+                } catch (Exception ignored) {}
+            }
+            return unreadable; // Let the UI protect and export damaged copies instead of overwriting them.
+        }
     }
 
     /** window.FlowBridge.hasBackup() — true якщо є резервний файл */
     @JavascriptInterface
     public boolean hasBackup() {
         try {
-            return new File(getBackupDir(), BACKUP_FILE).exists();
+            return !readBackup().isEmpty();
         } catch (Exception e) { return false; }
     }
 
@@ -154,7 +212,9 @@ public class FlowBridge {
         try {
             File dir = new File(ctx.getCacheDir(), "exports");
             if (!dir.exists()) dir.mkdirs();
-            File f = new File(dir, filename != null && !filename.isEmpty() ? filename : "flow-export.txt");
+            String safeName = filename != null && !filename.isEmpty() ? new File(filename).getName() : "flow-export.txt";
+            if (".".equals(safeName) || "..".equals(safeName)) safeName = "flow-export.txt";
+            File f = new File(dir, safeName);
             FileOutputStream fos = new FileOutputStream(f);
             fos.write(content.getBytes("UTF-8"));
             fos.close();

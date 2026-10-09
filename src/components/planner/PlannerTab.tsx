@@ -34,6 +34,7 @@ export default function PlannerTab() {
         <span className="wn-lbl">{weekLabel}</span>
         <button className="wn-btn" onClick={() => shiftPlanWeek(1)}>Наступний →</button>
       </div>
+      <div className="week-dates">{getWeekStart(weekOffset).toLocaleDateString('uk', { day: 'numeric', month: 'long', year: 'numeric' })} · <button className="wn-btn" onClick={() => useStore.setState({ planWeekOffset: 0, planSelectedDay: fmtDate(new Date()) })}>Сьогодні</button></div>
       <WeekGrid />
       <WeekConstructor />
       {selectedDay && <DayDetail ds={selectedDay} />}

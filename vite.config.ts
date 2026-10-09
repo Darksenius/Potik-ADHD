@@ -1,11 +1,16 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import packageJson from './package.json';
+import { execFileSync } from 'node:child_process';
+
+const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
 // Capacitor WebView (androidScheme: "https", але без реального хоста) вимагає
 // ВІДНОСНИХ шляхів до асетів — тому base:'./', а не '/'.
 export default defineConfig({
   plugins: [react()],
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(packageJson.version.replace('-r', '.r')), __SOURCE_REVISION__: JSON.stringify(revision) },
   build: {
     // Capacitor читає веб-контент саме з www/ (див. capacitor.config.json → webDir).
     // Ця тека повністю генерується збіркою — більше не редагується вручну

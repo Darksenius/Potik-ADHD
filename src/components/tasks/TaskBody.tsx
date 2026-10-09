@@ -4,7 +4,6 @@ import { WD } from '../../utils/date';
 import { REPEAT_LABELS, CONTEXT_TAGS } from '../../constants';
 
 const KID_DIFF_LABELS: Record<string, string> = { easy: 'Легко', mid: 'Норм', hard: 'Важко' };
-const REPEAT_UNIT_SUFFIX: Record<string, string> = { hour: 'год', day: 'дн', week: 'тиж', month: 'міс', min: 'хв' };
 
 export default function TaskBody({ t }: { t: Task }) {
   const toggleChecklistItem = useStore((s) => s.toggleChecklistItem);

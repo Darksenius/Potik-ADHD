@@ -1,3 +1,4 @@
+import { normalizeTime } from '../../utils/date';
 import type { AppSlice } from '../store';
 import type {
   DateKey,
@@ -76,6 +77,7 @@ export interface PlannerSlice {
 
   /** planAddItem() — рядки 3885–3904, без kbdOpen (текст приходить від компонента) */
   addPlanItem: (ds: DateKey, rawText: string) => void;
+  updateDayZone: (ds: DateKey, index: number, start: string, end: string) => void;
   /** planAddEvent() — рядки 3905–3918 */
   addPlanEvent: (ds: DateKey, rawText: string) => void;
   /** planTogRest() — рядки 3860–3870 */
@@ -147,6 +149,14 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
     if (!zoneId || !s || !e) return;
     const blocks = get().materializeDay(ds).concat([{ zoneId, s, e }]);
     set((st) => ({ planDayZones: { ...st.planDayZones, [ds]: blocks } }));
+    get().recalculateZoneUsage();
+  },
+  updateDayZone: (ds, index, start, end) => {
+    const from = normalizeTime(start);
+    const to = end === '24:00' ? end : normalizeTime(end);
+    if (!from || !to) return;
+    const blocks = get().materializeDay(ds).map((b, i) => i === index ? { ...b, s: from, e: to, ov: true } : b);
+    set(st => ({ planDayZones: { ...st.planDayZones, [ds]: blocks } }));
     get().recalculateZoneUsage();
   },
 
@@ -234,17 +244,13 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
       time = m[1];
       title = m[2];
     }
-    let dd: DateKey = ds;
+    const dd: DateKey = ds;
     if (time) {
-      const today = fmtDate(new Date());
-      const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-      const [th, tm] = time.split(':').map(Number);
-      if (ds === today && th * 60 + tm <= nowMin) {
-        dd = addDaysDs(ds, 1);
-      }
+      time = normalizeTime(time) || '';
+      if (!time) return;
       const task = get().createTask(title, 'sched', null, '');
       set((s) => ({
-        tasks: s.tasks.map((t) => (t.id === task.id ? { ...t, schedDate: dd, schedTime: time, firedSched: false, planDate: dd } : t)),
+        tasks: s.tasks.map((t) => (t.id === task.id ? { ...t, schedDate: dd, schedTime: time, firedSched: false, planDate: dd, reminderEnabled: true, remindBeforeMinutes: 0 } : t)),
       }));
     } else {
       const task = get().createTask(title, 'simple', null, '');

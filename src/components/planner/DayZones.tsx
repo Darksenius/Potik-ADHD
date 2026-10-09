@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../state/store';
 import { ruleFor } from '../../state/slices/plannerSlice';
 import type { DateKey } from '../../types';
+import { normalizeTime } from '../../utils/date';
 
 export default function DayZones({ ds }: { ds: DateKey }) {
   const zones = useStore((s) => s.zones);
@@ -21,6 +22,12 @@ export default function DayZones({ ds }: { ds: DateKey }) {
   const [addZoneId, setAddZoneId] = useState('');
   const [addStart, setAddStart] = useState('09:00');
   const [addEnd, setAddEnd] = useState('12:00');
+  const [editing, setEditing] = useState<number | null>(null);
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
+  const [error, setError] = useState('');
+  const [dailyZoneId, setDailyZoneId] = useState<number | null>(null);
+  function openEditor(index: number, start: string, end: string) { setEditing(index); setDailyZoneId(null); setEditStart(start); setEditEnd(end); setError(''); }
 
   const dayZones = dayBlocks(ds);
   const dayRule = ruleFor(planRules, ds);
@@ -62,7 +69,7 @@ export default function DayZones({ ds }: { ds: DateKey }) {
           <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>
             {(z.slots || []).map((sl) => sl.s + '–' + sl.e).join(' · ')}
           </span>
-          <button className="plan-rm" title="Змінити час лише цього дня" onClick={() => editDailyZoneForDay(ds, z.id)}>✎</button>
+          <button className="plan-rm" title="Змінити час лише цього дня" onClick={() => { openEditor(dayBlocks(ds).length, z.slots[0].s, z.slots[0].e); setDailyZoneId(z.id); }}>✎</button>
           <button className="plan-rm" title="Вимкнути лише цього дня" onClick={() => setDailyZoneOff(ds, z.id)}>✕</button>
         </div>
       ))}
@@ -89,10 +96,18 @@ export default function DayZones({ ds }: { ds: DateKey }) {
               {b.ov && <span style={{ fontSize: 9, color: 'var(--t3)', fontWeight: 400 }}> лише цей день</span>}
             </span>
             <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{b.s}–{b.e}</span>
+            <button className="plan-rm" aria-label={'Змінити час ' + (z?.nm || 'зони')} onClick={() => openEditor(i, b.s, b.e)}>✎</button>
             <button className="plan-rm" onClick={() => removeDayZone(ds, i)}>✕</button>
           </div>
         );
       })}
+
+      {editing !== null && <form className="editor-section" onSubmit={e => {
+        e.preventDefault();
+        if (!normalizeTime(editStart) || (!normalizeTime(editEnd) && editEnd !== '24:00')) { setError('Вкажи час у форматі 09:00. Кінець дня — 24:00.'); return; }
+        if (dailyZoneId !== null) editDailyZoneForDay(ds, dailyZoneId);
+        useStore.getState().updateDayZone(ds, editing, editStart, editEnd); setEditing(null); setDailyZoneId(null);
+      }}><h3>Час лише цього дня</h3><div className="editor-row"><label className="el">Початок зони<input className="ei" type="time" value={editStart} onChange={e => setEditStart(e.target.value)} /></label><label className="el">Кінець зони<input className="ei" inputMode="numeric" value={editEnd} onChange={e => setEditEnd(e.target.value)} placeholder="18:00 або 24:00" /></label></div>{error && <p role="alert">{error}</p>}<div className="editor-actions"><button type="submit">Зберегти час</button><button type="button" onClick={() => setEditing(null)}>Скасувати</button></div></form>}
 
       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 5, flexWrap: 'wrap' }}>
         <select

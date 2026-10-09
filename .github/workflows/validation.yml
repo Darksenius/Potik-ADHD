@@ -2,7 +2,7 @@ name: Migration validation
 on:
   pull_request:
   push:
-    branches: [main, refactor/vite-react-migration, 'audit/**']
+    branches: [main, refactor/vite-react-migration, 'audit/**', 'improve/**']
   workflow_dispatch:
 permissions:
   contents: read

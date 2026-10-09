@@ -2,13 +2,10 @@ import { useStore } from '../../state/store';
 import type { TabId } from '../../state/slices/uiSlice';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
-  { id: 'tasks', icon: '✅', label: 'Задачі' },
-  { id: 'notes', icon: '📝', label: 'Блокнот' },
+  { id: 'tasks', icon: '☀', label: 'Сьогодні' },
   { id: 'planner', icon: '📅', label: 'План' },
-  { id: 'state', icon: '🫀', label: 'Стан' },
-  { id: 'zones', icon: '🕐', label: 'Зони' },
-  { id: 'ideas', icon: '💡', label: 'Ідеї' },
-  { id: 'stats', icon: '📊', label: 'Стат' },
+  { id: 'inbox', icon: '↓', label: 'Вхідні' },
+  { id: 'more', icon: '⋯', label: 'Ще' },
 ];
 
 export default function Tabs() {
@@ -20,7 +17,8 @@ export default function Tabs() {
       {TABS.map((t) => (
         <button
           key={t.id}
-          className={'tb' + (currentTab === t.id ? ' active' : '')}
+          aria-current={currentTab === t.id || (t.id === 'more' && !['tasks', 'planner', 'inbox'].includes(currentTab)) ? 'page' : undefined}
+          className={'tb' + (currentTab === t.id || (t.id === 'more' && !['tasks', 'planner', 'inbox'].includes(currentTab)) ? ' active' : '')}
           onClick={() => switchTab(t.id)}
         >
           <span className="tbi">{t.icon}</span>{t.label}

@@ -54,7 +54,6 @@ function RoutineList() {
   const decRecur = useStore((s) => s.decRecur);
   const toggleRecurCheck = useStore((s) => s.toggleRecurCheck);
   const deleteRecur = useStore((s) => s.deleteRecur);
-  const addRecur = useStore((s) => s.addRecur);
 
   return (
     <div id="recur-bar">

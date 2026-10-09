@@ -1,5 +1,7 @@
 import { useStore } from '../../state/store';
-import { applyState, saveState } from '../../services/persistence';
+import { getRecoverySources } from '../../services/persistence';
+import { importState } from '../../services/exportImport';
+import { flowBridge } from '../../bridge/nativeBridge';
 
 export default function BackupBanner() {
   const banner = useStore((s) => s.backupBanner);
@@ -21,7 +23,13 @@ export default function BackupBanner() {
           <span style={{ fontSize: 18 }}>⚠️</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, color: '#f5c542' }}>Знайдено резервний файл, але він пошкоджений</div>
-            <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>Вміст збережено у нотатки як текст</div>
+            <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>Автозбереження призупинено, щоб зберегти оригінал. Збережи файл діагностики та імпортуй справну копію в Налаштуваннях.</div>
+            <button onClick={() => {
+              const raw = getRecoverySources();
+              const fb = flowBridge();
+              if (fb) fb.exportTxt('flow-recovery.json', raw);
+              else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([raw], { type: 'application/json' })); a.download = 'flow-recovery.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+            }}>Зберегти оригінали</button>
           </div>
           <button
             onClick={dismiss}
@@ -44,11 +52,8 @@ export default function BackupBanner() {
         </div>
         <button
           onClick={() => {
-            applyState(banner.data);
-            saveState();
-            useStore.getState().recalculateZoneUsage();
-            showToast('✓ Дані відновлено!');
-            dismiss();
+            try { importState(banner.data, 'restore'); showToast('✓ Дані відновлено!'); dismiss(); }
+            catch (e) { showToast(e instanceof Error ? e.message : 'Не вдалося відновити дані'); }
           }}
           style={{ background: '#7ed321', border: 'none', borderRadius: 7, padding: '6px 14px', color: '#0d1117', fontFamily: "'Syne',sans-serif", fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
         >

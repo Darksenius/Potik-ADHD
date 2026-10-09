@@ -16,19 +16,29 @@
 
 ## Збірка з джерел
 
-Потрібні: Node.js 18+, JDK 21, Android SDK.
+Потрібні: Node.js 22+, JDK 21, Android SDK (compile SDK 36).
 
 ```bash
 npm ci
+npm run build             # React/TypeScript → www/
 node scripts/embed-oss.js   # вшити ліцензію та вихідний код у довідку (AGPL)
 npx cap sync android
 cd android && ./gradlew assembleDebug
 # APK: android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Весь веб-код застосунку — один файл [`www/index.html`](www/index.html).
+Веб-інтерфейс — React/TypeScript у [`src/`](src/), стан — Zustand. `www/` генерується збіркою й не редагується вручну.
 Нативна частина (сповіщення, будильники, Room-сховище) — Java у
 [`android/app/src/main/java/com/flow/adhd/`](android/app/src/main/java/com/flow/adhd/).
+
+Основні сценарії: **Проста** й **Запланована** задача. Решта типів збережені в «Додаткових можливостях».
+[Дорожня карта з прикладами всіх 13 типів](docs/roadmap/TASK-TYPES.md).
+[Звіт про перевірки поточного кандидата 1.7.6.r1](docs/qa/organizer-2026-10-08.md).
+
+Перевірки: `npm test` (Playwright). Звіт: `playwright-report/index.html`.
+Для перевірки production-збірки встановіть `TEST_PRODUCTION=1`; `PLAYWRIGHT_CHANNEL=chromium` дозволяє використати встановлений Chromium замість Chrome.
+Для Android задайте `ANDROID_HOME` і JDK 21 через `JAVA_HOME`.
+Автоматичного копіювання APK в особисту папку немає. За потреби явно задайте Gradle `-PflowApkOutput=<directory>`.
 
 ## Ліцензія
 

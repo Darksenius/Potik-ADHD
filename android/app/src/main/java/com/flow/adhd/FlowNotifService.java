@@ -567,6 +567,7 @@ public class FlowNotifService extends Service {
                                                  String itemId, int notifId) {
         Intent i = new Intent(this, FlowNotifService.class);
         i.setAction(action);
+        i.setData(android.net.Uri.parse("flow://action/" + android.net.Uri.encode(action) + "/" + android.net.Uri.encode(itemId == null ? "" : itemId)));
         i.putExtra(EXTRA_ID, itemId);
         i.putExtra("notif_id", notifId);
         // requestCode унікальний: action.hashCode ^ notifId ^ itemId.hashCode

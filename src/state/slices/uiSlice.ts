@@ -1,4 +1,6 @@
 import type { AppSlice } from '../store';
+import type { Preferences } from '../../types';
+import { fmtDate } from '../../utils/date';
 
 /**
  * ══ UI ══ — навігаційний і фільтраційний стан, що реально потрібен
@@ -15,12 +17,14 @@ import type { AppSlice } from '../store';
  *   - firedA                     — Set дедуплікації спрацьованих будильників
  *                                  (рядок 1212), теж імперативна бухгалтерія
  */
-export type PageId = 'main' | 'widget' | 'readme';
-export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state';
+export type PageId = 'main' | 'readme' | 'settings';
+export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state' | 'inbox' | 'more' | 'alltasks';
 
 export interface UiSlice {
   alarmTaskIds: number[];
   theme: 'light' | 'dark';
+  preferences: Preferences;
+  setPreferences: (patch: Partial<Preferences>) => void;
   currentPage: PageId;
   currentTab: TabId;
 
@@ -29,11 +33,6 @@ export interface UiSlice {
   /** curFolder — рядок 1214: фільтр папки нотаток */
   noteFolder: string;
   showDone: boolean;
-  inboxOpen: boolean;
-  shadeOpen: boolean;
-  /** wFlt/wMode — рядок 1214: фільтр і режим віджета шторки */
-  widgetFilter: string;
-  widgetMode: 'note' | 'task';
 
   /** planWeekOffset/planSelectedDay — рядок 1224, НЕ персистяться в оригіналі */
   planWeekOffset: number;
@@ -47,6 +46,7 @@ export interface UiSlice {
    * на картці задачі (openEdit(t.id), рядок 2235).
    */
   editorTaskId: number | 'new' | null;
+  editorInitialDate: string | null;
 
   toggleTheme: () => void;
   showPage: (page: PageId) => void;
@@ -54,7 +54,7 @@ export interface UiSlice {
   setTaskFilter: (filter: string) => void;
   setNoteFolder: (folder: string) => void;
   toggleShowDone: () => void;
-  requestNewTaskEditor: () => void;
+  requestNewTaskEditor: (date?: string) => void;
   requestEditTask: (id: number) => void;
   closeTaskEditor: () => void;
   /** planSelDay(ds) — рядок 3400, без scrollIntoView (репорт 11.06 — совало інтерфейс) */
@@ -93,35 +93,41 @@ export interface KbdOverlayContext {
 export const createUiSlice: AppSlice<UiSlice> = (set) => ({
   alarmTaskIds: [],
   theme: 'dark',
+  preferences: { themeMode: 'system', reduceMotion: false, showGamification: true },
+  setPreferences: (patch) => set((s) => ({ preferences: { ...s.preferences, ...patch } })),
   currentPage: 'main',
   currentTab: 'tasks',
   taskFilter: 'all',
   noteFolder: 'all',
   showDone: false,
-  inboxOpen: false,
-  shadeOpen: false,
-  widgetFilter: 'all',
-  widgetMode: 'note',
   planWeekOffset: 0,
   planSelectedDay: null,
   editorTaskId: null,
+  editorInitialDate: null,
   toastMessage: null,
   backupBanner: null,
   kbdOverlay: null,
 
   // toggleTheme() — рядки 1171–1175. Застосування data-theme до <html> —
   // тепер робота useEffect у App.tsx, що читає це поле (див. App.tsx).
-  toggleTheme: () => set((s) => ({ theme: s.theme === 'light' ? 'dark' : 'light' })),
+  toggleTheme: () => set((s) => {
+    const theme = s.theme === 'light' ? 'dark' : 'light';
+    return { theme, preferences: { ...s.preferences, themeMode: theme } };
+  }),
   showPage: (page) => set({ currentPage: page }),
   switchTab: (tab) => set({ currentTab: tab }),
   setTaskFilter: (filter) => set({ taskFilter: filter }),
   setNoteFolder: (folder) => set({ noteFolder: folder }),
   toggleShowDone: () => set((s) => ({ showDone: !s.showDone })),
-  requestNewTaskEditor: () => set({ editorTaskId: 'new' }),
-  requestEditTask: (id) => set({ editorTaskId: id }),
-  closeTaskEditor: () => set({ editorTaskId: null }),
+  requestNewTaskEditor: (date) => set({ editorTaskId: 'new', editorInitialDate: typeof date === 'string' ? date : null }),
+  requestEditTask: (id) => set({ editorTaskId: id, editorInitialDate: null }),
+  closeTaskEditor: () => set({ editorTaskId: null, editorInitialDate: null }),
   setPlanSelectedDay: (ds) => set({ planSelectedDay: ds }),
-  shiftPlanWeek: (dir) => set((s) => ({ planWeekOffset: s.planWeekOffset + dir })),
+  shiftPlanWeek: (dir) => set((s) => {
+    const selected = s.planSelectedDay ? new Date(s.planSelectedDay + 'T12:00:00') : new Date();
+    selected.setDate(selected.getDate() + dir * 7);
+    return { planWeekOffset: s.planWeekOffset + dir, planSelectedDay: fmtDate(selected) };
+  }),
   showToast: (msg) => set({ toastMessage: msg }),
   dismissToast: () => set({ toastMessage: null }),
   setBackupBanner: (v) => set({ backupBanner: v }),

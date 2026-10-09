@@ -26,7 +26,6 @@ public abstract class FlowDatabase extends RoomDatabase {
                             "flow_db"
                     )
                     .allowMainThreadQueries()
-                    .fallbackToDestructiveMigration()
                     .build();
                 }
             }

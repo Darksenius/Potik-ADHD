@@ -14,22 +14,8 @@ import { fmtDate } from '../../utils/date';
  */
 let lastResetDate = new Date().toDateString();
 
-/** repeatDueOn(t,dt) — рядки 2887–2898. Чи повторювана задача активна саме в цей день. */
-export function repeatDueOn(t: Task, dt: Date): boolean {
-  const r = t && t.repeat;
-  if (!r || r === 'none' || r === 'everyzone') return false;
-  const wd = (dt.getDay() + 6) % 7;
-  if (r === 'daily') return true;
-  if (r === 'weekdays') return wd <= 4;
-  if (r === 'weekend') return wd >= 5;
-  if (r === 'custom') return !!(t.repeatDays && t.repeatDays[wd]);
-  if (r === 'weekly') {
-    const c = t.created ? new Date(t.created) : null;
-    return c ? (c.getDay() + 6) % 7 === wd : true;
-  }
-  if (r === 'interval') return true; // час-базоване — принаймні зводимо щодня
-  return false;
-}
+export { repeatDueOn } from '../../utils/taskSchedule';
+import { repeatDueOn, taskPlanDate } from '../../utils/taskSchedule';
 
 export interface LifecycleSlice {
   /** resetRepeatingTasksFor(dt) — рядки 2902–2913 */
@@ -47,9 +33,11 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
       tasks: s.tasks.map((t) => {
         if (!t.done || t.trashed) return t;
         if (!t.repeat || t.repeat === 'none' || t.repeat === 'everyzone') return t;
-        if (t.doneDate === ds) return t; // вже виконано саме сьогодні — не чіпати
+        if (t.repeat !== 'interval' && t.doneDate === ds) return t; // вже виконано саме сьогодні — не чіпати
         if (!repeatDueOn(t, dt)) return t; // сьогодні не за графіком — лишити як є
-        const next: Task = { ...t, done: false, doneDate: '', doneAt: undefined };
+        const next: Task = { ...t, done: false, doneDate: '', doneAt: undefined, alarmFired: false, firedSched: false, firedPre: false, nextRepeatAt: 0 };
+        if (next.type === 'sched' && taskPlanDate(next) && taskPlanDate(next)! <= ds) { next.schedDate = ds; next.planDate = ds; }
+        if (next.type === 'counter') next.cntHit = false;
         if (Array.isArray(next.items)) next.items = next.items.map((it) => ({ ...it, done: false }));
         if (next.type === 'counter') next.counter = 0;
         return next;

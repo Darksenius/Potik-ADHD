@@ -19,21 +19,23 @@ import BackupBanner from './components/common/BackupBanner';
 import KbdOverlay from './components/common/KbdOverlay';
 import AlarmBanner from './components/common/AlarmBanner';
 import { usePomodoroTick } from './hooks/usePomodoroTick';
+import MoreTab from './components/layout/MoreTab';
+import SettingsPage from './components/layout/SettingsPage';
+import InboxTab from './components/tasks/InboxTab';
 
 /** applyTheme() — рядки 1165–1170: data-theme на <html> тепер ефект, не імперативний виклик. */
 function useThemeEffect() {
   const theme = useStore((s) => s.theme);
+  const preferences = useStore(s => s.preferences);
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
-  }, [theme]);
-}
-
-function TabPlaceholder({ name }: { name: string }) {
-  return (
-    <div className="tsec active" style={{ padding: '24px 4px', textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
-      «{name}» ще не перенесено на Кроці 3 — у прогресі.
-    </div>
-  );
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const apply = () => document.documentElement.setAttribute('data-theme', preferences.themeMode === 'system' ? mq.matches ? 'light' : 'dark' : preferences.themeMode || theme);
+    apply();
+    // addListener is required by the Android 9 WebView used in r4 verification.
+    mq.addListener(apply);
+    document.documentElement.setAttribute('data-reduce-motion', String(!!preferences.reduceMotion));
+    return () => mq.removeListener(apply);
+  }, [theme, preferences.themeMode, preferences.reduceMotion]);
 }
 
 export default function App() {
@@ -48,23 +50,14 @@ export default function App() {
       <Nav />
 
       {currentPage === 'readme' && <ReadmePage />}
-
-      {/* 'widget' — у ОРИГІНАЛІ теж недосяжна сторінка: goToWidget() ніде не
-          викликається і сама сторінка мала inline style="display:none!important".
-          Мертвий код оригіналу, не пропущена функція — свідомо не будую UI. */}
-      {currentPage !== 'main' && currentPage !== 'readme' && (
-        <div className="page active" style={{ padding: 24, textAlign: 'center', color: 'var(--t3)' }}>
-          Сторінка «{currentPage}» недосяжна (те саме й в оригіналі — goToWidget() ніде не викликається).
-        </div>
-      )}
+      {currentPage === 'settings' && <SettingsPage />}
 
       {currentPage === 'main' && (
         <div id="main-page" className="page active">
           <div id="app">
             <Topbar />
-            <ZoneCard />
-            <ProgressBars />
             <Tabs />
+            {currentTab === 'tasks' && <details className="today-context"><summary>Поточна зона й час дня</summary><ZoneCard /><ProgressBars /></details>}
 
             {currentTab === 'tasks' && <TasksTab />}
             {currentTab === 'notes' && <NotesTab />}
@@ -73,6 +66,9 @@ export default function App() {
             {currentTab === 'zones' && <ZonesTab />}
             {currentTab === 'ideas' && <IdeasTab />}
             {currentTab === 'stats' && <StatsTab />}
+            {currentTab === 'more' && <MoreTab />}
+            {currentTab === 'inbox' && <InboxTab />}
+            {currentTab === 'alltasks' && <TasksTab key="all" all />}
           </div>
         </div>
       )}

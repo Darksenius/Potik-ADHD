@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useStore } from '../../state/store';
 import { fmtHuman } from '../../utils/date';
 import { PLAN_TEMPLATES } from '../../constants';
@@ -6,6 +5,7 @@ import type { DateKey } from '../../types';
 import { DayAnalysis, DayJournal } from './DayJournal';
 import DayZones from './DayZones';
 import DayTemplates from './DayTemplates';
+import { taskOccursOn } from '../../utils/taskSchedule';
 
 export default function DayDetail({ ds }: { ds: DateKey }) {
   const dayIsRest = useStore((s) => s.dayIsRest);
@@ -20,7 +20,8 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
   const planItems = useStore((s) => s.planItems);
   const togglePlanItem = useStore((s) => s.togglePlanItem);
   const removePlanItem = useStore((s) => s.removePlanItem);
-  const addPlanItem = useStore((s) => s.addPlanItem);
+  const newTask = useStore((s) => s.requestNewTaskEditor);
+  const editTask = useStore((s) => s.requestEditTask);
   const addPlanEvent = useStore((s) => s.addPlanEvent);
   const openKbdOverlay = useStore((s) => s.openKbdOverlay);
 
@@ -33,7 +34,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
   const isRest = dayIsRest(ds);
   const sched = planSchedules[ds] || '';
   const items = planItems[ds] || [];
-  const dayTasks = tasks.filter((t) => t.planDate === ds && !t.trashed);
+  const dayTasks = tasks.filter(t => taskOccursOn(t, ds)).sort((a, b) => (a.schedTime || '').localeCompare(b.schedTime || ''));
 
   return (
     <div className="plan-detail open">
@@ -43,14 +44,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
           <button
             className="pdd-add"
             style={{ background: 'var(--s3)', color: 'var(--t2)', border: '1px solid var(--b2)' }}
-            onClick={() => {
-              openKbdOverlay({
-                hint: '+ Задача на ' + fmtHuman(new Date(ds + 'T12:00:00')),
-                placeholder: 'напр. "10:00 Подзвонити" або просто назва',
-                showTaskHint: false,
-                onSend: (txt) => addPlanItem(ds, txt),
-              });
-            }}
+            onClick={() => newTask(ds)}
           >
             + Задача
           </button>
@@ -69,6 +63,28 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
           </button>
         </div>
       </div>
+
+      {dayTasks.map((t) => (
+        <div className="plan-task-row" key={t.id}>
+          <button aria-label={(t.done ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (t.done ? ' on' : '')} onClick={() => toggleTask(t.id)}>{t.done ? '✓' : ''}</button>
+          <button onClick={() => editTask(t.id)} className="plan-task-nm" style={t.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}</button>
+          {t.type === 'sched' && t.schedTime && <span style={{ fontSize: 10, color: 'var(--z)', fontFamily: 'monospace' }}>{t.schedTime}</span>}
+          <button aria-label={'У кошик: ' + t.title} className="plan-rm" onClick={() => deleteTask(t.id)}>✕</button>
+        </div>
+      ))}
+
+      {items.map((it, i) => (
+        <div className={'plan-task-row' + (it.isEvent ? ' plan-event' : '')} key={i}>
+          <button className={'plan-ck' + (it.done ? ' on' : '')} onClick={() => togglePlanItem(ds, i)}>
+            {it.done ? '✓' : it.isEvent ? '🎉' : ''}
+          </button>
+          <span className="plan-task-nm" style={it.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{it.title || ''}</span>
+          {it.time && <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{it.time}</span>}
+          <button className="plan-rm" onClick={() => removePlanItem(ds, i)}>✕</button>
+        </div>
+      ))}
+
+      {!dayTasks.length && !items.length && <div className="plan-empty">Порожньо — додай задачу, зону або подію</div>}
 
       <DayAnalysis ds={ds} isFuture={isFuture} />
       <DayJournal ds={ds} />
@@ -109,32 +125,12 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
             const tmpl = PLAN_TEMPLATES.find((t) => t.id === sched);
             return tmpl ? <div style={{ fontSize: 10, color: 'var(--z)', padding: '2px 0 6px' }}>📋 Графік: {tmpl.label} ({tmpl.hours})</div> : null;
           })()}
-          <DayZones ds={ds} />
+          <DayZones key={ds} ds={ds} />
           <DayTemplates ds={ds} />
         </>
       )}
 
-      {dayTasks.map((t) => (
-        <div className="plan-task-row" key={t.id}>
-          <button className={'plan-ck' + (t.done ? ' on' : '')} onClick={() => toggleTask(t.id)}>{t.done ? '✓' : ''}</button>
-          <span className="plan-task-nm" style={t.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}</span>
-          {t.schedTime && <span style={{ fontSize: 10, color: 'var(--z)', fontFamily: 'monospace' }}>{t.schedTime}</span>}
-          <button className="plan-rm" onClick={() => deleteTask(t.id)}>✕</button>
-        </div>
-      ))}
 
-      {items.map((it, i) => (
-        <div className={'plan-task-row' + (it.isEvent ? ' plan-event' : '')} key={i}>
-          <button className={'plan-ck' + (it.done ? ' on' : '')} onClick={() => togglePlanItem(ds, i)}>
-            {it.done ? '✓' : it.isEvent ? '🎉' : ''}
-          </button>
-          <span className="plan-task-nm" style={it.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{it.title || ''}</span>
-          {it.time && <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{it.time}</span>}
-          <button className="plan-rm" onClick={() => removePlanItem(ds, i)}>✕</button>
-        </div>
-      ))}
-
-      {!dayTasks.length && !items.length && <div className="plan-empty">Порожньо — додай задачу, зону або подію</div>}
     </div>
   );
 }
