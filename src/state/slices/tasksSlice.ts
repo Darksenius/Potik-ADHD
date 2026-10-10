@@ -1,16 +1,13 @@
 import type { AppSlice } from '../store';
 import type { Task, TaskType, ChecklistItem } from '../../types';
-import { fmtDate, nowHM, toMinutes } from '../../utils/date';
+import { fmtDate, nowHM, normalizeTime, hmToString } from '../../utils/date';
 
 /** TXP — рядок 1239: базова нагорода XP за тип задачі при виконанні. */
 const TASK_XP: Record<TaskType, number> = {
   simple: 10, check: 10, counter: 2, note: 5, alarm: 10, sched: 10,
-  timewin: 5, pomodoro: 10, habit: 8, kid: 10, ctx: 8, negative: 0, zonelinked: 8,
+  timewin: 5, ctx: 8, negative: 0, zonelinked: 8,
 };
 
-/** PW/PB — рядок 2263: тривалості помодоро-циклу (секунди) */
-const POMODORO_WORK_SECS = 25 * 60;
-const POMODORO_BREAK_SECS = 5 * 60;
 const REPEAT_UNIT_MS: Record<string, number> = { sec: 1000, min: 60000, hour: 3600000, day: 86400000, week: 604800000, month: 2592000000 };
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -21,6 +18,7 @@ export interface TasksSlice {
 
   createTask: (title: string, type: TaskType, zoneId?: number | null, alarmTime?: string) => Task;
   toggleTask: (id: number) => void;
+  setTaskDone: (id: number, done: boolean) => void;
   skipTask: (id: number) => void;
   toSomeday: (id: number) => void;
   fromSomeday: (id: number) => void;
@@ -28,7 +26,7 @@ export interface TasksSlice {
   markScheduledFired: (id: number) => void;
   markPreReminderFired: (id: number) => void;
 
-  moveTask: (id: number, dir: -1 | 1) => void;
+  moveTask: (id: number, dir: -1 | 1, visibleIds: number[]) => void;
   deleteTask: (id: number) => void;
   restoreTask: (id: number) => void;
   hardDeleteTask: (id: number) => void;
@@ -40,17 +38,7 @@ export interface TasksSlice {
   addChecklistItem: (taskId: number, text: string) => void;
   changeCounter: (taskId: number, delta: number) => void;
   updateCounterTarget: (taskId: number, target: number) => void;
-  togglePomodoro: (taskId: number) => void;
-  tickPomodoro: (taskId: number) => void;
-  resetPomodoro: (taskId: number) => void;
-  skipPomodoro: (taskId: number) => void;
-  toggleHabitDay: (taskId: number, dayIndex: number) => void;
   toggleCtxTag: (taskId: number, tag: string) => void;
-  setKidStars: (taskId: number, stars: number) => void;
-  setKidDifficulty: (taskId: number, diff: 'easy' | 'mid' | 'hard') => void;
-  updateKidReward: (taskId: number, text: string) => void;
-  toggleZoneDoneTask: (taskId: number) => void;
-
   saveTask: (id: number | null, patch: Partial<Task> & { title: string; type: TaskType }) => number;
   /** efSnooze(x) — рядки 2402–2411. x='tomorrow' або хвилини. */
   snoozeTask: (id: number, x: 'tomorrow' | number) => void;
@@ -58,10 +46,6 @@ export interface TasksSlice {
   updateNote: (id: number, text: string) => void;
   /** updAlarm(tid,v) — рядок 2251 */
   updateAlarm: (id: number, time: string) => void;
-  /** updRepeat(tid,v) — рядок 2257 */
-  updateRepeat: (id: number, repeat: Task['repeat']) => void;
-  /** togRepDay(tid,i) — рядок 2258 */
-  toggleRepeatDay: (id: number, dayIndex: number) => void;
   /** rmTag(tid,i) — рядок 2259 */
   removeTag: (id: number, index: number) => void;
 }
@@ -98,14 +82,6 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       windowStart: type === 'timewin' ? '07:00' : undefined,
       windowEnd: type === 'timewin' ? '09:00' : undefined,
       completedToday: type === 'timewin' ? false : undefined,
-      pomSecs: type === 'pomodoro' ? POMODORO_WORK_SECS : undefined,
-      pomMode: type === 'pomodoro' ? 'work' : undefined,
-      pomSessions: type === 'pomodoro' ? 0 : undefined,
-      pomRunning: type === 'pomodoro' ? false : undefined,
-      habitDays: type === 'habit' ? [false, false, false, false, false, false, false] : undefined,
-      kidStars: type === 'kid' ? 0 : undefined,
-      kidDiff: type === 'kid' ? 'mid' : undefined,
-      kidReward: type === 'kid' ? '' : undefined,
       ctxTags: type === 'ctx' ? [] : undefined,
       zoneDoneToday: type === 'zonelinked' ? false : undefined,
       repeat: 'none',
@@ -118,7 +94,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   toggleTask: (id) => {
     const t = get().tasks.find((x) => x.id === id);
-    if (!t) return;
+    if (!t || t.trashed) return;
 
     if (t.type === 'negative') {
       set((s) => ({
@@ -129,24 +105,40 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       return;
     }
 
-    const willBeDone = !t.done;
+    get().setTaskDone(id, !t.done);
+  },
+
+  setTaskDone: (id, done) => {
+    const t = get().tasks.find((x) => x.id === id);
+    if (!t || t.trashed || t.type === 'negative' || t.done === done) return;
+    const shouldCredit = done && !t.completionCredited;
+    const now = new Date();
+    const completionCredited = done ? true : (t.completionCredited ?? t.done);
+    const completionCreditDate = done
+      ? (shouldCredit ? fmtDate(now) : t.completionCreditDate)
+      : (completionCredited ? (t.completionCreditDate || t.doneDate || fmtDate(now)) : t.completionCreditDate);
     set((s) => ({
       tasks: s.tasks.map((x) => {
         if (x.id !== id) return x;
-        const updated: Task = { ...x, done: willBeDone };
-        if (x.type === 'timewin' && willBeDone) updated.completedToday = true;
-        if (willBeDone) {
-          updated.doneDate = fmtDate(new Date());
-          updated.doneAt = new Date().toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
+        const updated: Task = { ...x, done, completionCredited, completionCreditDate };
+        if (x.type === 'timewin') updated.completedToday = done;
+        if (x.type === 'zonelinked') updated.zoneDoneToday = done;
+        if (done) {
+          updated.doneDate = fmtDate(now);
+          updated.doneAt = now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
           updated.snoozeUntil = 0;
-          if (x.repeat === 'interval' && x.repeatMs) updated.nextRepeatAt = Date.now() + x.repeatMs;
+          updated.nextRepeatAt = x.repeat === 'interval' && x.repeatMs ? Date.now() + x.repeatMs : 0;
+        } else {
+          updated.doneDate = undefined;
+          updated.doneAt = undefined;
+          updated.nextRepeatAt = 0;
         }
         return updated;
       }),
-      priorities: willBeDone ? s.priorities.map((pid) => (pid === id ? null : pid)) : s.priorities,
+      priorities: done ? s.priorities.map((pid) => (pid === id ? null : pid)) : s.priorities,
     }));
 
-    if (willBeDone) {
+    if (shouldCredit) {
       get().incrementDoneCount();
       get().award(TASK_XP[t.type] ?? 10);
     }
@@ -165,7 +157,14 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   toSomeday: (id) => {
     set((s) => ({
-      tasks: s.tasks.map((x) => (x.id === id ? { ...x, someday: true, done: false } : x)),
+      tasks: s.tasks.map((x) => (x.id === id ? {
+        ...x, someday: true, done: false,
+        completionCredited: x.completionCredited ?? x.done,
+        completionCreditDate: (x.completionCredited ?? x.done) ? (x.completionCreditDate || x.doneDate || fmtDate(new Date())) : x.completionCreditDate,
+        doneDate: undefined, doneAt: undefined, nextRepeatAt: 0,
+        completedToday: x.type === 'timewin' ? false : x.completedToday,
+        zoneDoneToday: x.type === 'zonelinked' ? false : x.zoneDoneToday,
+      } : x)),
       priorities: s.priorities.map((pid) => (pid === id ? null : pid)),
       xpPopup: { text: '→ Колись', tone: 'muted' },
     }));
@@ -176,9 +175,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   },
 
   addQuickTaskFromShade: (title) => {
-    const task = get().createTask(title, 'simple', null, '');
-    get().award(10);
-    return void task;
+    get().createTask(title, 'simple', null, '');
   },
 
   markScheduledFired: (id) => {
@@ -191,11 +188,11 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, firedPre: true } : t)) }));
   },
 
-  moveTask: (id, dir) => {
+  moveTask: (id, dir, visibleIds) => {
     set((s) => {
       const activeIdx: number[] = [];
       s.tasks.forEach((tk, gi) => {
-        if (!tk.trashed && !tk.someday) activeIdx.push(gi);
+        if (!tk.trashed && visibleIds.includes(tk.id)) activeIdx.push(gi);
       });
       let pos = -1;
       for (let k = 0; k < activeIdx.length; k++) {
@@ -242,7 +239,13 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const t = get().tasks.find((x) => x.id === id);
     if (!t) return;
     const nid = get().nid;
-    const copy: Task = { ...JSON.parse(JSON.stringify(t)), id: nid, done: false, expanded: false, title: t.title + ' (копія)' };
+    const copy: Task = {
+      ...JSON.parse(JSON.stringify(t)), id: nid, done: false, completionCredited: false,
+      completionCreditDate: undefined, doneDate: undefined, doneAt: undefined, nextRepeatAt: 0, snoozeUntil: 0,
+      completedToday: t.type === 'timewin' ? false : t.completedToday,
+      zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
+      expanded: false, title: t.title + ' (копія)',
+    };
     set((s) => {
       const idx = s.tasks.findIndex((x) => x.id === id);
       const tasks = s.tasks.slice();
@@ -292,66 +295,6 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, counterTarget: target || 10 } : t)) }));
   },
 
-  togglePomodoro: (taskId) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, pomRunning: !t.pomRunning } : t)) }));
-  },
-
-  tickPomodoro: (taskId) => {
-    const t = get().tasks.find((x) => x.id === taskId);
-    if (!t || !t.pomRunning) return;
-    const secs = (t.pomSecs || 0) - 1;
-    if (secs <= 0) {
-      const wasWork = t.pomMode === 'work';
-      set((s) => ({
-        tasks: s.tasks.map((x) =>
-          x.id === taskId
-            ? {
-                ...x,
-                pomRunning: false,
-                pomMode: wasWork ? 'break' : 'work',
-                pomSecs: wasWork ? POMODORO_BREAK_SECS : POMODORO_WORK_SECS,
-                pomSessions: wasWork ? (x.pomSessions || 0) + 1 : x.pomSessions,
-              }
-            : x
-        ),
-      }));
-      if (wasWork) get().award(15);
-    } else {
-      set((s) => ({ tasks: s.tasks.map((x) => (x.id === taskId ? { ...x, pomSecs: secs } : x)) }));
-    }
-  },
-
-  resetPomodoro: (taskId) => {
-    set((s) => ({
-      tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, pomRunning: false, pomSecs: POMODORO_WORK_SECS, pomMode: 'work' } : t)),
-    }));
-  },
-
-  skipPomodoro: (taskId) => {
-    const t = get().tasks.find((x) => x.id === taskId);
-    if (!t) return;
-    const wasWork = t.pomMode === 'work';
-    set((s) => ({
-      tasks: s.tasks.map((x) =>
-        x.id === taskId
-          ? { ...x, pomRunning: false, pomMode: wasWork ? 'break' : 'work', pomSecs: wasWork ? POMODORO_BREAK_SECS : POMODORO_WORK_SECS, pomSessions: wasWork ? (x.pomSessions || 0) + 1 : x.pomSessions }
-          : x
-      ),
-    }));
-  },
-
-  toggleHabitDay: (taskId, dayIndex) => {
-    const t = get().tasks.find((x) => x.id === taskId);
-    if (!t || !t.habitDays) return;
-    const willBeOn = !t.habitDays[dayIndex];
-    set((s) => ({
-      tasks: s.tasks.map((x) =>
-        x.id === taskId ? { ...x, habitDays: (x.habitDays || []).map((d, i) => (i === dayIndex ? willBeOn : d)) } : x
-      ),
-    }));
-    if (willBeOn) get().award(5);
-  },
-
   toggleCtxTag: (taskId, tag) => {
     set((s) => ({
       tasks: s.tasks.map((t) => {
@@ -361,28 +304,6 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         return { ...t, ctxTags: i < 0 ? [...tags, tag] : tags.filter((_, idx) => idx !== i) };
       }),
     }));
-  },
-
-  setKidStars: (taskId, stars) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, kidStars: stars } : t)) }));
-    get().award(stars * 2);
-  },
-
-  setKidDifficulty: (taskId, diff) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, kidDiff: diff } : t)) }));
-  },
-
-  updateKidReward: (taskId, text) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, kidReward: text } : t)) }));
-  },
-
-  toggleZoneDoneTask: (taskId) => {
-    const t = get().tasks.find((x) => x.id === taskId);
-    if (!t) return;
-    const willBeDone = !t.zoneDoneToday;
-    set((s) => ({ tasks: s.tasks.map((x) => (x.id === taskId ? { ...x, zoneDoneToday: willBeDone } : x)) }));
-    if (willBeDone) get().award(8);
-    void get().getActiveZones(nowHM())[0];
   },
 
   saveTask: (id, patch) => {
@@ -408,15 +329,8 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           }
           if (patch.type === 'alarm' && !next.alarmTime) next.alarmTime = '';
           if (patch.type === 'note' && !next.note) next.note = '';
-          if (patch.type === 'habit' && !next.habitDays) next.habitDays = [false, false, false, false, false, false, false];
-          if (patch.type === 'kid' && next.kidStars === undefined) {
-            next.kidStars = 0;
-            next.kidDiff = 'mid';
-            next.kidReward = '';
-          }
           if (patch.type === 'ctx' && !next.ctxTags) next.ctxTags = [];
           if (patch.type === 'negative') next.negXp = 5;
-          if (patch.type === 'zonelinked') next.zoneDoneToday = false;
         }
 
         let zid = patch.zoneId ?? null;
@@ -430,36 +344,38 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         next.zoneName = zone ? zone.nm : null;
         next.folderId = patch.folderId ?? null;
         if ('planDate' in patch) next.planDate = patch.planDate || undefined;
+        if (next.type !== t.type || next.planDate !== t.planDate) next.snoozeUntil = 0;
+        if (next.type !== 'sched') { next.schedDate = undefined; next.schedTime = undefined; }
         next.repeat = patch.repeat || 'none';
         next.repeatDays = patch.repeatDays ? patch.repeatDays.slice() : next.repeatDays;
 
         if (next.type === 'sched') {
           next.schedDate = patch.schedDate || '';
-          next.schedTime = patch.schedTime || '';
-          const today = fmtDate(new Date());
-          const nowMin = nowHM().h * 60 + nowHM().m;
-          if (next.schedDate === today && next.schedTime && toMinutes(next.schedTime) <= nowMin) {
-            const d = new Date();
-            d.setDate(d.getDate() + 1);
-            next.schedDate = fmtDate(d);
+          next.schedTime = normalizeTime(patch.schedTime) || '';
+          next.planDate = next.schedDate || undefined;
+          if (next.schedDate !== t.schedDate || next.schedTime !== t.schedTime || (patch.reminderEnabled !== false) !== (t.reminderEnabled !== false) || patch.remindBeforeMinutes !== t.remindBeforeMinutes) {
+            next.firedSched = false;
+            next.firedPre = false;
+            next.snoozeUntil = 0;
           }
-          next.firedSched = false;
-          next.firedPre = false;
         }
+        if ('reminderEnabled' in patch) next.reminderEnabled = patch.reminderEnabled;
+        if ('remindBeforeMinutes' in patch) next.remindBeforeMinutes = patch.remindBeforeMinutes;
         if (next.type === 'timewin') {
           next.windowStart = patch.windowStart || '07:00';
           next.windowEnd = patch.windowEnd || '09:00';
-          next.completedToday = false;
         }
+        next.completedToday = next.type === 'timewin' ? next.done : undefined;
+        next.zoneDoneToday = next.type === 'zonelinked' ? next.done : undefined;
         if (next.repeat === 'interval') {
           next.repeatInterval = patch.repeatInterval || 30;
           next.repeatUnit = patch.repeatUnit || 'min';
           next.repeatMs = (REPEAT_UNIT_MS[next.repeatUnit] || 60000) * next.repeatInterval;
-          next.nextRepeatAt = 0;
+          if (next.repeatMs !== t.repeatMs || t.repeat !== next.repeat) next.nextRepeatAt = next.done ? Date.now() + next.repeatMs : 0;
         }
         if (next.type === 'alarm') {
-          next.alarmTime = patch.alarmTime || '';
-          next.alarmFired = false;
+          next.alarmTime = normalizeTime(patch.alarmTime) || '';
+          if (next.alarmTime !== t.alarmTime) { next.alarmFired = false; next.snoozeUntil = 0; }
         }
         if (next.type === 'note') next.note = patch.note ?? next.note;
         if (next.type === 'counter') next.counterTarget = patch.counterTarget || 10;
@@ -479,12 +395,24 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set((s) => ({
       tasks: s.tasks.map((t) => {
         if (t.id !== id) return t;
-        if (x === 'tomorrow') {
-          const d = new Date();
-          d.setDate(d.getDate() + 1);
-          return { ...t, planDate: fmtDate(d), snoozeUntil: 0, done: false };
-        }
-        return { ...t, snoozeUntil: Date.now() + x * 60000, planDate: undefined, done: false };
+        // The editor and Android snapshot use minute precision. Round forward
+        // so the saved time is never earlier than the requested delay.
+        const d = new Date(x === 'tomorrow' ? Date.now() : Math.ceil((Date.now() + x * 60000) / 60000) * 60000);
+        if (x === 'tomorrow') d.setDate(d.getDate() + 1);
+        const day = fmtDate(d);
+        const time = x === 'tomorrow' ? normalizeTime(t.type === 'alarm' ? t.alarmTime : t.schedTime) : hmToString({ h: d.getHours(), m: d.getMinutes() });
+        const patch: Partial<Task> = {
+          planDate: day, snoozeUntil: x === 'tomorrow' ? 0 : d.getTime(), done: false,
+          completionCredited: t.completionCredited ?? t.done,
+          completionCreditDate: (t.completionCredited ?? t.done) ? (t.completionCreditDate || t.doneDate || fmtDate(new Date())) : t.completionCreditDate,
+          doneDate: undefined, doneAt: undefined, nextRepeatAt: 0,
+          completedToday: t.type === 'timewin' ? false : t.completedToday,
+          zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
+          firedSched: false, firedPre: false, alarmFired: false,
+        };
+        if (t.type === 'sched') { patch.schedDate = day; patch.schedTime = time || t.schedTime; }
+        if (t.type === 'alarm' && time) patch.alarmTime = time;
+        return { ...t, ...patch };
       }),
       xpPopup: { text: '⏳ Відкладено', tone: 'muted' },
     }));
@@ -497,18 +425,6 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   updateAlarm: (id, time) => {
     set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, alarmTime: time, alarmFired: false } : t)) }));
     // TODO: firedA.delete(tid) — Set дедуплікації, ще не перенесено (СИСТЕМА СПОВІЩЕНЬ)
-  },
-
-  updateRepeat: (id, repeat) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, repeat } : t)) }));
-  },
-
-  toggleRepeatDay: (id, dayIndex) => {
-    set((s) => ({
-      tasks: s.tasks.map((t) =>
-        t.id === id ? { ...t, repeatDays: t.repeatDays.map((d, i) => (i === dayIndex ? !d : d)) } : t
-      ),
-    }));
   },
 
   removeTag: (id, index) => {

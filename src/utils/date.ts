@@ -26,6 +26,26 @@ export function toMinutes(time: string): number {
   return h * 60 + m;
 }
 
+/** Accept legacy 9:00 values, but never let an invalid time become a reminder. */
+export function normalizeTime(value: string | null | undefined): string | undefined {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value || '');
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return undefined;
+  return match[1].padStart(2, '0') + ':' + match[2];
+}
+
+export function isDateKey(value: string | null | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + 'T12:00:00');
+  return Number.isFinite(date.getTime()) && fmtDate(date) === value;
+}
+
+export function localDateTimeMs(day: string | undefined, time: string | undefined): number | undefined {
+  const normalized = normalizeTime(time);
+  if (!isDateKey(day) || !normalized) return undefined;
+  const date = new Date(day + 'T' + normalized + ':00');
+  return Number.isFinite(date.getTime()) ? date.getTime() : undefined;
+}
+
 /** Перенесено з www/index.html, рядок 1243. Пн..Нд. */
 export const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
 

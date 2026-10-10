@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles/tokens.css';
 import './styles/global.css';
+import './styles/organizer.css';
 
 import { useStore } from './state/store';
 import { loadState, saveState, queueSave, checkBackupRecovery } from './services/persistence';

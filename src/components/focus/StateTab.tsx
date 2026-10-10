@@ -4,15 +4,18 @@ import { ULBL } from '../../state/slices/routineSlice';
 import { ENERGY_LABELS } from '../../constants';
 import PriorityPicker from '../tasks/PriorityPicker';
 import RoutineEditor from './RoutineEditor';
+import { canPrioritizeTask } from '../../utils/taskSchedule';
+import { useClock } from '../../hooks/useClock';
 
 function PrioritySlot({ index }: { index: number }) {
+  useClock();
   const tasks = useStore((s) => s.tasks);
   const priorities = useStore((s) => s.priorities);
   const clearPriority = useStore((s) => s.clearPriority);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const tid = priorities[index];
-  const t = tid ? tasks.find((x) => x.id === tid) : null;
+  const t = tid != null ? tasks.find((x) => x.id === tid && canPrioritizeTask(x)) : null;
 
   return (
     <>
@@ -54,7 +57,6 @@ function RoutineList() {
   const decRecur = useStore((s) => s.decRecur);
   const toggleRecurCheck = useStore((s) => s.toggleRecurCheck);
   const deleteRecur = useStore((s) => s.deleteRecur);
-  const addRecur = useStore((s) => s.addRecur);
 
   return (
     <div id="recur-bar">

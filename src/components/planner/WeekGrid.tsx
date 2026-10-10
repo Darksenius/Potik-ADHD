@@ -1,12 +1,14 @@
 import { useStore } from '../../state/store';
 import { getWeekStart } from '../../state/slices/plannerSlice';
 import { fmtDate, WD } from '../../utils/date';
+import { taskOccursOn } from '../../utils/taskSchedule';
 
 export default function WeekGrid() {
   const weekOffset = useStore((s) => s.planWeekOffset);
   const selectedDay = useStore((s) => s.planSelectedDay);
   const switchDay = useStore((s) => s.setPlanSelectedDay);
   const planItems = useStore((s) => s.planItems);
+  const tasks = useStore(s => s.tasks);
   const planSchedules = useStore((s) => s.planSchedules);
   const zones = useStore((s) => s.zones);
   // Підписки нижче — щоб перемалювати grid одразу при зміні розмітки зон дня
@@ -35,7 +37,7 @@ export default function WeekGrid() {
         const isRest = dayIsRest(ds);
         const items = planItems[ds] || [];
         const hasEvents = items.some((it) => it.isEvent);
-        const hasTasks = items.some((it) => !it.isEvent);
+        const hasTasks = items.some((it) => !it.isEvent) || tasks.some(t => taskOccursOn(t, ds));
         const sched = planSchedules[ds] || '';
         const zc: string[] = [];
         dayBlocks(ds).forEach((b) => {
@@ -44,8 +46,11 @@ export default function WeekGrid() {
         });
 
         return (
-          <div
+          <button
             key={ds}
+            type="button"
+            aria-label={d.toLocaleDateString('uk', { day: 'numeric', month: 'long', year: 'numeric' }) + (hasTasks ? ', є задачі' : '')}
+            aria-pressed={selectedDay === ds}
             className={'plan-day' + (isToday ? ' today' : '') + (isWE && !isRest ? ' weekend-day' : '') + (isRest ? ' rest-day' : '') + (selectedDay === ds ? ' sel' : '')}
             onClick={() => switchDay(ds)}
           >
@@ -55,11 +60,11 @@ export default function WeekGrid() {
               <div className="pd-rest">вих</div>
             ) : (
               <>
-                <div className={'pd-dot' + (hasTasks ? ' has' : '')} />
                 {hasEvents && <div style={{ fontSize: 8, marginTop: 1 }}>🎉</div>}
                 {sched && <div style={{ fontSize: 7, color: 'var(--z)', marginTop: 1 }}>{sched}</div>}
               </>
             )}
+            <div className={'pd-dot' + (hasTasks ? ' has' : '')} />
             {!!zc.length && (
               <div className="pd-zstrip">
                 {zc.slice(0, 4).map((c, idx) => (
@@ -67,7 +72,7 @@ export default function WeekGrid() {
                 ))}
               </div>
             )}
-          </div>
+          </button>
         );
       })}
     </div>

@@ -9,7 +9,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import android.net.Uri;
+import android.content.SharedPreferences;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -97,22 +100,32 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             JSONArray sched = j.optJSONArray("schedList");
             if (sched == null) return;
             long now = System.currentTimeMillis();
+            SharedPreferences delivered = context.getSharedPreferences("flow_delivered_reminders", Context.MODE_PRIVATE);
             for (int i = 0; i < sched.length(); i++) {
                 JSONObject s = sched.optJSONObject(i);
                 if (s == null) continue;
                 long due = s.optLong("dueMs", 0);
                 boolean fired = s.optBoolean("fired", false);
-                if (!fired && due > 0 && due <= now) {
-                    fireReminder(context, s.optString("id", ""), s.optString("title", "Нагадування"));
-                    // позначаємо як fired через подію (апка зафіксує в стані)
-                    pushAndNotify(context, bridge, "sched_fired:" + s.optString("id", ""));
+                String deliveryKey = "due:" + s.optString("id", "");
+                if (!fired && due > 0 && due <= now && delivered.getLong(deliveryKey, -1) != due) {
+                    if (!fireReminder(context, s.optString("id", ""), s.optString("title", "Нагадування"))) continue;
+                    // Keep delivery deduplication available when the WebView is closed.
+                    delivered.edit().putLong(deliveryKey, due).commit();
+                    // JS state is acknowledged through the durable command queue.
+                    pushAndNotify(context, bridge, "sched_fired:" + s.optString("id", "") + ":" + due);
                 }
             }
         } catch (Exception ignored) {}
     }
 
-    private void fireReminder(Context context, String id, String title) {
+    private boolean fireReminder(Context context, String id, String title) {
         createRemindChannel(context);
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null || !NotificationManagerCompat.from(context).areNotificationsEnabled()) return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = nm.getNotificationChannel(CHANNEL_REMIND);
+            if (channel == null || channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return false;
+        }
         Intent open = new Intent(context, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         open.putExtra("nav", "tasks");
@@ -130,8 +143,8 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                 .setAutoCancel(true)
                 .setContentIntent(pi);
 
-        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) nm.notify(REMIND_BASE + (id.hashCode() & 0xffff), b.build());
+        try { nm.notify("flow-task:" + id, REMIND_BASE, b.build()); return true; }
+        catch (SecurityException denied) { return false; }
     }
 
     private void createRemindChannel(Context context) {
@@ -305,6 +318,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         if (am == null) return;
         Intent i = new Intent(ctx, FlowAlarmReceiver.class);
         i.setAction(ACTION_SNOOZE);
+        i.setData(Uri.parse("flow://snooze/" + Uri.encode(id == null ? "" : id)));
         i.putExtra("snooze_id", id);
         i.putExtra("snooze_title", title);
         int fImm = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;

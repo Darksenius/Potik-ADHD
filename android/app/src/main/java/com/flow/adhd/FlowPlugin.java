@@ -9,8 +9,18 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.Manifest;
+import android.os.Build;
+import android.provider.Settings;
+import androidx.core.content.ContextCompat;
+import androidx.core.app.NotificationManagerCompat;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
-@CapacitorPlugin(name = "FlowNotif")
+@CapacitorPlugin(name = "FlowNotif", permissions = {
+    @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
+})
 public class FlowPlugin extends Plugin {
 
     private BroadcastReceiver receiver;
@@ -28,8 +38,8 @@ public class FlowPlugin extends Plugin {
                 notifyListeners("flowEvent", data);
             }
         };
-        getContext().registerReceiver(receiver,
-                new IntentFilter("com.flow.adhd.FLOW_EVENT"));
+        ContextCompat.registerReceiver(getContext(), receiver,
+                new IntentFilter("com.flow.adhd.FLOW_EVENT"), ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     /** JS викликає щоб запустити/оновити сповіщення */
@@ -50,6 +60,41 @@ public class FlowPlugin extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         FlowNotifService.stop(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void readEvents(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("events", new FlowBridge(getContext()).getEventEnvelopes());
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void notificationPermission(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean enabled = NotificationManagerCompat.from(getContext()).areNotificationsEnabled();
+        String state = enabled ? "granted" : "denied";
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") == PermissionState.PROMPT) state = "prompt";
+        ret.put("state", state);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT < 33 || getPermissionState("notifications") == PermissionState.GRANTED) {
+            notificationPermission(call);
+        } else requestPermissionForAlias("notifications", call, "notificationPermissionResult");
+    }
+
+    @PermissionCallback
+    private void notificationPermissionResult(PluginCall call) { notificationPermission(call); }
+
+    @PluginMethod
+    public void openNotificationSettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+        intent.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+        getActivity().startActivity(intent);
         call.resolve();
     }
 

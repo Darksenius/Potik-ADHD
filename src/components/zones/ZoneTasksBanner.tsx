@@ -1,6 +1,8 @@
 import { useStore } from '../../state/store';
 import { useClock } from '../../hooks/useClock';
 import { REPEAT_LABELS } from '../../constants';
+import { isTaskAvailable } from '../../utils/taskSchedule';
+import { fmtDate } from '../../utils/date';
 
 export default function ZoneTasksBanner() {
   const hm = useClock();
@@ -8,11 +10,12 @@ export default function ZoneTasksBanner() {
   useStore((s) => s.zones);
   const pz = useStore.getState().getActiveZones(hm)[0];
   const tasks = useStore((s) => s.tasks);
-  const toggleZoneDoneTask = useStore((s) => s.toggleZoneDoneTask);
+  const toggleTask = useStore((s) => s.toggleTask);
   const requestEditTask = useStore((s) => s.requestEditTask);
   const deleteTask = useStore((s) => s.deleteTask);
 
-  const linked = tasks.filter((t) => !t.trashed && !t.someday && t.type === 'zonelinked' && t.zoneId === pz.id);
+  const today = fmtDate(new Date());
+  const linked = tasks.filter((t) => (!t.done || t.doneDate === today) && isTaskAvailable(t) && t.type === 'zonelinked' && t.zoneId === pz.id);
   if (!linked.length || pz.id === 0) return null;
 
   return (
@@ -24,10 +27,10 @@ export default function ZoneTasksBanner() {
       <div className="ztb-list">
         {linked.map((t) => (
           <div className="ztb-item" key={t.id}>
-            <button className={'ztb-ck' + (t.zoneDoneToday ? ' on' : '')} onClick={() => toggleZoneDoneTask(t.id)}>
-              {t.zoneDoneToday ? '✓' : ''}
+            <button aria-label={(t.done ? 'Позначити невиконаною: ' : 'Виконати: ') + t.title} aria-pressed={t.done} className={'ztb-ck' + (t.done ? ' on' : '')} onClick={() => toggleTask(t.id)}>
+              {t.done ? '✓' : ''}
             </button>
-            <span className={'ztb-title' + (t.zoneDoneToday ? ' done-t' : '')}>{t.title}</span>
+            <span className={'ztb-title' + (t.done ? ' done-t' : '')}>{t.title}</span>
             <span className="ztb-rep">{REPEAT_LABELS[t.repeat] || ''}</span>
             <button className="ab eb" onClick={() => requestEditTask(t.id)} title="Редагувати" style={{ flexShrink: 0 }}>✎</button>
             <button className="ab del" onClick={() => deleteTask(t.id)} title="Видалити" style={{ flexShrink: 0 }}>✕</button>

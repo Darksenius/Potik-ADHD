@@ -5,6 +5,7 @@ export default function ProgressBars() {
   const hm = useClock();
   const xp = useStore((s) => s.xp);
   const level = useStore((s) => s.level);
+  const showXp = useStore((s) => s.preferences.showGamification !== false);
 
   const dayPct = Math.round(((hm.h * 60 + hm.m) / 1440) * 100);
   const xpNeeded = level * 100; // XPL(level) — рядок 1547
@@ -13,13 +14,13 @@ export default function ProgressBars() {
   return (
     <div id="prog-wrap">
       <div className="lrow">
-        <span>Прогрес дня</span>
+        <span>Минуло дня</span>
         <span className="pv" id="dpct">{dayPct}%</span>
       </div>
       <div className="ptrack">
         <div className="pfill" id="dfill" style={{ width: dayPct + '%' }} />
       </div>
-      <div style={{ marginTop: 7 }}>
+      {showXp && <div style={{ marginTop: 7 }}>
         <div className="lrow">
           <span>Досвід до рівня</span>
           <span className="pv" style={{ color: 'var(--xp)' }} id="xppct">{xp}/{xpNeeded}</span>
@@ -27,7 +28,7 @@ export default function ProgressBars() {
         <div className="ptrack">
           <div className="pfill" id="xp-fill" style={{ width: xpPct + '%' }} />
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -1,119 +1,48 @@
 import { useState } from 'react';
 import { useStore } from '../../state/store';
 import { useClock } from '../../hooks/useClock';
-import { fmtDate, toMinutes } from '../../utils/date';
-import type { Task } from '../../types';
+import { fmtDate } from '../../utils/date';
+import { isTaskAvailable, taskPlanDate } from '../../utils/taskSchedule';
 import TaskItem from './TaskItem';
 import ZoneTasksBanner from '../zones/ZoneTasksBanner';
 import TrashSection from './TrashSection';
 
-/** _appRank(t) — рядки 2179–2190. Ранжування (версія Клод). */
-function appRank(t: Task, priorityIds: number[], zoneId: number): number {
-  if (t.done) return 100;
-  const pi = priorityIds.indexOf(t.id);
-  if (pi >= 0) return pi;
-  const fired = (t.type === 'alarm' && t.alarmFired) || (t.type === 'sched' && t.firedSched);
-  if (fired) return 10;
-  if (zoneId && t.zoneId === zoneId) return 20;
-  if ((t.type === 'alarm' && !t.alarmFired) || (t.type === 'sched' && !t.firedSched)) return 45;
-  if (t.zoneId) return 50;
-  return 40;
-}
-
-export default function TasksTab() {
-  const hm = useClock();
-  const tasks = useStore((s) => s.tasks);
-  const priorities = useStore((s) => s.priorities);
-  const folders = useStore((s) => s.folders);
-  const taskFilter = useStore((s) => s.taskFilter);
-  const setTaskFilter = useStore((s) => s.setTaskFilter);
-  const showDone = useStore((s) => s.showDone);
-  const toggleShowDone = useStore((s) => s.toggleShowDone);
-  const requestNewTaskEditor = useStore((s) => s.requestNewTaskEditor);
-  const pz = useStore.getState().getActiveZones(hm)[0];
-
-  const todayStr = fmtDate(new Date());
-
-  let allTasks = tasks.filter((t) => {
-    if (t.trashed || t.someday || t.type === 'zonelinked') return false;
-    if (t.planDate && t.planDate > todayStr && !t.done) return false;
-    if (t.done && t.doneDate !== todayStr) return false;
-    if (t.snoozeUntil && Date.now() < t.snoozeUntil && !t.done) return false;
-    if (t.type === 'timewin') {
-      if (t.completedToday) return false;
-      const curMin = hm.h * 60 + hm.m;
-      const wsMin = toMinutes(t.windowStart || '00:00');
-      const weMin = toMinutes(t.windowEnd || '23:59');
-      if (curMin < wsMin || curMin > weMin) return false;
-    }
-    return true;
-  });
-
-  const doneTasks = allTasks.filter((t) => t.done);
-  let visible = showDone ? allTasks : allTasks.filter((t) => !t.done);
-
-  const prioIds = priorities.filter((x): x is number => !!x);
-  visible = visible.slice().sort((a, b) => appRank(a, prioIds, pz.id) - appRank(b, prioIds, pz.id));
-
-  if (taskFilter === 'neg') {
-    visible = visible.filter((t) => t.type === 'negative');
-  } else if (taskFilter.indexOf('f:') === 0) {
-    const fid = taskFilter.slice(2);
-    visible = visible.filter((t) => t.folderId === fid);
-  }
-
-  return (
-    <div id="tasks-sec" className="tsec active">
-      <ZoneTasksBanner />
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <div style={{ fontSize: 10, color: 'var(--t3)' }}>
-          {doneTasks.length ? '✓ ' + doneTasks.length + ' виконано' : ''}
-        </div>
-        <button
-          onClick={toggleShowDone}
-          style={{ background: 'none', border: '1px solid var(--b2)', borderRadius: 9, padding: '3px 9px', fontSize: 11, color: 'var(--t3)', cursor: 'pointer', fontFamily: "'Syne',sans-serif" }}
-        >
-          {showDone ? 'Виконані ▲' : 'Виконані (' + doneTasks.length + ') ▼'}
-        </button>
-      </div>
-
-      <div className="ctx-filter">
-        <div className={'ctxf' + (taskFilter === 'all' ? ' act' : '')} onClick={() => setTaskFilter('all')}>Всі</div>
-        {folders.map((f) => (
-          <div
-            key={f.id}
-            className={'ctxf' + (taskFilter === 'f:' + f.id ? ' act' : '')}
-            onClick={() => setTaskFilter('f:' + f.id)}
-            title={f.nm}
-          >
-            {f.ico || '📁'}
-          </div>
-        ))}
-        <div
-          className={'ctxf' + (taskFilter === 'neg' ? ' act' : '')}
-          onClick={() => setTaskFilter('neg')}
-          style={{ color: 'var(--neg)' }}
-          title="Шкідливі"
-        >
-          ⚠
-        </div>
-      </div>
-
-      <button id="add-fab" onClick={requestNewTaskEditor}>
-        <span className="plus">＋</span> Нова задача
-      </button>
-
-      <div id="tasks-list">
-        {!visible.length ? (
-          <div className="empty">
-            <div className="empty-i">📭</div>Задач немає
-          </div>
-        ) : (
-          visible.map((t) => <TaskItem key={t.id} t={t} isPriority={prioIds.indexOf(t.id) >= 0} />)
-        )}
-      </div>
-      <TrashSection />
-    </div>
-  );
+export default function TasksTab({ all = false }: { all?: boolean }) {
+  useClock();
+  const tasks = useStore(s => s.tasks);
+  const priorities = useStore(s => s.priorities);
+  const folders = useStore(s => s.folders);
+  const taskFilter = useStore(s => s.taskFilter);
+  const setTaskFilter = useStore(s => s.setTaskFilter);
+  const showDone = useStore(s => s.showDone);
+  const toggleShowDone = useStore(s => s.toggleShowDone);
+  const requestNewTaskEditor = useStore(s => s.requestNewTaskEditor);
+  const [search, setSearch] = useState('');
+  const [scope, setScope] = useState('all');
+  const [sort, setSort] = useState<'manual' | 'priority'>('manual');
+  const today = fmtDate(new Date());
+  const priorityIds = priorities.filter((id): id is number => id !== null);
+  const pool = tasks.filter(t => !t.trashed && (all || (isTaskAvailable(t) && t.type !== 'zonelinked' && (!t.done || t.doneDate === today))));
+  const doneCount = pool.filter(t => t.done).length;
+  let visible = pool.filter(t => all || showDone || !t.done);
+  if (scope === 'future') visible = visible.filter(t => (taskPlanDate(t) || '') > today && !t.done);
+  if (scope === 'undated') visible = visible.filter(t => !taskPlanDate(t) && !t.done && !t.someday);
+  if (scope === 'overdue') visible = visible.filter(t => !!taskPlanDate(t) && taskPlanDate(t)! < today && !t.done && !t.someday);
+  if (scope === 'someday') visible = visible.filter(t => t.someday);
+  if (scope === 'done') visible = visible.filter(t => t.done);
+  if (taskFilter === 'neg') visible = visible.filter(t => t.type === 'negative');
+  if (taskFilter.startsWith('f:')) visible = visible.filter(t => t.folderId === taskFilter.slice(2));
+  if (search.trim()) { const q = search.trim().toLocaleLowerCase('uk'); visible = visible.filter(t => [t.title, t.note || '', ...(t.tags || [])].join(' ').toLocaleLowerCase('uk').includes(q)); }
+  if (sort === 'priority') visible = visible.slice().sort((a, b) => { const ar = priorityIds.indexOf(a.id), br = priorityIds.indexOf(b.id); return (ar < 0 ? 100 : ar) - (br < 0 ? 100 : br); });
+  return <section id="tasks-sec" className="tsec active">
+    <div className="section-title"><h2>{all ? 'Усі задачі' : 'Сьогодні'}</h2>{!all && <button onClick={() => useStore.getState().switchTab('alltasks')}>Усі задачі</button>}</div>
+    <p className="section-hint">{all ? 'Тут можна знайти також майбутні, відкладені та зональні задачі.' : 'План на сьогодні та невиконані справи минулих днів. Без дати — у Вхідних.'}</p>
+    {!all && <ZoneTasksBanner />}
+    <button id="add-fab" onClick={() => requestNewTaskEditor(all ? undefined : today)}><span className="plus">＋</span> Нова задача</button>
+    {all && <><label className="sr-only" htmlFor="task-search">Пошук задач</label><input id="task-search" className="ei" value={search} onChange={e => setSearch(e.target.value)} placeholder="Знайти за назвою, нотаткою чи тегом" /><label className="el">Показати<select className="ei" value={scope} onChange={e => setScope(e.target.value)}><option value="all">Усі, включно з виконаними</option><option value="future">Майбутні</option><option value="undated">Без дати</option><option value="overdue">Прострочені</option><option value="someday">Колись</option><option value="done">Виконані</option></select></label></>}
+    <div className="list-options"><label>Порядок<select aria-label="Порядок задач" value={sort} onChange={e => setSort(e.target.value as typeof sort)}><option value="manual">Вручну</option><option value="priority">Пріоритети спочатку</option></select></label>{!all && <button onClick={toggleShowDone}>{showDone ? 'Сховати виконані' : `Виконані (${doneCount})`}</button>}</div>
+    <label className="task-folder-filter">Папка<select aria-label="Папка задач" value={taskFilter} onChange={e => setTaskFilter(e.target.value)}><option value="all">Усі папки</option>{folders.map(f => <option key={f.id} value={'f:' + f.id}>{f.ico || '📁'} {f.nm}</option>)}<option value="neg">Шкідливі звички</option></select></label>
+    <div id="tasks-list">{visible.length ? visible.map(t => <TaskItem key={t.id} t={t} isPriority={priorityIds.includes(t.id)} visibleIds={visible.map(task => task.id)} allowMove={sort === 'manual'} />) : <p className="empty">{search || taskFilter !== 'all' ? 'За цими умовами задач немає' : 'Задач немає'}</p>}</div>
+    <TrashSection />
+  </section>;
 }

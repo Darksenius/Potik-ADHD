@@ -2,7 +2,7 @@ import { useStore } from '../state/store';
 import { collectState, saveState } from './persistence';
 
 /** Persist domain changes, not navigation/toast state. Bounded delay also saves
- * while a Pomodoro timer is continuously updating. Flush before backgrounding. */
+ * during frequent state changes. Flush before backgrounding. */
 export function startAutosave(): () => void {
   const keys = Object.keys(collectState()).filter(k => k !== 'saveDate');
   let pending: ReturnType<typeof setTimeout> | undefined;

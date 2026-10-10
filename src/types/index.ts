@@ -48,9 +48,6 @@ export type TaskType =
   | 'alarm'       // Будильник (щоденний час)
   | 'sched'       // Заплановано (конкретні дата+час)
   | 'timewin'     // Вікно часу
-  | 'pomodoro'    // Pomodoro
-  | 'habit'       // Звичка
-  | 'kid'         // Дитяча
   | 'ctx'         // Контекст
   | 'negative'    // Шкідлива звичка (віднімає XP)
   | 'zonelinked'; // Прив'язана до зони
@@ -66,7 +63,7 @@ export interface ChecklistItem {
  * undefined), і рендер-функції по всьому коду читають `t.foo` одразу після
  * перевірки `t.type==='foo-type'`. Точне звуження на discriminated union —
  * можлива майбутня чистка (окремо від Кроку 1), але зараз пріоритет —
- * побітова сумісність із existing localStorage/Room-даними користувачів.
+ * проста модель підтримуваних типів; сумісність старих даних не вимагається.
  */
 export interface Task {
   id: number;
@@ -86,6 +83,8 @@ export interface Task {
   // done-стан
   doneDate?: string;   // "YYYY-MM-DD" (fmtDate)
   doneAt?: string;     // "HH:MM"
+  completionCredited?: boolean; // XP and cumulative completion already credited for this occurrence
+  completionCreditDate?: string; // Date key for the occurrence that earned XP and cumulative completion
   snoozeUntil?: number; // epoch ms, task_skip / відкладання
 
   // type === 'check'
@@ -109,26 +108,15 @@ export interface Task {
   schedDate?: string;   // "YYYY-MM-DD"
   schedTime?: string;   // "HH:MM"
   firedSched?: boolean;
-  firedPre?: boolean;   // передвісник "за день до" вже спрацював
+  firedPre?: boolean;   // додаткове нагадування вже спрацювало
+  reminderEnabled?: boolean;
+  /** Advance reminder in minutes; missing or 0 means no advance reminder. */
+  remindBeforeMinutes?: number;
 
   // type === 'timewin'
   windowStart?: string;
   windowEnd?: string;
   completedToday?: boolean;
-
-  // type === 'pomodoro'
-  pomSecs?: number;
-  pomMode?: 'work' | 'break';
-  pomSessions?: number;
-  pomRunning?: boolean;
-
-  // type === 'habit'
-  habitDays?: boolean[]; // 7 елементів, Пн..Нд
-
-  // type === 'kid'
-  kidStars?: number;
-  kidDiff?: 'easy' | 'mid' | 'hard';
-  kidReward?: string;
 
   // type === 'ctx'
   ctxTags?: string[];
@@ -390,6 +378,12 @@ export interface ForegroundNotifPayload {
   title: string;
 }
 
+export interface Preferences {
+  themeMode?: 'system' | 'light' | 'dark';
+  reduceMotion?: boolean;
+  showGamification?: boolean;
+}
+
 export interface AppState extends PlannerState {
   tasks: Task[];
   recur: RecurItem[];
@@ -424,6 +418,7 @@ export interface AppState extends PlannerState {
 
   notepad: string;
   theme: 'light' | 'dark';
+  preferences?: Preferences;
 
   /** Додається лише при saveState(), не є частиною логічного стану */
   saveDate?: string;

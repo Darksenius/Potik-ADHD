@@ -1,5 +1,8 @@
 import { useStore } from '../state/store';
 import { buildForegroundNotifPayload } from './notifPayload';
+import { saveState, saveIsBlocked } from '../services/persistence';
+import { fmtDate } from '../utils/date';
+import { nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -8,12 +11,13 @@ import { buildForegroundNotifPayload } from './notifPayload';
  *   - window.FlowBridge              ← android/.../FlowBridge.java (@JavascriptInterface)
  *   - window.Capacitor.Plugins.FlowNotif ← android/.../FlowPlugin.java (@CapacitorPlugin)
  *
- * Android-сторону НЕ потрібно міняти для цього рефакторингу — контракт
- * лишається побітово той самий, міняється лише те, що є ПО ЦЕЙ бік моста.
+ * Snapshot і підтвердження команд зберігаються однією Room-транзакцією.
+ * Контракт змінюється разом з Java-плагіном та перевіряється тестами.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export interface FlowBridgeNative {
   save(json: string): void;
+  saveWithEvents?(json: string, eventIds: string): boolean;
   saveNotif(notifJson: string): void;
   load(): string;
   getEvents(): string;
@@ -37,10 +41,10 @@ export interface FlowNotifPlugin {
   update(): Promise<void>;
   stop(): Promise<void>;
   drainEvents(): Promise<{ events: string }>;
-}
-
-export interface ForegroundServicePlugin {
-  stopForegroundService(opts: { id: number }): Promise<void>;
+  readEvents?: () => Promise<{ events: string }>;
+  notificationPermission?: () => Promise<{ state: string }>;
+  requestNotificationPermission?: () => Promise<{ state: string }>;
+  openNotificationSettings?: () => Promise<void>;
 }
 
 declare global {
@@ -50,7 +54,6 @@ declare global {
       isNativePlatform: () => boolean;
       Plugins: {
         FlowNotif?: FlowNotifPlugin;
-        ForegroundService?: ForegroundServicePlugin;
         [key: string]: unknown;
       };
     };
@@ -78,28 +81,21 @@ function flowNotif(): FlowNotifPlugin | undefined {
 }
 
 /**
- * handleNativeEvent() — ПОВНИЙ перенос switch-логіки, рядки 4361–4427.
- * Відрізняється від оригіналу лише тим, ЯК застосовується зміна (дії стору
- * замість прямої мутації S + виклику render-функцій) — сама логіка подій
- * 1:1. saveState()/queueSave() винесені зовні (викликач нижче), як і в
- * оригіналі (рядки 4422–4426).
+ * Applies native notification commands through the current store actions.
+ * The notification capture commands carry an explicit task or note kind.
  */
 export function handleNativeEvent(event: string | null | undefined): boolean {
   if (!event) return false;
   const store = useStore.getState();
   let changed = false;
 
-  if (event === 'done_first') {
-    const first = store.tasks.find((t) => !t.done && !t.someday);
-    if (first) {
-      store.toggleTask(first.id);
-      changed = true;
-    }
-  } else if (event.indexOf('task_done:') === 0) {
+  // Only explicit task IDs may complete tasks. The obsolete done_first event
+  // cannot safely identify which row the user saw and is deliberately ignored.
+  if (event.indexOf('task_done:') === 0) {
     const tid = event.slice(10);
     const pt = store.tasks.find((t) => String(t.id) === tid);
-    if (pt && !pt.done) {
-      store.toggleTask(pt.id);
+    if (pt && !pt.done && !pt.trashed && pt.type !== 'negative') {
+      store.setTaskDone(pt.id, true);
       changed = true;
     }
   } else if (event.indexOf('task_skip:') === 0) {
@@ -123,7 +119,13 @@ export function handleNativeEvent(event: string | null | undefined): boolean {
     useStore.getState().checkDailyReset();
     changed = true;
   } else if (event.indexOf('sched_fired:') === 0) {
-    const fid = event.slice(12);
+    const [fid, deliveredAt] = event.slice(12).split(':');
+    const occurrence = Number(deliveredAt);
+    const baseId = fid.endsWith('_pre') ? fid.slice(0, -4) : fid;
+    const task = store.tasks.find(t => String(t.id) === baseId);
+    if (!task || !Number.isFinite(occurrence) || occurrence <= 0) return false;
+    const due = nextTaskReminderAt(task, new Date(occurrence));
+    if (due === undefined || (fid.endsWith('_pre') ? taskPreReminderAt(task, due) : due) !== occurrence) return false;
     if (fid.slice(-4) === '_pre') {
       const pid = fid.slice(0, -4);
       const pt = store.tasks.find((t) => String(t.id) === pid);
@@ -142,22 +144,20 @@ export function handleNativeEvent(event: string | null | undefined): boolean {
     // Оригінал лише перемальовував список (renderTasks()) — у React це не
     // потребує явної дії, компоненти й так реагують на зміну relevant стану.
     changed = true;
+  } else if (event.indexOf('capture_task:') === 0) {
+    const title = event.slice('capture_task:'.length).trim();
+    if (!title) return false;
+    store.addQuickTaskFromShade(title);
+    changed = true;
+  } else if (event.indexOf('capture_note:') === 0) {
+    const txt = event.slice('capture_note:'.length).trim();
+    if (!txt) return false;
+    store.addQuickNote(txt, 'impulse');
+    changed = true;
   } else if (event.indexOf('note:') === 0) {
     const txt = event.slice(5).trim();
     if (!txt) return false;
-    if (txt === '...') {
-      // Було: setTimeout(() => { goToMain(); openEdit(null); }, 250) — рядок 4411
-      setTimeout(() => {
-        useStore.getState().showPage('main');
-        useStore.getState().switchTab('tasks');
-        useStore.getState().requestNewTaskEditor();
-      }, 250);
-    } else if (txt.startsWith('...')) {
-      const title = txt.slice(3).trim();
-      if (title) store.addQuickTaskFromShade(title);
-    } else {
-      store.addQuickNote(txt, 'impulse');
-    }
+    store.addQuickNote(txt, 'impulse');
     changed = true;
   }
 
@@ -169,9 +169,39 @@ export function handleNativeEvent(event: string | null | undefined): boolean {
  * «перевір чергу», ми забираємо події через Capacitor-плагін і проганяємо
  * кожну через handleNativeEvent.
  */
+let draining = false;
 export function drainNativeEvents(onChanged: () => void): void {
   const fp = flowNotif();
-  if (!fp) return;
+  const fb = flowBridge();
+  if (!fp || draining || saveIsBlocked() || useStore.getState().backupBanner) return;
+  if (fp.readEvents && fb?.saveWithEvents) {
+    draining = true;
+    fp.readEvents().then(res => {
+      const events: { id: number; event: string; createdAt: number }[] = JSON.parse(res.events);
+      if (!Array.isArray(events) || !events.length || events.some(e => !e || !Number.isSafeInteger(e.id) || e.id <= 0 || typeof e.event !== 'string' || !Number.isFinite(e.createdAt))) return;
+      const before = useStore.getState();
+      try {
+        for (const e of events) {
+          if (fmtDate(new Date(e.createdAt)) !== fmtDate(new Date()) && /^(rc_|task_done:|task_skip:)/.test(e.event)) {
+            // A stale toggle must never silently change today's reset routine.
+            const task = before.tasks.find(t => String(t.id) === e.event.split(':')[1]);
+            useStore.getState().addQuickNote('Дія зі сповіщення ' + new Date(e.createdAt).toLocaleString('uk') + ': ' + e.event + (task ? ' · ' + task.title : '') + '. Перевір і застосуй вручну: день уже змінився.', 'impulse');
+          } else handleNativeEvent(e.event);
+        }
+        if (!saveState(events.map(e => e.id))) {
+          useStore.setState(before);
+          useStore.getState().showToast('Дію зі сповіщення ще не збережено. Вона лишилася в черзі для повторної спроби.');
+          return;
+        }
+      } catch {
+        useStore.setState(before);
+        useStore.getState().showToast('Не вдалося застосувати дію зі сповіщення. Команду збережено в черзі.');
+        return;
+      }
+      onChanged();
+    }).catch(() => {}).then(() => { draining = false; });
+    return;
+  }
   fp.drainEvents()
     .then((res) => {
       if (!res || !res.events || res.events === '[]') return;
@@ -227,11 +257,21 @@ export function updateForegroundService(): void {
 export function stopForegroundService(): void {
   if (!isCapacitor() || !fgStarted) return;
   try {
-    window.Capacitor?.Plugins.ForegroundService?.stopForegroundService({ id: 1 }).catch(() => {});
+    flowNotif()?.stop().catch(() => {});
   } catch {
     /* плагін відсутній — тихо ігноруємо, як в оригіналі */
   }
   fgStarted = false;
+}
+
+export async function getNativeNotificationPermission(): Promise<string> {
+  try { return (await flowNotif()?.notificationPermission?.())?.state || 'unavailable'; } catch { return 'unavailable'; }
+}
+export async function requestNativeNotificationPermission(): Promise<string> {
+  try { return (await flowNotif()?.requestNotificationPermission?.())?.state || 'unavailable'; } catch { return 'unavailable'; }
+}
+export async function openNativeNotificationSettings(): Promise<void> {
+  try { await flowNotif()?.openNotificationSettings?.(); } catch { useStore.getState().showToast('Відкрий дозволи Потоку в налаштуваннях Android.'); }
 }
 
 /**

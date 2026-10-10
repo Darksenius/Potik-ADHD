@@ -1,9 +1,10 @@
 import { useStore } from '../state/store';
-import { collectState } from './persistence';
+import { collectState, applyState, saveState, releaseSaveGuard } from './persistence';
+import { validateBackup, sameBackupValue } from './backupValidation';
 import { flowBridge } from '../bridge/nativeBridge';
 import { fmtDate } from '../utils/date';
 import { ULBL } from '../state/slices/routineSlice';
-import type { AppState, Task, Zone, Folder, QuickNote, RecurItem, RareEvent, DayTemplate, WeekTemplate, PlanRule, PlanItem, PlanDayZoneOverride } from '../types';
+import type { Task, Zone, Folder, QuickNote, RecurItem, RareEvent, DayTemplate, WeekTemplate, PlanRule, PlanItem, PlanDayZoneOverride } from '../types';
 
 /** exportBackup() — рядки 2593-2605. ПОВНА копія (те, що читає імпорт). */
 export function exportBackupFile(): void {
@@ -177,8 +178,7 @@ export function buildAiPromptText(): string {
  * (не є дією одного slice — торкається майже всіх доменів одразу).
  */
 export function mergeState(raw: unknown): number {
-  if (!raw || typeof raw !== 'object') return 0;
-  const d = raw as Partial<AppState>;
+  const d = validateBackup(raw);
   const s = useStore.getState();
   let added = 0;
 
@@ -219,7 +219,7 @@ export function mergeState(raw: unknown): number {
   if (Array.isArray(d.tasks)) {
     d.tasks.forEach((t) => {
       if (!t || !t.title) return;
-      const ex = tasks.find((x) => x.title === t.title && (x.type || 'simple') === (t.type || 'simple') && !!x.someday === !!t.someday && !x.trashed);
+      const ex = tasks.find(x => { const { id: _oldId, ...a } = x; const { id: _newId, ...b } = t; return sameBackupValue(a, { ...b, zoneId: zid(t.zoneId) ?? t.zoneId }); });
       if (ex) {
         if (t.id !== undefined) taskMap[t.id] = ex.id;
         return;
@@ -227,7 +227,7 @@ export function mergeState(raw: unknown): number {
       const nt: Task = JSON.parse(JSON.stringify(t));
       if (t.id !== undefined) taskMap[t.id] = nid;
       nt.id = nid++;
-      nt.trashed = false;
+      // Preserve trash and completion status from the validated file.
       if (nt.zoneId) nt.zoneId = zid(nt.zoneId) ?? null;
       tasks.push(nt);
       added++;
@@ -251,7 +251,7 @@ export function mergeState(raw: unknown): number {
   if (Array.isArray(d.qnotes)) {
     d.qnotes.forEach((n) => {
       if (!n || !n.txt) return;
-      if (qnotes.some((x) => x.txt === n.txt)) return;
+      if (qnotes.some(x => x.txt === n.txt && x.date === n.date && x.time === n.time && x.folder === n.folder)) return;
       const nn: QuickNote = JSON.parse(JSON.stringify(n));
       nn.id = qnid++;
       qnotes.push(nn);
@@ -398,20 +398,41 @@ export function mergeState(raw: unknown): number {
   return added;
 }
 
-/** importPickedFile() — рядки 2847-2865, без DOM/alert (те — робота компонента). */
-export function importFromFile(file: File): Promise<number> {
+export const IMPORT_ROLLBACK_KEY = 'flow_v2_before_import';
+export function importState(raw: unknown, mode: 'merge' | 'restore'): number {
+  const parsed = validateBackup(raw);
+  const before = JSON.stringify(collectState());
+  try { localStorage.setItem(IMPORT_ROLLBACK_KEY, before); }
+  catch { throw new Error('Немає місця для копії перед імпортом. Звільни місце й повтори. Наявні дані не змінено.'); }
+  let count: number;
+  if (mode === 'restore') {
+    if (!applyState(parsed, true)) throw new Error('Некоректна резервна копія.');
+    count = (parsed.tasks || []).length;
+  } else count = mergeState(parsed);
+  releaseSaveGuard();
+  useStore.getState().dismissBackupBanner();
+  useStore.getState().recalculateZoneUsage();
+  if (!saveState()) {
+    applyState(JSON.parse(before), true);
+    throw new Error('Не вдалося зберегти імпорт. Попередній стан повернуто.');
+  }
+  return count;
+}
+export function rollbackLastImport(): boolean {
+  const raw = localStorage.getItem(IMPORT_ROLLBACK_KEY);
+  if (!raw) return false;
+  const current = JSON.stringify(collectState());
+  if (!applyState(JSON.parse(raw), true)) return false;
+  if (!saveState()) { applyState(JSON.parse(current), true); return false; }
+  localStorage.setItem(IMPORT_ROLLBACK_KEY, current);
+  return true;
+}
+export function importFromFile(file: File, mode: 'merge' | 'restore' = 'merge'): Promise<number> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      let d: unknown = null;
-      try {
-        d = JSON.parse(String(e.target?.result));
-      } catch {
-        reject(new Error('Не вдалося прочитати файл. Потрібен JSON-файл експорту Потік (flow-backup-*.json).'));
-        return;
-      }
-      const added = mergeState(d);
-      resolve(added);
+    reader.onload = e => {
+      try { resolve(importState(JSON.parse(String(e.target?.result)), mode)); }
+      catch (error) { reject(error instanceof Error ? error : new Error('Не вдалося прочитати резервну копію.')); }
     };
     reader.onerror = () => reject(new Error('Помилка читання файлу'));
     reader.readAsText(file);

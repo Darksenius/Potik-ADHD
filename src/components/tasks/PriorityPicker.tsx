@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../state/store';
 import { TASK_TYPE_LABELS } from '../../constants';
 import Modal from '../common/Modal';
+import { canPrioritizeTask } from '../../utils/taskSchedule';
 
 export default function PriorityPicker({ slot, onClose }: { slot: number; onClose: () => void }) {
   const [query, setQuery] = useState('');
@@ -11,11 +12,12 @@ export default function PriorityPicker({ slot, onClose }: { slot: number; onClos
 
   const q = query.toLowerCase();
   const filtered = tasks.filter(
-    (t) => !t.trashed && !t.someday && t.type !== 'negative' && t.type !== 'zonelinked' && (!q || t.title.toLowerCase().includes(q))
+    (t) => canPrioritizeTask(t) && (!q || t.title.toLowerCase().includes(q))
   );
 
   return (
     <Modal title={`Пріоритет #${slot + 1}`} onClose={onClose}>
+      <p className="section-hint">Обери невиконану справу зі «Сьогодні». Справі з Вхідних спочатку признач день.</p>
       <input
         type="text"
         value={query}
