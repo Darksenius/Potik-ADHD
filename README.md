@@ -43,6 +43,8 @@ cd android && ./gradlew assembleDebug
 Для Android задайте `ANDROID_HOME` і JDK 21 через `JAVA_HOME`.
 Автоматичного копіювання APK в особисту папку немає. За потреби явно задайте Gradle `-PflowApkOutput=<directory>`.
 
+[Порядок розробки та перевірок](docs/WORKFLOW.md).
+
 ## Ліцензія
 
 [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
