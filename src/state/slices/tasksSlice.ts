@@ -18,6 +18,7 @@ export interface TasksSlice {
 
   createTask: (title: string, type: TaskType, zoneId?: number | null, alarmTime?: string) => Task;
   toggleTask: (id: number) => void;
+  setTaskDone: (id: number, done: boolean) => void;
   skipTask: (id: number) => void;
   toSomeday: (id: number) => void;
   fromSomeday: (id: number) => void;
@@ -38,8 +39,6 @@ export interface TasksSlice {
   changeCounter: (taskId: number, delta: number) => void;
   updateCounterTarget: (taskId: number, target: number) => void;
   toggleCtxTag: (taskId: number, tag: string) => void;
-  toggleZoneDoneTask: (taskId: number) => void;
-
   saveTask: (id: number | null, patch: Partial<Task> & { title: string; type: TaskType }) => number;
   /** efSnooze(x) — рядки 2402–2411. x='tomorrow' або хвилини. */
   snoozeTask: (id: number, x: 'tomorrow' | number) => void;
@@ -95,7 +94,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   toggleTask: (id) => {
     const t = get().tasks.find((x) => x.id === id);
-    if (!t) return;
+    if (!t || t.trashed) return;
 
     if (t.type === 'negative') {
       set((s) => ({
@@ -106,24 +105,40 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       return;
     }
 
-    const willBeDone = !t.done;
+    get().setTaskDone(id, !t.done);
+  },
+
+  setTaskDone: (id, done) => {
+    const t = get().tasks.find((x) => x.id === id);
+    if (!t || t.trashed || t.type === 'negative' || t.done === done) return;
+    const shouldCredit = done && !t.completionCredited;
+    const now = new Date();
+    const completionCredited = done ? true : (t.completionCredited ?? t.done);
+    const completionCreditDate = done
+      ? (shouldCredit ? fmtDate(now) : t.completionCreditDate)
+      : (completionCredited ? (t.completionCreditDate || t.doneDate || fmtDate(now)) : t.completionCreditDate);
     set((s) => ({
       tasks: s.tasks.map((x) => {
         if (x.id !== id) return x;
-        const updated: Task = { ...x, done: willBeDone };
-        if (x.type === 'timewin' && willBeDone) updated.completedToday = true;
-        if (willBeDone) {
-          updated.doneDate = fmtDate(new Date());
-          updated.doneAt = new Date().toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
+        const updated: Task = { ...x, done, completionCredited, completionCreditDate };
+        if (x.type === 'timewin') updated.completedToday = done;
+        if (x.type === 'zonelinked') updated.zoneDoneToday = done;
+        if (done) {
+          updated.doneDate = fmtDate(now);
+          updated.doneAt = now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
           updated.snoozeUntil = 0;
-          if (x.repeat === 'interval' && x.repeatMs) updated.nextRepeatAt = Date.now() + x.repeatMs;
+          updated.nextRepeatAt = x.repeat === 'interval' && x.repeatMs ? Date.now() + x.repeatMs : 0;
+        } else {
+          updated.doneDate = undefined;
+          updated.doneAt = undefined;
+          updated.nextRepeatAt = 0;
         }
         return updated;
       }),
-      priorities: willBeDone ? s.priorities.map((pid) => (pid === id ? null : pid)) : s.priorities,
+      priorities: done ? s.priorities.map((pid) => (pid === id ? null : pid)) : s.priorities,
     }));
 
-    if (willBeDone) {
+    if (shouldCredit) {
       get().incrementDoneCount();
       get().award(TASK_XP[t.type] ?? 10);
     }
@@ -142,7 +157,14 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   toSomeday: (id) => {
     set((s) => ({
-      tasks: s.tasks.map((x) => (x.id === id ? { ...x, someday: true, done: false } : x)),
+      tasks: s.tasks.map((x) => (x.id === id ? {
+        ...x, someday: true, done: false,
+        completionCredited: x.completionCredited ?? x.done,
+        completionCreditDate: (x.completionCredited ?? x.done) ? (x.completionCreditDate || x.doneDate || fmtDate(new Date())) : x.completionCreditDate,
+        doneDate: undefined, doneAt: undefined, nextRepeatAt: 0,
+        completedToday: x.type === 'timewin' ? false : x.completedToday,
+        zoneDoneToday: x.type === 'zonelinked' ? false : x.zoneDoneToday,
+      } : x)),
       priorities: s.priorities.map((pid) => (pid === id ? null : pid)),
       xpPopup: { text: '→ Колись', tone: 'muted' },
     }));
@@ -217,7 +239,13 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const t = get().tasks.find((x) => x.id === id);
     if (!t) return;
     const nid = get().nid;
-    const copy: Task = { ...JSON.parse(JSON.stringify(t)), id: nid, done: false, expanded: false, title: t.title + ' (копія)' };
+    const copy: Task = {
+      ...JSON.parse(JSON.stringify(t)), id: nid, done: false, completionCredited: false,
+      completionCreditDate: undefined, doneDate: undefined, doneAt: undefined, nextRepeatAt: 0, snoozeUntil: 0,
+      completedToday: t.type === 'timewin' ? false : t.completedToday,
+      zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
+      expanded: false, title: t.title + ' (копія)',
+    };
     set((s) => {
       const idx = s.tasks.findIndex((x) => x.id === id);
       const tasks = s.tasks.slice();
@@ -278,15 +306,6 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     }));
   },
 
-  toggleZoneDoneTask: (taskId) => {
-    const t = get().tasks.find((x) => x.id === taskId);
-    if (!t) return;
-    const willBeDone = !t.zoneDoneToday;
-    set((s) => ({ tasks: s.tasks.map((x) => (x.id === taskId ? { ...x, zoneDoneToday: willBeDone } : x)) }));
-    if (willBeDone) get().award(8);
-    void get().getActiveZones(nowHM())[0];
-  },
-
   saveTask: (id, patch) => {
     const isNew = id == null;
     let taskId = id as number;
@@ -312,7 +331,6 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           if (patch.type === 'note' && !next.note) next.note = '';
           if (patch.type === 'ctx' && !next.ctxTags) next.ctxTags = [];
           if (patch.type === 'negative') next.negXp = 5;
-          if (patch.type === 'zonelinked') next.zoneDoneToday = false;
         }
 
         let zid = patch.zoneId ?? null;
@@ -346,8 +364,9 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         if (next.type === 'timewin') {
           next.windowStart = patch.windowStart || '07:00';
           next.windowEnd = patch.windowEnd || '09:00';
-          next.completedToday = false;
         }
+        next.completedToday = next.type === 'timewin' ? next.done : undefined;
+        next.zoneDoneToday = next.type === 'zonelinked' ? next.done : undefined;
         if (next.repeat === 'interval') {
           next.repeatInterval = patch.repeatInterval || 30;
           next.repeatUnit = patch.repeatUnit || 'min';
@@ -382,7 +401,15 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         if (x === 'tomorrow') d.setDate(d.getDate() + 1);
         const day = fmtDate(d);
         const time = x === 'tomorrow' ? normalizeTime(t.type === 'alarm' ? t.alarmTime : t.schedTime) : hmToString({ h: d.getHours(), m: d.getMinutes() });
-        const patch: Partial<Task> = { planDate: day, snoozeUntil: x === 'tomorrow' ? 0 : d.getTime(), done: false, doneDate: undefined, doneAt: undefined, firedSched: false, firedPre: false, alarmFired: false };
+        const patch: Partial<Task> = {
+          planDate: day, snoozeUntil: x === 'tomorrow' ? 0 : d.getTime(), done: false,
+          completionCredited: t.completionCredited ?? t.done,
+          completionCreditDate: (t.completionCredited ?? t.done) ? (t.completionCreditDate || t.doneDate || fmtDate(new Date())) : t.completionCreditDate,
+          doneDate: undefined, doneAt: undefined, nextRepeatAt: 0,
+          completedToday: t.type === 'timewin' ? false : t.completedToday,
+          zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
+          firedSched: false, firedPre: false, alarmFired: false,
+        };
         if (t.type === 'sched') { patch.schedDate = day; patch.schedTime = time || t.schedTime; }
         if (t.type === 'alarm' && time) patch.alarmTime = time;
         return { ...t, ...patch };

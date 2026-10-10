@@ -169,7 +169,11 @@ test('legacy saved state keeps task details, notes, statistics and planner data'
 test('midnight resets daily tasks and routine while preserving one-off completion', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-16T23:59:50+03:00') });
   await page.addInitScript(data => localStorage.setItem('flow_v2', JSON.stringify(data)), {
-    saveDate: 'Wed Sep 16 2026', tasks: [task(401, 'Щодня', { done: true, doneDate: '2026-09-16', repeat: 'daily' }), task(402, 'Разова', { done: true, doneDate: '2026-09-16' })],
+    saveDate: 'Wed Sep 16 2026', tasks: [
+      task(401, 'Щодня', { done: true, doneDate: '2026-09-16', repeat: 'daily' }),
+      task(402, 'Разова', { done: true, doneDate: '2026-09-16' }),
+      task(403, 'Часове вікно', { type: 'timewin', done: true, completedToday: true, completionCredited: true, completionCreditDate: '2026-09-16', doneDate: '2026-09-16', doneAt: '10:00', nextRepeatAt: 1, windowStart: '00:00', windowEnd: '23:59' }),
+    ],
     recur: [{ id: 'water', nm: 'Вода', val: 4, done: true, unit: 'count', step: 1, color: '#fff' }],
   });
   await page.goto('/');
@@ -177,6 +181,11 @@ test('midnight resets daily tasks and routine while preserving one-off completio
   await expect(page.locator('.tt').filter({ hasText: 'Щодня' })).toBeVisible();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(saved.tasks.find((t: any) => t.id === 402).done).toBe(true);
+  const window = saved.tasks.find((t: any) => t.id === 403);
+  expect(window).toMatchObject({ done: false, completedToday: false, completionCredited: false, nextRepeatAt: 0 });
+  expect(window.doneDate).toBeUndefined();
+  expect(window.doneAt).toBeUndefined();
+  expect(window.completionCreditDate).toBeUndefined();
   expect(saved.recur[0]).toMatchObject({ val: 0, done: false });
 });
 

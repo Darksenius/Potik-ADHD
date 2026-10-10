@@ -94,8 +94,8 @@ export function handleNativeEvent(event: string | null | undefined): boolean {
   if (event.indexOf('task_done:') === 0) {
     const tid = event.slice(10);
     const pt = store.tasks.find((t) => String(t.id) === tid);
-    if (pt && !pt.done) {
-      store.toggleTask(pt.id);
+    if (pt && !pt.done && !pt.trashed && pt.type !== 'negative') {
+      store.setTaskDone(pt.id, true);
       changed = true;
     }
   } else if (event.indexOf('task_skip:') === 0) {

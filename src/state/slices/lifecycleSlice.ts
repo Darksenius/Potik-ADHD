@@ -31,11 +31,25 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
     const ds = fmtDate(dt);
     set((s) => ({
       tasks: s.tasks.map((t) => {
-        if (!t.done || t.trashed) return t;
+        if (t.trashed) return t;
         if (!t.repeat || t.repeat === 'none' || t.repeat === 'everyzone') return t;
-        if (t.repeat !== 'interval' && t.doneDate === ds) return t; // вже виконано саме сьогодні — не чіпати
+        if (!t.done) {
+          const anchor = taskPlanDate(t);
+          const creditDue = t.repeat !== 'interval'
+            && !t.someday
+            && !!t.completionCredited
+            && !!t.completionCreditDate
+            && t.completionCreditDate < ds
+            && (!anchor || anchor <= ds)
+            && repeatDueOn(t, dt);
+          if (!creditDue) return t;
+          return { ...t, completionCredited: false, completionCreditDate: undefined };
+        }
+        if (t.repeat !== 'interval' && t.doneDate && t.doneDate >= ds) return t; // дата виконання сьогодні або в майбутньому — не скидати
         if (!repeatDueOn(t, dt)) return t; // сьогодні не за графіком — лишити як є
-        const next: Task = { ...t, done: false, doneDate: '', doneAt: undefined, alarmFired: false, firedSched: false, firedPre: false, nextRepeatAt: 0 };
+        const next: Task = { ...t, done: false, completionCredited: false, completionCreditDate: undefined, doneDate: '', doneAt: undefined, alarmFired: false, firedSched: false, firedPre: false, nextRepeatAt: 0 };
+        if (next.type === 'timewin') next.completedToday = false;
+        if (next.type === 'zonelinked') next.zoneDoneToday = false;
         if (next.type === 'sched' && taskPlanDate(next) && taskPlanDate(next)! <= ds) { next.schedDate = ds; next.planDate = ds; }
         if (next.type === 'counter') next.cntHit = false;
         if (Array.isArray(next.items)) next.items = next.items.map((it) => ({ ...it, done: false }));
@@ -53,10 +67,14 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
         tasks: s.tasks.map((t) => {
           if (t.type !== 'zonelinked' && t.type !== 'timewin' && t.type !== 'sched' && t.type !== 'alarm') return t;
           const next = { ...t };
-          if (next.type === 'zonelinked') next.zoneDoneToday = false;
           if (next.type === 'timewin') {
             next.completedToday = false;
             next.done = false;
+            next.completionCredited = false;
+            next.completionCreditDate = undefined;
+            next.doneDate = undefined;
+            next.doneAt = undefined;
+            next.nextRepeatAt = 0;
           }
           if (next.type === 'sched') next.firedSched = false;
           if (next.type === 'alarm') next.alarmFired = false;
@@ -80,10 +98,14 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
       tasks: s.tasks.map((t) => {
         if (t.type !== 'zonelinked' && t.type !== 'timewin' && t.type !== 'sched' && t.type !== 'alarm') return t;
         const next = { ...t };
-        if (next.type === 'zonelinked') next.zoneDoneToday = false;
         if (next.type === 'timewin') {
           next.completedToday = false;
           next.done = false;
+          next.completionCredited = false;
+          next.completionCreditDate = undefined;
+          next.doneDate = undefined;
+          next.doneAt = undefined;
+          next.nextRepeatAt = 0;
         }
         if (next.type === 'sched') next.firedSched = false;
         if (next.type === 'alarm') next.alarmFired = false; // щоденний будильник знову спрацює

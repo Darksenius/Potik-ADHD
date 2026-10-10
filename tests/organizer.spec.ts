@@ -216,15 +216,17 @@ test('moving a task reorders visible neighbors across hidden Inbox and future ta
   await expect(page.locator('#inbox-sec .tt')).toHaveText('Ще не запланована');
 });
 
-test('active zone cannot expose future, snoozed or completed tasks in Today banner', async ({ page }) => {
+test('active zone hides unavailable tasks and keeps today completion available for undo', async ({ page }) => {
   const zone = { id: 88, nm: 'Тестова зона', color: '#3388ff', slots: [{ s: '00:00', e: '23:59' }], active: true };
   await boot(page, { weekTplSeeded: true, zones: [zone], tasks: [
     task(1, 'Зараз у зоні', { type: 'zonelinked', zoneId: 88, planDate: '2026-10-08' }),
     task(2, 'Завтра у зоні', { type: 'zonelinked', zoneId: 88, planDate: '2026-10-09' }),
     task(3, 'Відкладена зона', { type: 'zonelinked', zoneId: 88, snoozeUntil: 2000000000000 }),
     task(4, 'Виконана зона', { type: 'zonelinked', zoneId: 88, done: true, doneDate: '2026-10-08' }),
+    task(5, 'Вчора виконана зона', { type: 'zonelinked', zoneId: 88, done: true, doneDate: '2026-10-07' }),
   ] });
-  await expect(page.locator('#zone-tasks-banner .ztb-title')).toHaveText(['Зараз у зоні']);
+  await expect(page.locator('#zone-tasks-banner .ztb-title')).toHaveText(['Зараз у зоні', 'Виконана зона']);
+  await expect(page.getByRole('button', { name: 'Позначити невиконаною: Виконана зона', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('priority picker offers only actionable Today tasks and hides a priority after moving it', async ({ page }) => {

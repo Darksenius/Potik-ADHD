@@ -67,7 +67,9 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   notifPool.sort((a, b) => notifRank(a) - notifRank(b));
   const topN = notifPool.slice(0, 7);
   const taskLines = topN.map((t) => t.title).join('|');
-  const taskList = topN.map((t) => ({ id: t.id, title: t.title, type: t.type || 'simple', counter: t.counter || 0, counterTarget: t.counterTarget || 10 }));
+  // Journal entries record an event, rather than completing a task. Do not
+  // offer the native "Done" action for them.
+  const taskList = topN.filter(t => t.type !== 'negative').map((t) => ({ id: t.id, title: t.title, type: t.type || 'simple', counter: t.counter || 0, counterTarget: t.counterTarget || 10 }));
 
   const routineParts: string[] = [];
   s.recur.forEach((r) => {

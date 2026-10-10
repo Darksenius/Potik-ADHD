@@ -83,6 +83,8 @@ export interface Task {
   // done-стан
   doneDate?: string;   // "YYYY-MM-DD" (fmtDate)
   doneAt?: string;     // "HH:MM"
+  completionCredited?: boolean; // XP and cumulative completion already credited for this occurrence
+  completionCreditDate?: string; // Date key for the occurrence that earned XP and cumulative completion
   snoozeUntil?: number; // epoch ms, task_skip / відкладання
 
   // type === 'check'

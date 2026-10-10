@@ -32,7 +32,7 @@ const ruleDay = shape({ tplId: str, rest: bool }, [], { tplId: '', rest: false }
 const task = shape({
   id, title: str, type: oneOf(['simple', 'check', 'counter', 'note', 'alarm', 'sched', 'timewin', 'ctx', 'negative', 'zonelinked']),
   done: bool, someday: bool, zoneId: nullable(id), zoneColor: nullable(str), zoneName: nullable(str), folderId: nullable(str),
-  expanded: bool, created: str, trashed: bool, doneDate: str, doneAt: str, snoozeUntil: num,
+  expanded: bool, created: str, trashed: bool, doneDate: str, doneAt: str, completionCredited: bool, completionCreditDate: str, snoozeUntil: num,
   items: array(shape({ text: str, done: bool }, ['text'], { done: false })),
   counter: num, counterTarget: num, cntHit: bool, negXp: num, note: str, alarmTime: str, alarmFired: bool,
   schedDate: str, schedTime: str, firedSched: bool, firedPre: bool, reminderEnabled: bool, remindBeforeMinutes: num, windowStart: str, windowEnd: str, completedToday: bool,
