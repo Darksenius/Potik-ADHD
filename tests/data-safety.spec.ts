@@ -69,7 +69,7 @@ test('Inbox capture is excluded from Android daily snapshot until planned, simpl
 });
 
 test('native capture, Today priority and moving day share the same eligibility without implicit completion', () => {
-  expect(handleNativeEvent('note:...Зателефонувати майстру')).toBe(true);
+  expect(handleNativeEvent('capture_task:Зателефонувати майстру')).toBe(true);
   const captured = useStore.getState().tasks[0];
   useStore.getState().setPriority(0, captured.id);
   expect(useStore.getState().priorities).toEqual([null, null, null]);

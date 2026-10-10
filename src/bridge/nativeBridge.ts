@@ -81,11 +81,8 @@ function flowNotif(): FlowNotifPlugin | undefined {
 }
 
 /**
- * handleNativeEvent() — ПОВНИЙ перенос switch-логіки, рядки 4361–4427.
- * Відрізняється від оригіналу лише тим, ЯК застосовується зміна (дії стору
- * замість прямої мутації S + виклику render-функцій) — сама логіка подій
- * 1:1. saveState()/queueSave() винесені зовні (викликач нижче), як і в
- * оригіналі (рядки 4422–4426).
+ * Applies native notification commands through the current store actions.
+ * The notification capture commands carry an explicit task or note kind.
  */
 export function handleNativeEvent(event: string | null | undefined): boolean {
   if (!event) return false;
@@ -147,22 +144,20 @@ export function handleNativeEvent(event: string | null | undefined): boolean {
     // Оригінал лише перемальовував список (renderTasks()) — у React це не
     // потребує явної дії, компоненти й так реагують на зміну relevant стану.
     changed = true;
+  } else if (event.indexOf('capture_task:') === 0) {
+    const title = event.slice('capture_task:'.length).trim();
+    if (!title) return false;
+    store.addQuickTaskFromShade(title);
+    changed = true;
+  } else if (event.indexOf('capture_note:') === 0) {
+    const txt = event.slice('capture_note:'.length).trim();
+    if (!txt) return false;
+    store.addQuickNote(txt, 'impulse');
+    changed = true;
   } else if (event.indexOf('note:') === 0) {
     const txt = event.slice(5).trim();
     if (!txt) return false;
-    if (txt === '...') {
-      // Було: setTimeout(() => { goToMain(); openEdit(null); }, 250) — рядок 4411
-      setTimeout(() => {
-        useStore.getState().showPage('main');
-        useStore.getState().switchTab('inbox');
-        useStore.getState().requestNewTaskEditor();
-      }, 250);
-    } else if (txt.startsWith('...')) {
-      const title = txt.slice(3).trim();
-      if (title) { store.addQuickTaskFromShade(title); store.showToast('Додано у Вхідні'); }
-    } else {
-      store.addQuickNote(txt, 'impulse');
-    }
+    store.addQuickNote(txt, 'impulse');
     changed = true;
   }
 

@@ -153,9 +153,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   },
 
   addQuickTaskFromShade: (title) => {
-    const task = get().createTask(title, 'simple', null, '');
-    get().award(10);
-    return void task;
+    get().createTask(title, 'simple', null, '');
   },
 
   markScheduledFired: (id) => {

@@ -29,7 +29,8 @@ public class FlowNotifService extends Service {
     public static final String GROUP_RC         = "com.flow.adhd.GROUP_RC";
 
     public static final String ACTION_DONE       = "com.flow.adhd.ACTION_DONE";
-    public static final String ACTION_NOTE       = "com.flow.adhd.ACTION_NOTE";
+    public static final String ACTION_CAPTURE_TASK = "com.flow.adhd.ACTION_CAPTURE_TASK";
+    public static final String ACTION_CAPTURE_NOTE = "com.flow.adhd.ACTION_CAPTURE_NOTE";
     public static final String ACTION_SHOW_TASKS = "com.flow.adhd.ACTION_SHOW_TASKS";
     public static final String ACTION_SHOW_RC    = "com.flow.adhd.ACTION_SHOW_RC";
     public static final String ACTION_TASK_DONE  = "com.flow.adhd.ACTION_TASK_DONE";
@@ -40,6 +41,7 @@ public class FlowNotifService extends Service {
     public static final String ACTION_DISMISS    = "com.flow.adhd.ACTION_DISMISS";
 
     public static final String KEY_NOTE  = "flow_note_input";
+    public static final String KEY_TASK  = "flow_task_input";
     public static final String EXTRA_ID  = "flow_item_id";
     public static final String EXTRA_KIND = "flow_kind"; // "tasks" | "rc"
     public static final String FLOW_EVENT = "com.flow.adhd.FLOW_EVENT";
@@ -51,6 +53,8 @@ public class FlowNotifService extends Service {
     private FlowBridge bridge;
     private Handler    handler;
     private int        lastZoneColor = COLOR_FLOW;
+    private String     captureReceipt = "";
+    private long       captureReceiptAt = 0L;
 
     @Override
     public void onCreate() {
@@ -79,12 +83,23 @@ public class FlowNotifService extends Service {
                 rebuildFromDb();
                 break;
 
-            case ACTION_NOTE: {
+            case ACTION_CAPTURE_TASK:
+            case ACTION_CAPTURE_NOTE: {
                 Bundle results = RemoteInput.getResultsFromIntent(intent);
-                if (results != null) {
-                    CharSequence txt = results.getCharSequence(KEY_NOTE);
-                    if (txt != null && txt.length() > 0)
-                        pushAndNotify("note:" + txt.toString());
+                boolean isTask = ACTION_CAPTURE_TASK.equals(action);
+                CharSequence txt = results == null ? null : results.getCharSequence(isTask ? KEY_TASK : KEY_NOTE);
+                String value = txt == null ? "" : txt.toString().trim();
+                if (value.isEmpty()) {
+                    setCaptureReceipt(isTask ? "Введи текст задачі" : "Введи текст нотатки");
+                } else {
+                    try {
+                        String event = (isTask ? "capture_task:" : "capture_note:") + value;
+                        bridge.pushEvent(event);
+                        setCaptureReceipt(isTask ? "Запис задачі збережено" : "Нотатку збережено");
+                        broadcastEvent(event);
+                    } catch (Exception e) {
+                        setCaptureReceipt("Не вдалося зберегти запис");
+                    }
                 }
                 rebuildFromDb();
                 break;
@@ -276,6 +291,8 @@ public class FlowNotifService extends Service {
         NotificationCompat.InboxStyle inbox = new NotificationCompat.InboxStyle();
         inbox.setBigContentTitle(title);
         inbox.setSummaryText(time.isEmpty() ? "Потік" : "Потік  " + time);
+        String receipt = activeCaptureReceipt();
+        if (!receipt.isEmpty()) inbox.addLine(receipt);
         if (desc != null && !desc.isEmpty()) {
             inbox.addLine(desc);
             inbox.addLine("─────────────────────────");
@@ -304,7 +321,7 @@ public class FlowNotifService extends Service {
                 .setSmallIcon(R.drawable.ic_notification)
                 .setColor(lastZoneColor)
                 .setContentTitle(title)
-                .setContentText(text)
+                .setContentText(receipt.isEmpty() ? text : receipt)
                 .setSubText("Потік")
                 .setContentIntent(openPI)
                 .setOngoing(true)
@@ -313,9 +330,9 @@ public class FlowNotifService extends Service {
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setStyle(inbox)
-                .addAction(buildNoteAction())
-                .addAction(actionService(android.R.drawable.ic_menu_agenda, "☑ Задачі", ACTION_SHOW_TASKS, 3))
-                .addAction(actionService(android.R.drawable.ic_menu_rotate, "🔁 Рутина", ACTION_SHOW_RC, 4));
+                .addAction(buildCaptureAction(KEY_TASK, "+ Задача", "Назва задачі", ACTION_CAPTURE_TASK, 2))
+                .addAction(buildCaptureAction(KEY_NOTE, "+ Нотатка", "Текст нотатки", ACTION_CAPTURE_NOTE, 4))
+                .addAction(actionService(android.R.drawable.ic_menu_agenda, "☑ Задачі", ACTION_SHOW_TASKS, 3));
 
         if (total > 0) b.setProgress(100, done * 100 / total, false);
 
@@ -374,7 +391,8 @@ public class FlowNotifService extends Service {
                 .setGroupSummary(true)
                 .setSilent(true)
                 .setAutoCancel(true)
-                .setTimeoutAfter(TEMP_MS);
+                .setTimeoutAfter(TEMP_MS)
+                .addAction(actionService(android.R.drawable.ic_menu_rotate, "🔁 Рутина", ACTION_SHOW_RC, 4));
         nm.notify(NOTIF_TASK_BASE + 100, summary.build());
         scheduleTempCancel(NOTIF_TASK_BASE + 100);
     }
@@ -502,6 +520,9 @@ public class FlowNotifService extends Service {
                 .setAutoCancel(true)
                 .setTimeoutAfter(TEMP_MS)
                 .setContentIntent(openTasksPI());
+        if (GROUP_TASKS.equals(group)) {
+            b.addAction(actionService(android.R.drawable.ic_menu_rotate, "🔁 Рутина", ACTION_SHOW_RC, 4));
+        }
         nm.notify(notifId, b.build());
     }
 
@@ -524,10 +545,14 @@ public class FlowNotifService extends Service {
      */
     private void pushAndNotify(String event) {
         bridge.pushEvent(event);
+        broadcastEvent(event);
+    }
+
+    private void broadcastEvent(String event) {
         Intent b = new Intent(FLOW_EVENT);
         b.putExtra("event", event);
         b.setPackage(getPackageName());
-        sendBroadcast(b);
+        try { sendBroadcast(b); } catch (Exception ignored) { /* Room already holds the durable command. */ }
     }
 
     private PendingIntent openTasksPI() {
@@ -538,20 +563,38 @@ public class FlowNotifService extends Service {
                 flagImmutable() | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
-    private NotificationCompat.Action buildNoteAction() {
-        RemoteInput remoteInput = new RemoteInput.Builder(KEY_NOTE)
-                .setLabel("... задача або нотатка")
+    private NotificationCompat.Action buildCaptureAction(String inputKey, String actionLabel, String inputLabel, String action, int requestCode) {
+        RemoteInput remoteInput = new RemoteInput.Builder(inputKey)
+                .setLabel(inputLabel)
                 .build();
-        Intent noteIntent = new Intent(this, FlowNotifService.class);
-        noteIntent.setAction(ACTION_NOTE);
-        PendingIntent notePI = PendingIntent.getService(
-                this, 2, noteIntent, flagMutable() | PendingIntent.FLAG_UPDATE_CURRENT);
+        Intent captureIntent = new Intent(this, FlowNotifService.class);
+        captureIntent.setAction(action);
+        PendingIntent capturePI = PendingIntent.getService(
+                this, requestCode, captureIntent, flagMutable() | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Action.Builder(
-                android.R.drawable.ic_menu_send, "⚡ Нотатка", notePI)
+                android.R.drawable.ic_menu_send, actionLabel, capturePI)
                 .addRemoteInput(remoteInput)
                 .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
                 .setShowsUserInterface(false)
                 .build();
+    }
+
+    private void setCaptureReceipt(String receipt) {
+        captureReceipt = receipt;
+        captureReceiptAt = android.os.SystemClock.elapsedRealtime();
+        handler.postDelayed(() -> {
+            if (android.os.SystemClock.elapsedRealtime() - captureReceiptAt >= 30_000L) {
+                captureReceipt = "";
+                rebuildFromDb();
+            }
+        }, 30_000L);
+    }
+
+    private String activeCaptureReceipt() {
+        if (!captureReceipt.isEmpty()
+                && android.os.SystemClock.elapsedRealtime() - captureReceiptAt < 30_000L) return captureReceipt;
+        captureReceipt = "";
+        return "";
     }
 
     private NotificationCompat.Action actionService(int icon, String label, String action, int rc) {
@@ -617,7 +660,7 @@ public class FlowNotifService extends Service {
     @Override public IBinder onBind(Intent intent) { return null; }
 
     @Override public void onDestroy() {
-        if (handler != null) handler.removeCallbacks(refreshTick);
+        if (handler != null) handler.removeCallbacksAndMessages(null);
         stopForeground(true);
         super.onDestroy();
     }
