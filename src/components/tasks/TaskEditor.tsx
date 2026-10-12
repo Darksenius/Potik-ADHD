@@ -3,7 +3,7 @@ import { useStore } from '../../state/store';
 import type { Task, TaskType } from '../../types';
 import { fmtDate, WD } from '../../utils/date';
 import { saveState } from '../../services/persistence';
-import { repeatDueOn } from '../../utils/taskSchedule';
+import { isTaskInInbox, repeatDueOn } from '../../utils/taskSchedule';
 
 const TYPE_OPTIONS: { value: TaskType; label: string }[] = [
   { value: 'simple', label: 'Проста' }, { value: 'sched', label: 'Запланована' },
@@ -57,6 +57,8 @@ export default function TaskEditor() {
   const [savedNewId, setSavedNewId] = useState<number | null>(null);
   const scheduled = type === 'sched';
   const special = type !== 'simple' && type !== 'sched';
+  const inboxDraft = isTaskInInbox({ type, repeat, planDate: date || undefined,
+    zoneId: zoneId ? Number(zoneId) : null, done: false, someday: false, trashed: false } as Task);
   const today = fmtDate(new Date());
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const pastTime = scheduled && date && time && new Date(date + 'T' + time).getTime() < Date.now();
@@ -105,6 +107,10 @@ export default function TaskEditor() {
         <button type="button" aria-pressed={scheduled} onClick={() => chooseType('sched')}>Запланована<span>На точну дату й час</span></button>
       </div>
       {special && <p className="editor-hint">Особливий тип: {TYPE_OPTIONS.find(o => o.value === type)?.label}. Його параметри збережені нижче.</p>}
+      <details id="task-note-section" className="editor-section" open={type === 'note' || !!note || undefined}>
+        <summary>Нотатка (необов’язково)</summary>
+        <div className="ef"><label className="el" htmlFor="task-note">Нотатка до задачі</label><textarea id="task-note" className="ei" rows={4} value={note} onChange={e => setNote(e.target.value)} placeholder="Деталі, адреса чи те, що допоможе виконати задачу" /></div>
+      </details>
       <section className="editor-section">
         <h3>Коли?</h3>
         <div className="editor-actions">
@@ -130,7 +136,6 @@ export default function TaskEditor() {
         {repeat === 'custom' && <div className="rep-days">{WD.map((day, i) => <button className={'rd' + (repeatDays[i] ? ' on' : '')} type="button" aria-pressed={repeatDays[i]} key={day} onClick={() => { setRepeatDays(days => days.map((v, j) => j === i ? !v : v)); setDirty(true); }}>{day}</button>)}</div>}
         {type === 'alarm' && <label className="el">Час будильника<input className="ei" type="time" value={alarmTime} onChange={e => setAlarmTime(e.target.value)} /></label>}
         {type === 'timewin' && <div className="editor-row"><label className="el">Початок вікна<input className="ei" type="time" value={winStart} onChange={e => setWinStart(e.target.value)} /></label><label className="el">Кінець вікна<input className="ei" type="time" value={winEnd} onChange={e => setWinEnd(e.target.value)} /></label></div>}
-        {type === 'note' && <label className="el">Нотатка<textarea className="ei" value={note} onChange={e => setNote(e.target.value)} /></label>}
         {type === 'counter' && <label className="el">Ціль лічильника<input type="number" className="ei" min="1" value={cntTgt} onChange={e => setCntTgt(Math.max(1, Number(e.target.value)))} /></label>}
         {type === 'negative' && <label className="el">Штраф досвіду<input type="number" className="ei" min="1" value={negXp} onChange={e => setNegXp(Math.max(1, Number(e.target.value)))} /></label>}
         <div className="ef"><label className="el" htmlFor="task-zone">Зона</label><select id="task-zone" className="ei" value={zoneId} onChange={e => setZoneId(e.target.value)}><option value="">Без зони</option>{zones.map(z => <option value={z.id} key={z.id}>{z.nm}</option>)}</select></div>
@@ -139,7 +144,7 @@ export default function TaskEditor() {
         {!isNew && <div className="ef"><span className="el">Зберегти зміни й перенести</span><div className="editor-actions">{[15, 60, 180].map(min => <button key={min} type="button" onClick={() => submit(min)}>+{min < 60 ? min + ' хв' : min / 60 + ' год'}</button>)}<button type="button" onClick={() => submit('tomorrow')}>На завтра</button></div></div>}
       </details>
       <div className="schedule-preview" aria-live="polite">
-        {date ? <>У плані: <strong>{dateLabel}{scheduled && time ? ', ' + time : ''}</strong>. </> : type === 'simple' && repeat === 'none' && !zoneId ? <>Без дати — у Вхідних. Вибери день, щоб додати у план. </> : <>Показ за додатковими умовами задачі. </>}
+        {date ? <>У плані: <strong>{dateLabel}{scheduled && time ? ', ' + time : ''}</strong>. </> : inboxDraft ? <>Без дати — у Вхідних. Вибери день, щоб додати у план. </> : <>Показ за додатковими умовами задачі. </>}
         {scheduled && date && <>У списку на сьогодні — від початку вибраного дня, щоб можна було підготуватися. </>}
         {type === 'simple' && <>Без сповіщення. Для сигналу на точний час вибери «Запланована». </>}
         {(scheduled || type === 'alarm') && (reminder ? <>Нагадаю {scheduled ? time || 'після вибору часу' : alarmTime || 'після вибору часу'}{advance !== '0' && scheduled ? ' і за ' + advance + ' хв' : ''}. </> : <>Без сповіщення. </>)}

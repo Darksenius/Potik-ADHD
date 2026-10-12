@@ -97,7 +97,7 @@ export interface Task {
   cntHit?: boolean;
   negXp?: number;         // тільки 'negative' — скільки XP віднімається за клік
 
-  // type === 'note'
+  // Optional details shared by all task types
   note?: string;
 
   // type === 'alarm'

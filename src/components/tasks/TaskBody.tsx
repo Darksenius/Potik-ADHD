@@ -52,10 +52,10 @@ export default function TaskBody({ t }: { t: Task }) {
         </>
       )}
 
-      {t.type === 'note' && (
+      {(t.type === 'note' || typeof t.note === 'string') && (
         <>
-          <div className="bl">Нотатка</div>
-          <textarea className="tnote" defaultValue={t.note || ''} onInput={(e) => updateNote(t.id, e.currentTarget.value)} />
+          <label className="bl" htmlFor={'task-note-' + t.id}>Нотатка до задачі</label>
+          <textarea id={'task-note-' + t.id} className="tnote" value={t.note || ''} onChange={(e) => updateNote(t.id, e.currentTarget.value)} />
         </>
       )}
 

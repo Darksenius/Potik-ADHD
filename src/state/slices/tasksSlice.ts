@@ -377,7 +377,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           next.alarmTime = normalizeTime(patch.alarmTime) || '';
           if (next.alarmTime !== t.alarmTime) { next.alarmFired = false; next.snoozeUntil = 0; }
         }
-        if (next.type === 'note') next.note = patch.note ?? next.note;
+        if ('note' in patch) next.note = patch.note;
         if (next.type === 'counter') next.counterTarget = patch.counterTarget || 10;
         if (next.type === 'negative') next.negXp = patch.negXp || 5;
         next.tags = (patch.tags || []).map((s) => s.trim()).filter(Boolean);

@@ -86,6 +86,66 @@ public class FlowWebViewTest {
         }
     }
 
+    @Test public void taskNoteSurvivesRoomRecreationTypeChangeAndInlineEdit() throws Exception {
+        String title = "Android note " + UUID.randomUUID();
+        String originalNote = "Під'їзд: 4\nЗателефонувати — після 18:00";
+        String editedNote = "Код: 57\nЗалишити біля дверей 📦";
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitReady(scenario);
+            click(scenario, "#add-fab");
+            await(scenario, "document.querySelector('#task-title') !== null", "Task editor opens");
+            input(scenario, "#task-title", title);
+            click(scenario, "#edit-body details:not(#task-note-section) summary");
+            selectValue(scenario, "#task-type", "note");
+            await(scenario, "document.querySelector('#task-note') !== null", "Task note field opens");
+            textArea(scenario, "#task-note", originalNote);
+            click(scenario, "#edit-save-fab");
+            await(scenario, "document.querySelector('#edit-page') === null", "Note task saves");
+            awaitTaskNote(scenario, title, originalNote);
+            JSONObject created = awaitTask(scenario, title, null);
+            assertEquals("note", created.getString("type"));
+            long id = created.getLong("id");
+
+            scenario.recreate();
+            awaitReady(scenario);
+            JSONObject afterRecreate = awaitTaskNote(scenario, title, originalNote);
+            assertEquals("Recreation must retain the task identity", id, afterRecreate.getLong("id"));
+            assertEquals("note", afterRecreate.getString("type"));
+
+            clickTaskTitle(scenario, title);
+            await(scenario, "document.querySelector('#task-note') !== null", "Existing task note opens in editor");
+            assertEquals(originalNote, value(scenario, "return document.querySelector('#task-note').value;").getString("value"));
+            click(scenario, ".editor-kinds button:first-child"); // Change legacy note task to primary simple type.
+            await(scenario, "document.querySelector('#task-note').value === " + JSONObject.quote(originalNote),
+                "Type change preserves the common note");
+            click(scenario, "#edit-save-fab");
+            await(scenario, "document.querySelector('#edit-page') === null", "Type change saves");
+            JSONObject changedType = awaitTaskNote(scenario, title, originalNote);
+            assertEquals(id, changedType.getLong("id"));
+            assertEquals("simple", changedType.getString("type"));
+
+            scenario.recreate();
+            awaitReady(scenario);
+            JSONObject afterTypeRecreate = awaitTaskNote(scenario, title, originalNote);
+            assertEquals(id, afterTypeRecreate.getLong("id"));
+            assertEquals("simple", afterTypeRecreate.getString("type"));
+
+            String selector = "#task-note-" + id;
+            expandTaskCard(scenario, title);
+            await(scenario, "document.querySelector(" + JSONObject.quote(selector) + ") !== null",
+                "Expanded simple task exposes inline note");
+            textArea(scenario, selector, editedNote);
+            JSONObject inlineEdit = awaitTaskNote(scenario, title, editedNote);
+            assertEquals(id, inlineEdit.getLong("id"));
+
+            scenario.recreate();
+            awaitReady(scenario);
+            JSONObject afterInlineRecreate = awaitTaskNote(scenario, title, editedNote);
+            assertEquals(id, afterInlineRecreate.getLong("id"));
+            assertEquals("simple", afterInlineRecreate.getString("type"));
+        }
+    }
+
     @Test public void scheduledTaskUsesSelectedCalendarDayAndSharedEditor() throws Exception {
         String title = "Android smoke scheduled " + UUID.randomUUID();
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
@@ -149,6 +209,51 @@ public class FlowWebViewTest {
         JSONArray tasks = value(scenario, "return (" + matches + ")" + filter + ";").getJSONArray("value");
         assertEquals("Saving or editing must not duplicate the task", 1, tasks.length());
         return tasks.getJSONObject(0);
+    }
+
+    private static JSONObject awaitTaskNote(ActivityScenario<MainActivity> scenario, String title, String note) throws Exception {
+        String matches = "JSON.parse(window.FlowBridge.load() || '{}').tasks || []";
+        String filter = ".filter(function(t){return t.title===" + JSONObject.quote(title) + ";})";
+        await(scenario, "(function(){var tasks=(" + matches + ")" + filter + ";return tasks.length===1"
+            + " && tasks[0].note===" + JSONObject.quote(note) + ";})()",
+            "Exactly one matching task with the expected durable Room note");
+        JSONObject task = awaitTask(scenario, title, null);
+        assertEquals("Room must retain the exact note text", note, task.getString("note"));
+        return task;
+    }
+
+    private static void clickTaskTitle(ActivityScenario<MainActivity> scenario, String title) throws Exception {
+        value(scenario, "var button=Array.prototype.find.call(document.querySelectorAll('.tc .tt'),"
+            + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";});"
+            + "if(!button)throw new Error('Task title missing');button.click();return true;");
+        await(scenario, "document.querySelector('#edit-page') !== null", "Task editor opens from task title");
+    }
+
+    private static void expandTaskCard(ActivityScenario<MainActivity> scenario, String title) throws Exception {
+        value(scenario, "var card=Array.prototype.find.call(document.querySelectorAll('.tc'),"
+            + "function(e){var title=e.querySelector('.tt');return title && title.textContent.trim()==="
+            + JSONObject.quote(title) + ";});"
+            + "if(!card)throw new Error('Task card missing');"
+            + "var button=card.querySelector('button[aria-label^=\"Розгорнути:\"]');"
+            + "if(!button)throw new Error('Task card has no expand button');button.click();return true;");
+    }
+
+    private static void selectValue(ActivityScenario<MainActivity> scenario, String selector, String selected) throws Exception {
+        value(scenario, "var input=document.querySelector(" + JSONObject.quote(selector) + ");"
+            + "if(!input)throw new Error('Select missing');"
+            + "Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(input,"
+            + JSONObject.quote(selected) + ");"
+            + "input.dispatchEvent(new Event('input',{bubbles:true}));"
+            + "input.dispatchEvent(new Event('change',{bubbles:true}));return true;");
+    }
+
+    private static void textArea(ActivityScenario<MainActivity> scenario, String selector, String text) throws Exception {
+        value(scenario, "var input=document.querySelector(" + JSONObject.quote(selector) + ");"
+            + "if(!input)throw new Error('Textarea missing');"
+            + "Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,"
+            + JSONObject.quote(text) + ");"
+            + "input.dispatchEvent(new Event('input',{bubbles:true}));"
+            + "input.dispatchEvent(new Event('change',{bubbles:true}));return true;");
     }
 
     private static void input(ActivityScenario<MainActivity> scenario, String selector, String text) throws Exception {

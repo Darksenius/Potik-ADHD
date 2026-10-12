@@ -29,7 +29,7 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
   const folders = useStore((s) => s.folders);
 
   const isNeg = t.type === 'negative';
-  const hasBody = t.type !== 'simple';
+  const hasBody = t.type !== 'simple' || !!t.note || !!t.expanded;
   const folder = t.folderId ? folders.find((f) => f.id === t.folderId) : null;
   const rep = repeatLabel(t);
   const date = taskPlanDate(t);
