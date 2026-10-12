@@ -189,7 +189,7 @@ test('midnight resets daily tasks and routine while preserving one-off completio
   expect(saved.recur[0]).toMatchObject({ val: 0, done: false });
 });
 
-test('pending Android backup is not overwritten by startup autosave', async ({ page }) => {
+test('Android backup remains intact when native archiving is unavailable', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-16T12:00:00+03:00') });
   await page.addInitScript(() => {
     (window as any).__writes = [];
@@ -199,7 +199,7 @@ test('pending Android backup is not overwritten by startup autosave', async ({ p
     };
   });
   await page.goto('/');
-  await expect(page.getByText('Знайдено резервну копію', { exact: true })).toBeVisible();
+  await expect(page.getByText('Не вдалося автоматично архівувати дані', { exact: true })).toBeVisible();
   await page.clock.runFor(61000);
   expect(await page.evaluate(() => (window as any).__writes)).toEqual([]);
 });

@@ -7,7 +7,7 @@ import './styles/global.css';
 import './styles/organizer.css';
 
 import { useStore } from './state/store';
-import { loadState, saveState, queueSave, checkBackupRecovery } from './services/persistence';
+import { loadState, saveState, queueSave, checkBackupRecovery, continueWithCurrentState } from './services/persistence';
 import { setupNativeBridge, updateForegroundService } from './bridge/nativeBridge';
 import { checkNotificationPermissionOnBoot, refreshWebNotificationIfGranted } from './services/webNotifications';
 import { fmtDate } from './utils/date';
@@ -34,16 +34,12 @@ function bootstrap() {
   useStore.getState().purgeOldTrash();
   checkNotificationPermissionOnBoot();
 
-  // BACKUP CHECK — рядки 2967-2991
+  // Archive incompatible or abandoned backup data before the first normal write.
+  // An old backup never blocks normal startup once its originals are durable.
   const backupResult = checkBackupRecovery();
-  if (backupResult.kind === 'unreadable') {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
-    useStore.getState().addQuickNote('📦 Резервна копія (нечитабельна, ' + timeStr + '):\n' + backupResult.raw.slice(0, 500), 'impulse');
-    queueSave();
+  if (backupResult.kind !== 'none' && !continueWithCurrentState(true)) {
+    // This is an actual archive/write failure, not a request to restore an old backup.
     useStore.getState().setBackupBanner('unreadable');
-  } else if (backupResult.kind === 'valid') {
-    useStore.getState().setBackupBanner({ data: backupResult.data, taskCount: backupResult.taskCount, saveDate: backupResult.saveDate });
   }
   startAutosave();
   checkReminders();

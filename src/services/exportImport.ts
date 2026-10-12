@@ -1,5 +1,5 @@
 import { useStore } from '../state/store';
-import { collectState, applyState, saveState, releaseSaveGuard } from './persistence';
+import { collectState, applyState, saveState, releaseSaveGuard, saveIsBlocked, blockSavingForRecovery, getRecoverySources, readRecoveryArchive } from './persistence';
 import { validateBackup, sameBackupValue } from './backupValidation';
 import { flowBridge } from '../bridge/nativeBridge';
 import { fmtDate } from '../utils/date';
@@ -32,6 +32,21 @@ function downloadBlob(content: string, fname: string, mime: string): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export function exportRecoveryFile(archived = false, name?: string): void {
+  const raw = archived ? readRecoveryArchive(name) : getRecoverySources();
+  if (!raw || raw === '[]') { useStore.getState().showToast('Архіву відновлення ще немає.'); return; }
+  const filename = archived ? (name || 'flow-recovery-archive.json') : 'flow-recovery-originals.json';
+  const fb = flowBridge();
+  if (fb) {
+    try {
+      if (fb.exportTxt(filename, raw) !== false) return;
+    } catch { /* Show an actionable error rather than claiming a download. */ }
+    useStore.getState().showToast('Не вдалося відкрити збереження архіву. Спробуй ще раз.');
+    return;
+  }
+  downloadBlob(raw, filename, 'application/json;charset=utf-8');
 }
 
 /** buildReadableMd() — рядки 2609-2660. Читабельний Markdown-звіт (НЕ бекап). */
@@ -402,6 +417,8 @@ export const IMPORT_ROLLBACK_KEY = 'flow_v2_before_import';
 export function importState(raw: unknown, mode: 'merge' | 'restore'): number {
   const parsed = validateBackup(raw);
   const before = JSON.stringify(collectState());
+  const beforeBlocked = saveIsBlocked();
+  const beforeBanner = useStore.getState().backupBanner;
   try { localStorage.setItem(IMPORT_ROLLBACK_KEY, before); }
   catch { throw new Error('Немає місця для копії перед імпортом. Звільни місце й повтори. Наявні дані не змінено.'); }
   let count: number;
@@ -414,6 +431,8 @@ export function importState(raw: unknown, mode: 'merge' | 'restore'): number {
   useStore.getState().recalculateZoneUsage();
   if (!saveState()) {
     applyState(JSON.parse(before), true);
+    if (beforeBlocked) blockSavingForRecovery();
+    useStore.getState().setBackupBanner(beforeBanner);
     throw new Error('Не вдалося зберегти імпорт. Попередній стан повернуто.');
   }
   return count;

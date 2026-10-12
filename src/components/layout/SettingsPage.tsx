@@ -3,6 +3,9 @@ import { useStore } from '../../state/store';
 import OssPage, { useAppVersion } from '../oss/OssPage';
 import ExportImportSection from '../notes/ExportImportSection';
 import { requestAndShowNotification } from '../../services/webNotifications';
+import { listRecoveryArchives, saveIsBlocked, showRecoveryBanner } from '../../services/persistence';
+import type { RecoveryArchive } from '../../services/persistence';
+import { exportRecoveryFile } from '../../services/exportImport';
 import { getNativeNotificationPermission, requestNativeNotificationPermission, openNativeNotificationSettings, updateForegroundService } from '../../bridge/nativeBridge';
 
 export default function SettingsPage() {
@@ -11,8 +14,17 @@ export default function SettingsPage() {
   const [ossOpen, setOssOpen] = useState(false);
   const version = useAppVersion();
   const [permission, setPermission] = useState('unavailable');
+  const [recoveryArchives, setRecoveryArchives] = useState<RecoveryArchive[]>([]);
   useEffect(() => {
     const refresh = () => { void getNativeNotificationPermission().then(setPermission); };
+    refresh(); window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
+  useEffect(() => {
+    const refresh = () => {
+      try { setRecoveryArchives(listRecoveryArchives()); }
+      catch { setRecoveryArchives([]); }
+    };
     refresh(); window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, []);
@@ -27,7 +39,23 @@ export default function SettingsPage() {
       {!window.Capacitor?.isNativePlatform?.() && <button onClick={requestAndShowNotification}>Перевірити сповіщення браузера</button>}
       {window.Capacitor?.isNativePlatform?.() && <><p>Дозвіл Android: {permission === 'granted' ? 'надано' : permission === 'denied' ? 'вимкнено' : permission === 'prompt' ? 'ще не запитували' : 'не вдалося перевірити'}.</p><button onClick={() => { void requestNativeNotificationPermission().then(state => { setPermission(state); if (state === 'granted') updateForegroundService(); }); }}>Дозволити сповіщення</button><button onClick={openNativeNotificationSettings}>Відкрити налаштування Android</button></>}
     </section>
-    <section><h2>Дані та резервні копії</h2><ExportImportSection /></section>
+    <section><h2>Дані та резервні копії</h2>
+      {saveIsBlocked() && <><p role="alert">Не вдалося автоматично архівувати старі дані. Оригінали збережено; повтори архівацію або експортуй копію.</p><button onClick={showRecoveryBanner}>Повторити архівацію</button></>}
+      <ExportImportSection />
+    </section>
+    <section aria-labelledby="incompatible-archives-title"><h2 id="incompatible-archives-title">Архів несумісних даних</h2>
+      <p>Тут зберігаються несумісні дані й старі резервні копії. Їх можна зберегти у файл; вони не додаються до поточних задач.</p>
+      {recoveryArchives.length === 0
+        ? <p>Архівів несумісних даних поки немає.</p>
+        : <ul>{recoveryArchives.map(archive => {
+          const created = new Date(archive.createdAt).toLocaleString('uk');
+          const size = archive.size < 1024 ? `${archive.size} Б` : `${(archive.size / 1024).toFixed(1)} КБ`;
+          return <li key={archive.name}>
+            <span>{created} · {size}</span>
+            <button onClick={() => exportRecoveryFile(true, archive.name)}>Експортувати архів</button>
+          </li>;
+        })}</ul>}
+    </section>
     <section><h2>Про застосунок</h2><p>Потік {version}</p><button onClick={() => setOssOpen(true)}>Ліцензія та вихідний код</button><button onClick={() => useStore.getState().showPage('readme')}>Відкрити довідку</button></section>
   </main><OssPage open={ossOpen} onClose={() => setOssOpen(false)} /></>;
 }

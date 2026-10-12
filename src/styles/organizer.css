@@ -59,6 +59,8 @@ button{cursor:pointer}
 .editor-check input,.editor-warning input{width:20px;height:20px;flex-shrink:0}
 .editor-warning,.editor-error{background:var(--s2);border-left:3px solid #e5ae4b;border-radius:7px;padding:12px;font-size:13px;line-height:1.5;margin:10px 0}
 .editor-error{border-color:var(--neg)}
+.editor-error button{min-height:44px;padding:8px 12px;margin-top:8px;background:var(--s1);color:var(--t1);border:1px solid var(--b2);border-radius:7px;font:inherit}
+.recovery-banner button{min-height:44px;max-width:100%;padding:8px 10px;margin:4px 4px 0 0;background:#253725;color:#e0e0e0;border:1px solid #7ed321;border-radius:7px;font:inherit;white-space:normal}
 .schedule-preview{padding:14px;background:var(--s2);border-radius:10px;font-size:13px;line-height:1.6;color:var(--t2);margin:15px 0}
 #edit-save-fab{position:static;width:100%;transform:none;min-height:50px;margin:8px 0}
 .plan-task-row button{min-width:36px;min-height:40px}

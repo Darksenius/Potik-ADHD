@@ -18,8 +18,9 @@ import org.junit.runner.RunWith;
 
 /**
  * Exercises the packaged React application in the actual Android WebView and Room bridge.
- * No store injection, fake bridge, or direct database writes are used. Run on an isolated
- * test AVD: each test leaves uniquely named synthetic tasks for inspection.
+ * Fixtures and state checks use the real FlowBridge API; no fake bridge or direct
+ * DAO/database writes are used. Run on an isolated test AVD: capture tests leave uniquely
+ * named synthetic tasks for inspection, while recovery fixtures restore prior state in finally.
  * DOM input/click events exercise React handlers; these are not physical touch tests.
  */
 @RunWith(AndroidJUnit4.class)
@@ -83,6 +84,62 @@ public class FlowWebViewTest {
             JSONObject after = awaitTask(scenario, title, null);
             assertEquals("Recreation must retain the task identity", id, after.getLong("id"));
             assertEquals(title, after.getString("title"));
+        }
+    }
+
+    @Test public void recoveryArchivesUnreadableRoomAndAllowsTaskCapture() throws Exception {
+        String title = "Android recovery " + UUID.randomUUID();
+        String note = "Під'їзд 4\nЗалишити біля дверей 📦";
+        android.content.Context context = androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().getTargetContext();
+        FlowBridge nativeBridge = new FlowBridge(context);
+        String originalRoom = nativeBridge.load();
+        String originalBackup = nativeBridge.readBackup();
+        JSONObject obsoleteTask = new JSONObject().put("id", 900000001)
+            .put("title", "Old unsupported habit").put("type", "habit");
+        String obsoleteState = new JSONObject().put("tasks", new JSONArray().put(obsoleteTask)).toString();
+        // Seed before launching any WebView: a running page's autosave must not race
+        // the external-state fixture. All writes still go through the real FlowBridge.
+        nativeBridge.save(obsoleteState);
+        assertTrue(nativeBridge.writeBackup(obsoleteState));
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitReady(scenario);
+            await(scenario, "window.FlowBridge.readRecoveryArchive() !== '' && "
+                + "JSON.parse(window.FlowBridge.readRecoveryArchive()).originalState === "
+                + JSONObject.quote(obsoleteState), "Startup automatically archives incompatible Room data");
+            assertFalse(value(scenario,
+                "return document.querySelector('.recovery-banner') !== null;").getBoolean("value"));
+            click(scenario, "#add-fab");
+            await(scenario, "document.querySelector('#task-title') !== null", "Task editor opens");
+            input(scenario, "#task-title", title);
+            click(scenario, "#task-note-section summary");
+            textArea(scenario, "#task-note", note);
+            click(scenario, "#edit-save-fab");
+            await(scenario, "document.querySelector('#edit-page') === null", "Task saves without a recovery decision");
+            long id = awaitTaskNote(scenario, title, note).getLong("id");
+            click(scenario, "#nav button:last-child");
+            await(scenario, "document.querySelector('#incompatible-archives-title') !== null",
+                "Settings exposes the archive section");
+            assertTrue(value(scenario, "return document.querySelector('[aria-labelledby=\"incompatible-archives-title\"]').innerText.indexOf('Експортувати архів') >= 0;").getBoolean("value"));
+            scenario.recreate();
+            awaitReady(scenario);
+            assertEquals("Automatic archive must allow durable task notes", id,
+                awaitTaskNote(scenario, title, note).getLong("id"));
+            JSONObject archive = value(scenario,
+                "return JSON.parse(window.FlowBridge.readRecoveryArchive());").getJSONObject("value");
+            assertEquals(obsoleteState, archive.getString("originalState"));
+            click(scenario, "#nav button:last-child");
+            await(scenario, "document.querySelector('#incompatible-archives-title') !== null", "Archive section reopens");
+            String archiveName = new JSONArray(nativeBridge.listRecoveryArchives()).getJSONObject(0).getString("name");
+            String exactArchive = nativeBridge.readRecoveryArchiveFile(archiveName);
+            click(scenario, "[aria-labelledby=\"incompatible-archives-title\"] button");
+            java.io.File exported = new java.io.File(context.getCacheDir(), "exports/" + archiveName);
+            assertTrue("Settings export creates the selected archive file", exported.isFile());
+            assertEquals("Export must preserve the exact archive", exactArchive,
+                new String(new android.util.AtomicFile(exported).readFully(), java.nio.charset.StandardCharsets.UTF_8));
+        } finally {
+            nativeBridge.save(originalRoom);
+            if (!originalBackup.isEmpty()) nativeBridge.writeBackup(originalBackup);
         }
     }
 
@@ -268,6 +325,13 @@ public class FlowWebViewTest {
     private static void click(ActivityScenario<MainActivity> scenario, String selector) throws Exception {
         value(scenario, "var button=document.querySelector(" + JSONObject.quote(selector) + ");"
             + "if(!button)throw new Error('Button missing');button.click();return true;");
+    }
+
+    private static void clickButtonText(ActivityScenario<MainActivity> scenario, String text) throws Exception {
+        value(scenario, "var button=Array.prototype.find.call(document.querySelectorAll('button'),"
+            + "function(e){return e.textContent.trim()===" + JSONObject.quote(text) + ";});"
+            + "if(!button)throw new Error('Button text missing: ' + " + JSONObject.quote(text) + ");"
+            + "button.click();return true;");
     }
 
     private static void await(ActivityScenario<MainActivity> scenario, String expression, String message) throws Exception {

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { useStore } from '../src/state/store';
-import { collectState, applyState, saveState, loadState, releaseSaveGuard, saveIsBlocked, checkBackupRecovery } from '../src/services/persistence';
+import { collectState, applyState, saveState, loadState, releaseSaveGuard, saveIsBlocked, checkBackupRecovery, continueWithCurrentState } from '../src/services/persistence';
 import { importState, rollbackLastImport, IMPORT_ROLLBACK_KEY } from '../src/services/exportImport';
 import { validateBackup } from '../src/services/backupValidation';
 import { buildForegroundNotifPayload } from '../src/bridge/notifPayload';
@@ -98,11 +98,23 @@ test('same-title tasks on different days survive merge and reimport adds no dupl
   expect(useStore.getState().tasks.map(t => t.schedDate)).toEqual(['2026-10-09', '2026-10-10']);
 });
 
-test('invalid native snapshot falls back to valid browser data', () => {
+test('invalid native snapshot is archived before writing a valid browser fallback', () => {
   values.set('flow_v2', JSON.stringify({ tasks: [task(404)], notepad: 'Цілий резерв', saveDate: 'Thu Oct 08 2026' }));
-  (window as any).FlowBridge = { load: () => '{broken' };
+  let archived = '';
+  let written = '';
+  (window as any).FlowBridge = { load: () => '{broken', readBackup: () => '',
+    archiveRecovery: (raw: string) => { archived = raw; return true; },
+    saveWithEvents: (raw: string) => { expect(archived).not.toBe(''); written = raw; return true; },
+    saveNotif: () => {}, writeBackup: () => {},
+  };
   expect(loadState()).toBe('Thu Oct 08 2026');
   expect(useStore.getState().notepad).toBe('Цілий резерв');
+  expect(saveIsBlocked()).toBe(true);
+  expect(checkBackupRecovery().kind).toBe('unreadable');
+  expect(continueWithCurrentState(true)).toBe(true);
+  expect(JSON.parse(archived).sources).toEqual([{ source: 'Android', raw: '{broken' }]);
+  expect(JSON.parse(written).tasks[0].id).toBe(404);
+  expect(JSON.parse(written).notepad).toBe('Цілий резерв');
   expect(saveIsBlocked()).toBe(false);
 });
 

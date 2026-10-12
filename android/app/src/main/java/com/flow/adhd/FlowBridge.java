@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Environment;
+import android.database.sqlite.SQLiteFullException;
 import android.util.AtomicFile;
 import android.webkit.JavascriptInterface;
 import androidx.core.content.FileProvider;
@@ -13,15 +14,28 @@ import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.UUID;
+import android.util.Base64;
 
 public class FlowBridge {
 
     private final FlowDao dao;
     private final Context ctx;
+    private final File publicBackupOverride;
+    private final File privateBackupOverride;
+    private volatile String lastSaveError = "";
 
     public FlowBridge(Context context) {
+        this(context, FlowDatabase.getInstance(context).flowDao(), null, null);
+    }
+
+    FlowBridge(Context context, FlowDao dao, File publicBackupDir, File privateBackupDir) {
         ctx = context.getApplicationContext();
-        dao = FlowDatabase.getInstance(context).flowDao();
+        this.dao = dao;
+        publicBackupOverride = publicBackupDir;
+        privateBackupOverride = privateBackupDir;
     }
 
     /** window.FlowBridge.save(json) — зберігає повний стан */
@@ -33,20 +47,139 @@ public class FlowBridge {
     /** Acknowledgement cannot become durable without its resulting state. */
     @JavascriptInterface
     public boolean saveWithEvents(String json, String eventIdsJson) {
+        org.json.JSONArray values;
+        List<Long> ids = new ArrayList<>();
         try {
             new org.json.JSONObject(json); // Reject malformed snapshots before the transaction.
-            org.json.JSONArray values = new org.json.JSONArray(eventIdsJson);
-            List<Long> ids = new ArrayList<>();
-            if (values.length() > 500) return false;
+            values = new org.json.JSONArray(eventIdsJson);
+            if (values.length() > 500) { lastSaveError = "invalid_state"; return false; }
             for (int i = 0; i < values.length(); i++) {
                 long id = values.getLong(i);
-                if (id <= 0) return false;
+                if (id <= 0) { lastSaveError = "invalid_state"; return false; }
                 ids.add(id);
             }
+        } catch (org.json.JSONException | NullPointerException e) {
+            lastSaveError = "invalid_state";
+            android.util.Log.w("FlowBridge", "Invalid state or event ids");
+            return false;
+        }
+        try {
             dao.commitEvents(json, ids);
+            lastSaveError = "";
+            return true;
+        } catch (SQLiteFullException e) {
+            lastSaveError = "storage_full";
+            android.util.Log.w("FlowBridge", "Command commit failed: storage_full", e);
+            return false;
+        } catch (Exception e) {
+            lastSaveError = "database_error";
+            android.util.Log.w("FlowBridge", "Command commit failed", e);
+            return false;
+        }
+    }
+
+    /** Sanitized code for the most recent failed snapshot commit. */
+    @JavascriptInterface
+    public String getLastSaveError() { return lastSaveError; }
+
+    /** Preserve all recovery inputs in a new archive; never alters Room or backups. */
+    @JavascriptInterface
+    public synchronized boolean archiveRecovery(String suppliedJson) {
+        try {
+            new org.json.JSONObject(suppliedJson);
+            String originalState = dao.getStateJson();
+            String originalNotif = dao.getNotifJson();
+            org.json.JSONObject archive = new org.json.JSONObject();
+            archive.put("version", 1);
+            archive.put("createdAt", System.currentTimeMillis());
+            archive.put("suppliedJson", suppliedJson);
+            archive.put("originalState", originalState == null ? org.json.JSONObject.NULL : originalState);
+            archive.put("originalNotif", originalNotif == null ? org.json.JSONObject.NULL : originalNotif);
+            org.json.JSONObject backups = new org.json.JSONObject();
+            putBackupBytes(backups, "public", new File(getPublicBackupDir(), BACKUP_FILE));
+            putBackupBytes(backups, "private", new File(getPrivateBackupDir(), BACKUP_FILE));
+            archive.put("backups", backups);
+
+            File directory = new File(ctx.getFilesDir(), "recovery");
+            if (!directory.isDirectory() && !directory.mkdirs()) return false;
+            String name = "recovery-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".json";
+            return writeAtomicFile(new File(directory, name), archive.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            android.util.Log.w("FlowBridge", "Recovery archive failed", e);
+            return false;
+        }
+    }
+
+    /** Returns the newest readable archive as JSON, or an empty string. */
+    @JavascriptInterface
+    public synchronized String readRecoveryArchive() {
+        try {
+            org.json.JSONArray archives = new org.json.JSONArray(listRecoveryArchives());
+            if (archives.length() == 0) return "";
+            return readRecoveryArchiveFile(archives.getJSONObject(0).getString("name"));
+        } catch (Exception ignored) { return ""; }
+    }
+
+    /** Metadata for readable immutable recovery archives, newest first. */
+    @JavascriptInterface
+    public synchronized String listRecoveryArchives() {
+        org.json.JSONArray result = new org.json.JSONArray();
+        File directory = new File(ctx.getFilesDir(), "recovery");
+        File[] files = directory.listFiles();
+        if (files == null) return result.toString();
+        Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed().thenComparing(File::getName));
+        for (File file : files) {
+            if (!isRecoveryArchiveName(file.getName())) continue;
+            try {
+                byte[] bytes = new AtomicFile(file).readFully();
+                org.json.JSONObject archive = new org.json.JSONObject(new String(bytes, StandardCharsets.UTF_8));
+                org.json.JSONObject item = new org.json.JSONObject();
+                item.put("name", file.getName());
+                item.put("createdAt", archive.optLong("createdAt", file.lastModified()));
+                item.put("size", bytes.length);
+                result.put(item);
+            } catch (Exception ignored) { }
+        }
+        return result.toString();
+    }
+
+    /** Read one archive by its generated filename only; reject traversal and paths. */
+    @JavascriptInterface
+    public synchronized String readRecoveryArchiveFile(String name) {
+        if (!isRecoveryArchiveName(name)) return "";
+        try {
+            File directory = new File(ctx.getFilesDir(), "recovery").getCanonicalFile();
+            File file = new File(directory, name).getCanonicalFile();
+            if (!directory.equals(file.getParentFile()) || !file.isFile()) return "";
+            String json = new String(new AtomicFile(file).readFully(), StandardCharsets.UTF_8);
+            new org.json.JSONObject(json);
+            return json;
+        } catch (Exception ignored) { return ""; }
+    }
+
+    private boolean isRecoveryArchiveName(String name) {
+        return name != null && name.matches("recovery-[0-9]+-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\.json");
+    }
+
+    private void putBackupBytes(org.json.JSONObject backups, String key, File file) throws Exception {
+        org.json.JSONObject value = new org.json.JSONObject();
+        boolean exists = file.exists() || new File(file.getPath() + ".bak").exists();
+        value.put("exists", exists);
+        if (exists) value.put("bytesBase64", Base64.encodeToString(new AtomicFile(file).readFully(), Base64.NO_WRAP));
+        else value.put("bytesBase64", org.json.JSONObject.NULL);
+        backups.put(key, value);
+    }
+
+    private boolean writeAtomicFile(File path, byte[] contents) {
+        AtomicFile file = new AtomicFile(path);
+        FileOutputStream stream = null;
+        try {
+            stream = file.startWrite();
+            stream.write(contents);
+            file.finishWrite(stream);
             return true;
         } catch (Exception e) {
-            android.util.Log.w("FlowBridge", "Command commit failed", e);
+            if (stream != null) file.failWrite(stream);
             return false;
         }
     }
@@ -131,12 +264,14 @@ public class FlowBridge {
      * Fallback: getExternalFilesDir (без дозволу, але стирається при деінсталяції)
      */
     private File getPublicBackupDir() {
+        if (publicBackupOverride != null) return publicBackupOverride;
         File pub = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOCUMENTS), "FLOW");
         return pub;
     }
 
     private File getPrivateBackupDir() {
+        if (privateBackupOverride != null) return privateBackupOverride;
         File base = ctx.getExternalFilesDir(null);
         return new File(base != null ? base : ctx.getFilesDir(), "FLOW-backup");
     }
@@ -208,7 +343,7 @@ public class FlowBridge {
      * <a download> не спрацьовує.
      */
     @JavascriptInterface
-    public void exportTxt(String filename, String content) {
+    public boolean exportTxt(String filename, String content) {
         try {
             File dir = new File(ctx.getCacheDir(), "exports");
             if (!dir.exists()) dir.mkdirs();
@@ -231,8 +366,10 @@ public class FlowBridge {
             Intent chooser = Intent.createChooser(share, "Зберегти / надіслати");
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             ctx.startActivity(chooser);
+            return true;
         } catch (Exception e) {
-            // тихо ігноруємо — JS лишить fallback на Blob
+            android.util.Log.w("FlowBridge", "File export failed", e);
+            return false;
         }
     }
 }

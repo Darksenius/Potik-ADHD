@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../state/store';
 import type { Task, TaskType } from '../../types';
 import { fmtDate, WD } from '../../utils/date';
-import { saveState } from '../../services/persistence';
+import { saveState, saveIsBlocked, getSaveErrorMessage, showRecoveryBanner } from '../../services/persistence';
 import { isTaskInInbox, repeatDueOn } from '../../utils/taskSchedule';
 
 const TYPE_OPTIONS: { value: TaskType; label: string }[] = [
@@ -90,10 +90,14 @@ export default function TaskEditor() {
       windowStart: winStart, windowEnd: winEnd, note, counterTarget: cntTgt, negXp,
       reminderEnabled: reminder, remindBeforeMinutes: Number(advance),
     };
-    const id = saveTask(isNew ? savedNewId : existing!.id, patch);
+    if (saveIsBlocked() || useStore.getState().backupBanner) {
+      saveState(); setError(getSaveErrorMessage()); return;
+    }
+    const retainedId = savedNewId !== null && tasks.some(t => t.id === savedNewId) ? savedNewId : null;
+    const id = saveTask(isNew ? retainedId : existing!.id, patch);
     if (isNew) setSavedNewId(id);
     if (snooze !== undefined) snoozeTask(id, snooze);
-    if (!saveState()) { setError('Зміни поки лише в пам’яті. Не закривай застосунок: звільни місце або зроби експорт.'); return; }
+    if (!saveState()) { setError(getSaveErrorMessage()); return; }
     closeTaskEditor();
     useStore.getState().showToast(snooze === undefined ? 'Задачу збережено' : 'Зміни збережено, задачу перенесено');
   }
@@ -150,7 +154,7 @@ export default function TaskEditor() {
         {(scheduled || type === 'alarm') && (reminder ? <>Нагадаю {scheduled ? time || 'після вибору часу' : alarmTime || 'після вибору часу'}{advance !== '0' && scheduled ? ' і за ' + advance + ' хв' : ''}. </> : <>Без сповіщення. </>)}
         {repeat !== 'none' && <>{REPEATS.find(r => r.value === repeat)?.label}.</>}
       </div>
-      {error && <p className="editor-error" role="alert">{error}</p>}
+      {error && <div className="editor-error" role="alert"><p>{error}</p>{saveIsBlocked() && <button type="button" onClick={showRecoveryBanner}>Відкрити відновлення</button>}</div>}
       <button id="edit-save-fab" type="submit">{isNew ? 'Створити задачу' : 'Зберегти зміни'}</button>
     </form>
   </div>;

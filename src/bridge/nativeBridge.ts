@@ -18,6 +18,11 @@ import { nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
 export interface FlowBridgeNative {
   save(json: string): void;
   saveWithEvents?(json: string, eventIds: string): boolean;
+  getLastSaveError?(): string;
+  archiveRecovery?(json: string): boolean;
+  readRecoveryArchive?(): string;
+  listRecoveryArchives?(): string;
+  readRecoveryArchiveFile?(name: string): string;
   saveNotif(notifJson: string): void;
   load(): string;
   getEvents(): string;
@@ -26,7 +31,7 @@ export interface FlowBridgeNative {
   writeBackup(json: string): void;
   readBackup(): string;
   hasBackup(): boolean;
-  exportTxt(filename: string, content: string): void;
+  exportTxt(filename: string, content: string): boolean | void;
 }
 
 interface NativeListenerHandle {
