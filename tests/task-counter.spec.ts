@@ -205,11 +205,11 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
         saveDate: new Date().toDateString(), weekTplSeeded: true, recur: [], qnotes: [], xp: 0, xpTotal: 0, done: 0,
         tasks: [
           { id: 501, title: 'Вода зі шторки', type: 'simple', done: false, someday: false, expanded: true,
-            planDate: '2026-10-13', repeat: 'daily', repeatDays: [], tags: [], created: new Date().toISOString(),
+            planDate: '2026-10-13', repeat: 'daily', repeatDays: [], tags: [], created: new Date(skipRequestedAt - 60000).toISOString(),
             counterEnabled: true, counterStep: 100, counterUnit: 'ml', counterTarget: 0,
             counter: 200, counterCreditedProgress: 200, counterDay: '2026-10-13' },
           { id: 502, title: 'Завершити зі шторки', type: 'simple', done: false, someday: false,
-            planDate: '2026-10-13', repeat: 'none', repeatDays: [], tags: [], created: new Date().toISOString() },
+            planDate: '2026-10-13', repeat: 'none', repeatDays: [], tags: [], created: new Date(skipRequestedAt - 60000).toISOString() },
         ],
       }),
       skipRequestedAt,
