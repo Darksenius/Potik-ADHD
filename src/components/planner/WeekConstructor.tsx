@@ -3,6 +3,7 @@ import { useStore } from '../../state/store';
 import type { WeekTemplate } from '../../types';
 import { WD, fmtDate, fmtHuman, addDaysDs } from '../../utils/date';
 import { WKC_SPANS } from '../../constants';
+import Icon from '../common/Icon';
 
 function dayName(dayTemplates: { id: string; name: string }[], e: { tplId?: string; rest?: boolean } | null): string {
   if (!e || !e.tplId) return e && e.rest ? 'Вихідний' : 'без зон';
@@ -83,7 +84,7 @@ export default function WeekConstructor() {
   return (
     <div id="wkc">
       <div className="wkc-head" onClick={() => setOpen(!open)}>
-        <span className="wkc-title">🗓 Конструктор тижня</span>
+        <span className="wkc-title"><Icon name="calendar" /> Конструктор тижня</span>
         <span className={'wkc-arrow' + (open ? ' open' : '')}>▼</span>
       </div>
       {open && (
@@ -201,15 +202,18 @@ export default function WeekConstructor() {
                     ))}
                   </select>
                   <button
+                    type="button"
                     className={'wkc-moon' + (d.rest ? ' on' : '')}
                     title="Вихідний день"
+                    aria-label={'Вихідний день: ' + (d.rest ? 'так' : 'ні')}
+                    aria-pressed={!!d.rest}
                     onClick={() => {
                       const days = draft.days.slice();
                       days[i] = { ...days[i], rest: !days[i].rest };
                       setDraft({ ...draft, days });
                     }}
                   >
-                    🌙
+                    <Icon name="moon" />
                   </button>
                   {draft.days.length > 1 && (
                     <button
@@ -231,10 +235,10 @@ export default function WeekConstructor() {
                 </button>
                 <span style={{ flex: 1 }} />
                 <button className="wkc-btn" onClick={() => setDraft(null)}>Скасувати</button>
-                <button className="wkc-btn go" onClick={handleSave}>💾 Зберегти</button>
+                <button className="wkc-btn go" onClick={handleSave}><Icon name="archive" /> Зберегти</button>
               </div>
               <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 6 }}>
-                7 днів — прив&apos;язка до Пн–Нд; інша довжина — цикл від дати старту. 🌙 = вихідний.
+                7 днів — прив&apos;язка до Пн–Нд; інша довжина — цикл від дати старту. <Icon name="moon" /> = вихідний.
               </div>
             </div>
           )}

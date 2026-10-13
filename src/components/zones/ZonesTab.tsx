@@ -1,6 +1,7 @@
 import { useStore } from '../../state/store';
 import { useState } from 'react';
 import ZoneEditor from './ZoneEditor';
+import Icon from '../common/Icon';
 
 const PRIO_LABELS = ['', 'Фон', 'Нарада', 'Критичне'];
 
@@ -47,7 +48,7 @@ export default function ZonesTab() {
                   {z.desc && <div className="zdesc">{z.desc}</div>}
                   {!!linked.length && (
                     <div className="zdesc" style={{ color: 'var(--z)' }}>
-                      🔗 {linked.map((t) => t.title).join(', ')}
+                      <Icon name="zones" /> {linked.map((t) => t.title).join(', ')}
                     </div>
                   )}
                 </div>

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useStore } from '../../state/store';
 import { exportBackupFile, exportReadableFile, buildAiPromptText, importFromFile, rollbackLastImport, IMPORT_ROLLBACK_KEY } from '../../services/exportImport';
 import ClipboardFallback from '../common/ClipboardFallback';
+import Icon from '../common/Icon';
 
 export default function ExportImportSection() {
   const showToast = useStore((s) => s.showToast);
@@ -14,7 +15,7 @@ export default function ExportImportSection() {
     const text = buildAiPromptText();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
-        () => showToast('🤖 Скопійовано! Встав у ChatGPT, Claude чи інший ШІ.'),
+        () => showToast('Скопійовано! Встав у ChatGPT, Claude чи інший ШІ.'),
         () => setFallbackText(text)
       );
     } else {
@@ -38,14 +39,14 @@ export default function ExportImportSection() {
       <label className="el" style={{ width: '100%' }}>Режим імпорту<select className="ei" value={mode} onChange={e => setMode(e.target.value as typeof mode)}><option value="merge">Додати записи до наявних</option><option value="restore">Повністю відновити копію</option></select></label>
       <p className="section-hint">Повне відновлення повертає також блокнот, досвід, налаштування та історію. Додавання об’єднує записи й залишає поточну статистику.</p>
       <button className="ab" onClick={exportBackupFile} title="Повна копія (.json) — саме її читає імпорт">
-        💾 Експорт
+        <Icon name="archive" /> Експорт
       </button>
       <button
         className="ab"
         onClick={() => fileRef.current?.click()}
         title={mode === 'merge' ? 'Додати записи з копії' : 'Повністю відновити з копії'}
       >
-        📥 Імпорт
+        <Icon name="archive" /> Імпорт
       </button>
       {hasRollback && <button className="ab" onClick={() => { if (window.confirm('Повернути стан перед останнім імпортом?')) showToast(rollbackLastImport() ? 'Попередній стан повернуто' : 'Відновити попередній стан не вдалося'); }}>Скасувати останній імпорт</button>}
       <input
@@ -60,10 +61,10 @@ export default function ExportImportSection() {
         }}
       />
       <button className="ab" onClick={exportReadableFile} title="Читабельний звіт (.md) — не бекап">
-        📄 Звіт (.md)
+        <Icon name="note" /> Звіт (.md)
       </button>
       <button className="ab" onClick={handleAiAnalyze} title="Копіює готовий промпт разом з даними у буфер">
-        🤖 Аналіз ШІ
+        <Icon name="idea" /> Аналіз ШІ
       </button>
       {fallbackText && <ClipboardFallback text={fallbackText} onClose={() => setFallbackText(null)} />}
     </div>

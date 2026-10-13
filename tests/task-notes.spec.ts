@@ -14,7 +14,7 @@ async function boot(page: Page) {
 }
 
 async function openInbox(page: Page) {
-  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
 }
 
 async function savedTask(page: Page, title: string) {
@@ -97,7 +97,7 @@ test('simple optional note survives type changes, reload, inline edit, and inten
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?').fill(title);
   await page.getByRole('button', { name: 'Без дати', exact: true }).click();
-  await expect(page.locator('.schedule-preview')).toContainText('Без дати — у Вхідних');
+  await expect(page.locator('.schedule-preview')).toContainText('Без дати — доступна');
   await page.locator('#task-note-section summary').click();
   await page.locator('#task-note').fill(multiline);
   await page.screenshot({ path: info.outputPath('notes-editor-320.png'), fullPage: true, animations: 'disabled' });
@@ -160,7 +160,7 @@ test('scheduled optional note opens from its calendar day with the same ID and s
   expect(original).toMatchObject({ type: 'sched', planDate: '2026-10-09', schedDate: '2026-10-09', schedTime: '14:30', note: multiline });
   expect(original.alarmTime).toBeFalsy();
 
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   const day = page.getByRole('button', { name: '9 жовтня 2026 р., є задачі', exact: true });
   await day.click();
   await page.getByRole('button', { name: title, exact: true }).click();

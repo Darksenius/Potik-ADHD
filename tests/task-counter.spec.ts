@@ -88,7 +88,9 @@ test('water seed is retired once; a user-created counter can be created, counted
   await page.getByRole('button', { name: 'Збільшити: Вода', exact: true }).click();
   await page.clock.runFor(700);
   expect((await savedState(page)).xpTotal).toBe(4);
-  await page.getByRole('button', { name: 'Редагувати: Вода', exact: true }).click();
+  await page.locator('#tasks-list .tc')
+    .filter({ has: page.getByRole('button', { name: 'Вода', exact: true }) })
+    .locator('.task-title-button').click();
   if (!await page.getByLabel('Крок + / −', { exact: true }).isVisible()) {
     await page.locator('summary').filter({ hasText: 'Додаткові можливості' }).click();
   }
@@ -196,6 +198,7 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
   await page.clock.install({ time: new Date('2026-10-13T12:00:00+03:00') });
   await page.addInitScript(() => {
     const restored = sessionStorage.getItem('counter-command-test');
+    const skipRequestedAt = Date.now();
     const mock = (window as any).__counterCommands = restored ? JSON.parse(restored) : {
       fail: true,
       persisted: JSON.stringify({
@@ -209,11 +212,12 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
             planDate: '2026-10-13', repeat: 'none', repeatDays: [], tags: [], created: new Date().toISOString() },
         ],
       }),
+      skipRequestedAt,
       pending: [
         { id: 11, event: 'task_inc:501', createdAt: Date.now() },
         { id: 12, event: 'task_dec:501', createdAt: Date.now() },
         { id: 13, event: 'task_inc:501', createdAt: Date.now() },
-        { id: 14, event: 'task_skip:501', createdAt: Date.now() },
+        { id: 14, event: 'task_skip:501', createdAt: skipRequestedAt },
         { id: 15, event: 'task_done:502', createdAt: Date.now() },
         { id: 16, event: 'capture_task:  ... Задача зі шторки  ', createdAt: Date.now() },
         { id: 17, event: 'capture_note:... Нотатка зі шторки\nДругий рядок', createdAt: Date.now() },
@@ -262,8 +266,17 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
   const saved = JSON.parse(committed.commits[0].state);
   const water = saved.tasks.find((t: any) => t.id === 501);
   expect(water).toMatchObject({ counter: 300, counterCreditedProgress: 300, done: false, someday: false });
-  expect(water.snoozeUntil).toBeGreaterThanOrEqual(retryAt + 15 * 60000);
-  expect(water.snoozeUntil).toBeLessThanOrEqual(retryAt + 16 * 60000);
+  expect(water).toMatchObject({
+    snoozeUntil: 0,
+    questDeferral: {
+      kind: 'next-zone',
+      requestedAt: committed.skipRequestedAt,
+      sourceZoneId: 3,
+      targetZoneId: 4,
+      startAt: new Date('2026-10-13T13:00:00+03:00').getTime(),
+      endAt: new Date('2026-10-13T14:00:00+03:00').getTime(),
+    },
+  });
   expect(saved.tasks.find((t: any) => t.id === 502).done).toBe(true);
   expect(saved.xpTotal).toBe(12);
   expect(saved.done).toBe(1);
@@ -274,7 +287,7 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
   expect(saved.qnotes.some((n: any) => n.txt === '... Нотатка зі шторки\nДругий рядок' && n.folder === 'impulse')).toBe(true);
   expect(saved.qnotes.some((n: any) => n.txt.includes('task_inc:501') && n.txt.includes('день уже змінився'))).toBe(true);
 
-  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await expect(page.locator('#inbox-sec')).toContainText('... Задача зі шторки');
   await page.evaluate(() => {
     window.__flowDrainEvents?.();

@@ -4,6 +4,7 @@ import { buildForegroundNotifPayload } from './notifPayload';
 import { saveState, saveIsBlocked } from '../services/persistence';
 import { fmtDate } from '../utils/date';
 import { nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
+import { buildQuestTimeline } from '../utils/questPolicy';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -113,9 +114,33 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
     const sid = event.slice(10);
     const task = store.tasks.find(t => String(t.id) === sid && !t.trashed && !t.done);
     if (task && belongsToTask(task)) {
-      store.snoozeTask(task.id, 15, createdAt);
+      store.deferTask(task.id, 'next-zone', createdAt);
       changed = true;
     }
+  } else if (event.indexOf('task_defer:') === 0) {
+    const match = /^task_defer:(\d+):(.*)$/.exec(event);
+    if (!match) return false;
+    const task = store.tasks.find(t => String(t.id) === match[1] && !t.trashed && !t.done);
+    if (!task || !belongsToTask(task)) return false;
+    let deferral: import('../types').QuestDeferral;
+    try { deferral = JSON.parse(match[2]); } catch { return false; }
+    if (!deferral || !['next-zone', 'not-today'].includes(deferral.kind)
+      || !Number.isFinite(deferral.requestedAt) || !Number.isFinite(deferral.startAt)
+      || !Number.isSafeInteger(deferral.sourceZoneId) || deferral.sourceZoneId < 0
+      || !Number.isSafeInteger(deferral.targetZoneId) || deferral.targetZoneId < 0
+      || deferral.startAt < deferral.requestedAt
+      || (Number.isFinite(createdAt) && Math.abs(deferral.requestedAt - createdAt!) > 60000)
+      || (deferral.kind === 'next-zone' && (!Number.isFinite(deferral.endAt) || deferral.endAt! <= deferral.startAt))) return false;
+    store.deferTask(task.id, deferral.kind, deferral.requestedAt, deferral);
+    changed = true;
+  } else if (event.indexOf('open_task:') === 0) {
+    const task = store.tasks.find(t => String(t.id) === event.slice('open_task:'.length) && !t.trashed);
+    if (!task || !belongsToTask(task)) return false;
+    store.showPage('main');
+    store.switchTab('alltasks');
+    store.requestEditTask(task.id);
+    // Navigation is not an edit, but the caller should refresh the interface.
+    changed = true;
   } else if (/^task_(inc|dec):/.test(event)) {
     const task = store.tasks.find(t => String(t.id) === event.split(':')[1]);
     if (task && belongsToTask(task) && !task.trashed && !task.done && !task.someday && hasTaskCounter(task)) {
@@ -141,7 +166,12 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
     const baseId = fid.endsWith('_pre') ? fid.slice(0, -4) : fid;
     const task = store.tasks.find(t => String(t.id) === baseId);
     if (!task || !Number.isFinite(occurrence) || occurrence <= 0) return false;
-    const due = nextTaskReminderAt(task, new Date(occurrence));
+    // Validate against the delivered day: a queued signal can be read much later.
+    const timeline = task.questDeferral ? buildQuestTimeline({
+      zones: store.zones, planDayOff: store.planDayOff,
+      dayBlocks: store.dayBlocks, now: new Date(task.questDeferral.requestedAt),
+    }) : undefined;
+    const due = nextTaskReminderAt(task, new Date(occurrence), timeline);
     if (due === undefined || (fid.endsWith('_pre') ? taskPreReminderAt(task, due) : due) !== occurrence) return false;
     if (fid.slice(-4) === '_pre') {
       const pid = fid.slice(0, -4);
@@ -160,6 +190,18 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
   } else if (event.indexOf('task_remind:') === 0) {
     // Оригінал лише перемальовував список (renderTasks()) — у React це не
     // потребує явної дії, компоненти й так реагують на зміну relevant стану.
+    changed = true;
+  } else if (event.indexOf('capture_task_v2:') === 0) {
+    const match = /^capture_task_v2:(\d+):(.*)$/.exec(event);
+    if (!match) return false;
+    const id = Number(match[1]);
+    if (!Number.isSafeInteger(id) || id <= 0 || id >= Number.MAX_SAFE_INTEGER) return false;
+    let payload: { title?: unknown; createdAt?: unknown };
+    try { payload = JSON.parse(match[2]); } catch { return false; }
+    if (!payload || typeof payload.title !== 'string' || !payload.title.trim()
+      || typeof payload.createdAt !== 'number' || !Number.isFinite(payload.createdAt)
+      || (Number.isFinite(createdAt) && Math.abs(payload.createdAt - createdAt!) > 60000)) return false;
+    store.addQuickTaskFromShade(payload.title.trim(), id, payload.createdAt);
     changed = true;
   } else if (event.indexOf('capture_task:') === 0) {
     const title = event.slice('capture_task:'.length).trim();
@@ -199,9 +241,11 @@ export function drainNativeEvents(onChanged: () => void): void {
       const before = useStore.getState();
       try {
         for (const e of events) {
-          if (fmtDate(new Date(e.createdAt)) !== fmtDate(new Date()) && /^(rc_|task_done:|task_skip:|task_inc:|task_dec:)/.test(e.event)) {
+          const task = useStore.getState().tasks.find(t => String(t.id) === e.event.split(':')[1]);
+          const staleDay = fmtDate(new Date(e.createdAt)) !== fmtDate(new Date());
+          const resetsByDay = !task || !!task.repeat && !['none', 'interval'].includes(task.repeat) || task.type === 'timewin';
+          if (staleDay && (/^rc_/.test(e.event) || resetsByDay && /^(task_done:|task_inc:|task_dec:)/.test(e.event))) {
             // A stale toggle must never silently change today's reset routine.
-            const task = before.tasks.find(t => String(t.id) === e.event.split(':')[1]);
             useStore.getState().addQuickNote('Дія зі сповіщення ' + new Date(e.createdAt).toLocaleString('uk') + ': ' + e.event + (task ? ' · ' + task.title : '') + '. Перевір і застосуй вручну: день уже змінився.', 'impulse');
           } else handleNativeEvent(e.event, e.createdAt);
         }

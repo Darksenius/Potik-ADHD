@@ -1,5 +1,6 @@
 import { useStore } from '../../state/store';
 import { ACHIEVEMENTS } from '../../state/slices/gamificationSlice';
+import Icon from '../common/Icon';
 
 export default function StatsTab() {
   const unlocked = useStore((s) => s.unlocked);
@@ -14,7 +15,7 @@ export default function StatsTab() {
       <div id="achs" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         {ACHIEVEMENTS.map((a) => (
           <div className={'ai' + (unlocked.includes(a.id) ? ' on' : '')} key={a.id}>
-            <div className="aico">{a.ico}</div>
+            <div className="aico"><Icon name={unlocked.includes(a.id) ? 'check' : 'chart'} /></div>
             <div className="anm">{a.nm}</div>
           </div>
         ))}

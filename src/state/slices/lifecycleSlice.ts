@@ -51,7 +51,7 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
     set((state) => {
       let changed = false;
       const tasks = state.tasks.map((task) => {
-        if (task.trashed || task.someday || !task.repeat || task.repeat === 'none' || task.repeat === 'everyzone') return task;
+        if (task.trashed || task.someday || (task.questDeferral && !task.done) || !task.repeat || task.repeat === 'none' || task.repeat === 'everyzone') return task;
         const anchor = taskPlanDate(task);
         if ((anchor && anchor > day) || (task.snoozeUntil && task.snoozeUntil > date.getTime())) return task;
         if (!repeatDueOn(task, date)) return task;
@@ -74,7 +74,7 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
     set((state) => {
       let changed = false;
       const tasks = state.tasks.map((task) => {
-        if (task.trashed || task.someday || task.repeat !== 'everyzone' || !task.zoneId) return task;
+        if (task.trashed || task.someday || (task.questDeferral && !task.done) || task.repeat !== 'everyzone' || !task.zoneId) return task;
         const anchor = taskPlanDate(task);
         if ((anchor && anchor > day) || (task.snoozeUntil && task.snoozeUntil > date.getTime())) return task;
         const key = get().getZoneOccurrenceKey(task.zoneId, date);

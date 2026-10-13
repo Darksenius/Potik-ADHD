@@ -4,7 +4,7 @@ import type { TaskType } from './types';
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   simple: 'Проста', check: 'Чекліст', counter: 'Лічильник', note: 'Нотатка', alarm: 'Будильник',
   sched: 'Заплановано', timewin: 'Вікно часу',
-  ctx: 'Контекст', negative: 'Шкідлива', zonelinked: 'До зони',
+  ctx: 'З мітками', negative: 'Журнал подій', zonelinked: 'До зони',
 };
 
 /** REP — рядок 1242 */
@@ -14,10 +14,10 @@ export const REPEAT_LABELS: Record<string, string> = {
 };
 
 /** CTAGS — рядок 1244 */
-export const CONTEXT_TAGS = ['🏠 Вдома', '📱 Телефон', '💼 Робота', '🤫 Тихо', '👶 Дитина'];
+export const CONTEXT_TAGS = ['Вдома', 'Телефон', 'Робота', 'Тихо', 'З дитиною'];
 
 /** NRJ — рядок 1246 (індекс 0 не використовується, енергія 1..5) */
-export const ENERGY_LABELS = ['', 'Вичерпаний', 'Низька', 'Нормально', 'Добре', 'Заряджений 🔥'];
+export const ENERGY_LABELS = ['', 'Вичерпаний', 'Низька', 'Нормально', 'Добре', 'Заряджений'];
 
 /** PLAN_TEMPLATES — рядки 3425-3430. Прості мітки графіка дня (не dayTemplates/зони!). */
 export const PLAN_TEMPLATES = [

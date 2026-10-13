@@ -1,12 +1,19 @@
-import { canPrioritizeTask, isCalendarRepeat, isTaskAvailable, nextTaskReminderAt, repeatDueOn, taskPlanDate, taskPreReminderAt } from '../utils/taskSchedule';
+import { isCalendarRepeat, isTaskAvailable, nextTaskReminderAt, questDeferralReminderAt, repeatDueOn, taskPlanDate, taskPreReminderAt } from '../utils/taskSchedule';
 import { useStore } from '../state/store';
 import { hasTaskCounter, taskCounterStep, taskCounterTarget } from '../utils/taskCounter';
 import { nowHM, fmtDate, hmToString, localDateTimeMs, normalizeTime } from '../utils/date';
 import type { ForegroundNotifPayload, NotifSchedListItem, NotifZoneTimelineItem, Task } from '../types';
+import { buildQuestTimeline, getCurrentQuestSegment, selectQuestTasks } from '../utils/questPolicy';
 
 /** Native alarms retain their calendar rules when the WebView is absent. */
-export function recurringReminderRows(task: Task, now = new Date()): NotifSchedListItem[] {
+export function recurringReminderRows(task: Task, now = new Date(), timeline?: readonly import('../types').QuestTimelineSegment[]): NotifSchedListItem[] {
   if (!isCalendarRepeat(task) || !['sched', 'alarm'].includes(task.type) || task.trashed || task.someday || task.reminderEnabled === false) return [];
+  if (task.questDeferral) {
+    const fired = task.type === 'sched' ? task.firedSched : task.alarmFired;
+    if (fired) return [];
+    const dueMs = questDeferralReminderAt(task, timeline);
+    return dueMs === undefined ? [] : [{ id: task.id, title: task.title, dueMs, fired: false }];
+  }
   const localTime = normalizeTime(task.type === 'sched' ? task.schedTime : task.alarmTime);
   if (!localTime) return [];
   const today = fmtDate(now);
@@ -31,31 +38,6 @@ export function recurringReminderRows(task: Task, now = new Date()): NotifSchedL
   return rows;
 }
 
-/** colorDot() — рядки 3932-3947. Hex-колір → найближчий емодзі-кружечок. */
-export function colorDot(hex: string | null | undefined): string {
-  if (!hex) return '⚪';
-  let h = hex.replace('#', '');
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  const r = parseInt(h.substr(0, 2), 16) / 255;
-  const g = parseInt(h.substr(2, 2), 16) / 255;
-  const b = parseInt(h.substr(4, 2), 16) / 255;
-  const mx = Math.max(r, g, b);
-  const mn = Math.min(r, g, b);
-  const d = mx - mn;
-  if (d < 0.08) return mx > 0.6 ? '⚪' : '⚫';
-  let hue: number;
-  if (mx === r) hue = ((g - b) / d + 6) % 6;
-  else if (mx === g) hue = (b - r) / d + 2;
-  else hue = (r - g) / d + 4;
-  hue *= 60;
-  if (hue < 15 || hue >= 330) return '🔴';
-  if (hue < 45) return '🟠';
-  if (hue < 70) return '🟡';
-  if (hue < 170) return '🟢';
-  if (hue < 255) return '🔵';
-  if (hue < 320) return '🟣';
-  return '🔴';
-}
 
 /**
  * fgNotifText() — ПОВНИЙ перенос, рядки 3948-4097. `r.ico` для рутини в
@@ -66,34 +48,32 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const s = useStore.getState();
   const hm = nowHM();
   const zones = s.getActiveZones(hm);
-  const pz = zones[0];
-  const zoneDots = zones.length > 1 && pz.id !== 0 ? zones.slice(0, 5).map((z) => colorDot(z.color)).join('') : '';
+  const now = new Date();
+  const questTimeline = buildQuestTimeline({
+    zones: s.zones,
+    planDayOff: s.planDayOff,
+    dayBlocks: day => s.dayBlocks(day),
+    now,
+  });
+  const currentSegment = getCurrentQuestSegment(questTimeline, now);
+  const currentZone = s.zones.find(zone => zone.id === currentSegment?.zoneId);
+  const pz = currentZone
+    ? { ...currentZone, id: currentZone.id, nm: currentZone.nm, color: currentZone.color, desc: currentZone.desc || '', prio: currentZone.prio || 1, slots: currentZone.slots }
+    : zones[0];
   const slots = pz.slots && pz.slots.length ? pz.slots[0].s + '–' + pz.slots[pz.slots.length - 1].e : '';
 
   const todayStr = fmtDate(new Date());
-  const allActive = s.tasks.filter(t => isTaskAvailable(t) && (!t.done || t.doneDate === todayStr));
-  const undoneTasks = allActive.filter((t) => !t.done);
-  const doneCnt = allActive.length - undoneTasks.length;
-  const total = allActive.length;
-  const prioIds = s.priorities.filter((id): id is number => id != null && s.tasks.some(t => t.id === id && canPrioritizeTask(t)));
-  const prioCount = prioIds.length;
-
-  const notifPool = undoneTasks.filter((t) => {
-    if (prioIds.indexOf(t.id) >= 0) return true;
-    const fired = (t.type === 'alarm' && t.alarmFired) || (t.type === 'sched' && t.firedSched);
-    if (fired) return true;
-    if (t.zoneId) return t.zoneId === pz.id;
-    return true;
-  });
-  const notifRank = (t: (typeof notifPool)[number]) => {
-    const fired = (t.type === 'alarm' && t.alarmFired) || (t.type === 'sched' && t.firedSched);
-    if (fired) return 0;
-    if (prioIds.includes(t.id)) return 1;
-    if (pz.id && t.zoneId === pz.id) return 2;
-    return 3;
-  };
-  notifPool.sort((a, b) => notifRank(a) - notifRank(b));
-  const topN = notifPool.slice(0, 7);
+  const questContext = { now, timeline: questTimeline, zones: s.zones, priorities: s.priorities };
+  const topN = selectQuestTasks(s.tasks, questContext, 5);
+  const undoneTasks = selectQuestTasks(s.tasks, questContext, s.tasks.length);
+  const doneCnt = s.tasks.filter(t => t.done && t.doneDate === todayStr && isTaskAvailable(t)
+    && (t.zoneId == null || t.zoneId === currentSegment?.zoneId)).length;
+  const total = undoneTasks.length + doneCnt;
+  const questTasks = s.tasks.map(task => ({
+    ...task,
+    priorityIndex: s.priorities.indexOf(task.id),
+  }));
+  const prioCount = topN.filter(task => task.priorityIndex >= 0).length;
   const taskLines = topN.map((t) => t.title).join('|');
   // Journal entries record an event, rather than completing a task. Do not
   // offer the native "Done" action for them.
@@ -109,8 +89,8 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
 
   const schedList: NotifSchedListItem[] = [];
   for (const task of s.tasks) {
-    if (isCalendarRepeat(task)) { schedList.push(...recurringReminderRows(task)); continue; }
-    const due = nextTaskReminderAt(task);
+    if (isCalendarRepeat(task)) { schedList.push(...recurringReminderRows(task, now, questTimeline)); continue; }
+    const due = nextTaskReminderAt(task, now, questTimeline);
     if (due === undefined) continue;
     schedList.push({ id: task.id, title: task.title, dueMs: due, fired: task.type === 'sched' ? !!task.firedSched : !!task.alarmFired && fmtDate(new Date(due)) === todayStr });
     const pre = taskPreReminderAt(task, due);
@@ -137,22 +117,17 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const zoneTasksById: Record<number, string[]> = {};
   const zonelessTasks: string[] = [];
   const urgentTasks: string[] = [];
-  undoneTasks.forEach((t) => {
-    if (prioIds.indexOf(t.id) >= 0) { urgentTasks.push(t.title); return; }
-    const fired = (t.type === 'alarm' && t.alarmFired) || (t.type === 'sched' && t.firedSched);
-    if (fired) {
-      urgentTasks.push(t.title);
-      return;
-    }
+  topN.forEach((t) => {
+    if (t.priorityIndex >= 0) urgentTasks.push(t.title);
     if (t.zoneId) (zoneTasksById[t.zoneId] = zoneTasksById[t.zoneId] || []).push(t.title);
     else zonelessTasks.push(t.title);
   });
 
   const focus = s.currentFocus && s.currentFocus !== pz.nm ? s.currentFocus : '';
-  const desc = pz.desc || (focus ? '🧠 ' + focus : '');
+  const desc = pz.desc || focus;
 
   return {
-    zone: (zoneDots ? zoneDots + ' ' : '') + pz.nm,
+    zone: pz.nm,
     zoneColor: pz.color || '#4f8ef7',
     zoneTimeline,
     zoneBaseline,
@@ -164,10 +139,14 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
     desc,
     tasks: taskLines,
     taskList,
+    questTasks,
+    questTimeline,
+    questTimelineUntil: questTimeline[questTimeline.length - 1]?.endAt || now.getTime(),
+    questZones: s.zones.map(z => ({ id: z.id, nm: z.nm, desc: z.desc || '', color: z.color || '#4f8ef7' })),
     routine,
     routineList,
     schedList,
-    body: (prioCount > 0 ? '🎯 ' + prioCount + ' · ' : '') + (undoneTasks.length ? undoneTasks.length + ' активних · ' + doneCnt + ' виконано' : '✓ Всі виконано'),
+    body: (prioCount > 0 ? 'Пріоритети: ' + prioCount + ' · ' : '') + (undoneTasks.length ? undoneTasks.length + ' активних · ' + doneCnt + ' виконано' : 'Зараз немає доречних задач'),
     time: hmToString(hm),
     done: doneCnt,
     total,

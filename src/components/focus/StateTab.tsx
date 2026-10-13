@@ -6,6 +6,7 @@ import PriorityPicker from '../tasks/PriorityPicker';
 import RoutineEditor from './RoutineEditor';
 import { canPrioritizeTask } from '../../utils/taskSchedule';
 import { useClock } from '../../hooks/useClock';
+import Icon from '../common/Icon';
 
 function PrioritySlot({ index }: { index: number }) {
   useClock();
@@ -151,7 +152,7 @@ function FocusTracker() {
   return (
     <div id="focus-tracker">
       <div className="ft-head">
-        <span className="ft-lbl">🧠 Гіперфокус</span>
+        <span className="ft-lbl"><Icon name="focus" /> Гіперфокус</span>
         <span className="ft-cur">{currentFocus || '—'}</span>
         <button
           onClick={clearFocus}
@@ -223,17 +224,17 @@ export default function StateTab() {
   return (
     <div id="state-sec" className="tsec active">
       <div id="morning-card">
-        <h4>🎯 Пріоритети дня</h4>
+        <h4><Icon name="quest" /> Пріоритети дня</h4>
         <PrioritySlot index={0} />
         <PrioritySlot index={1} />
         <PrioritySlot index={2} />
         <div className="nrj-row">
           <span className="nrj-lbl">Енергія:</span>
           <div className="nrj-btns">
-            {['😴', '😐', '🙂', '😊', '🔥'].map((ico, i) => (
-              <div className={'nrj-btn' + (energy === i + 1 ? ' sel' : '')} key={i} onClick={() => setEnergy((i + 1) as 1 | 2 | 3 | 4 | 5)}>
-                {ico}
-              </div>
+            {[1, 2, 3, 4, 5].map(value => (
+              <button type="button" aria-label={'Енергія: ' + ENERGY_LABELS[value]} aria-pressed={energy === value} className={'nrj-btn' + (energy === value ? ' sel' : '')} key={value} onClick={() => setEnergy(value as 1 | 2 | 3 | 4 | 5)}>
+                {value}
+              </button>
             ))}
           </div>
           <span id="nrj-lbl">{energy ? ENERGY_LABELS[energy] : ''}</span>

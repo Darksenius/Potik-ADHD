@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useStore } from '../../state/store';
 import ExportImportSection from './ExportImportSection';
+import Icon from '../common/Icon';
 
 export default function NotesTab() {
   const notepad = useStore((s) => s.notepad);
@@ -61,14 +62,14 @@ export default function NotesTab() {
         placeholder="Вільні думки..."
       />
       <button className="ab" onClick={saveNotepadAsNote} style={{ marginBottom: 12 }}>
-        📌 Зберегти як нотатку
+        <Icon name="note" /> Зберегти як нотатку
       </button>
 
       <div id="folder-tabs" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
         <div className={'ftab' + (noteFolder === 'all' ? ' act' : '')} onClick={() => setNoteFolder('all')}>Всі</div>
         {folders.map((f) => (
           <div className={'ftab' + (noteFolder === f.id ? ' act' : '')} key={f.id} onClick={() => setNoteFolder(f.id)}>
-            {f.ico || '📁'} {f.nm}{' '}
+            {f.ico ? <>{f.ico} </> : <><Icon name="folder" /> </>}{f.nm}{' '}
             <span
               onClick={(e) => {
                 e.stopPropagation();
@@ -98,7 +99,7 @@ export default function NotesTab() {
         />
         <select aria-label="Папка нотатки" style={{ maxWidth: '40%', minWidth: 0 }} value={qnFolder} onChange={(e) => setQnFolder(e.target.value)}>
           {folders.map((f) => (
-            <option value={f.id} key={f.id}>{f.ico || '📁'} {f.nm}</option>
+            <option value={f.id} key={f.id}>{f.ico ? `${f.ico} ` : ''}{f.nm}</option>
           ))}
         </select>
         <button aria-label="Додати нотатку" onClick={send}>➤</button>
@@ -141,7 +142,7 @@ export default function NotesTab() {
                   <label className="el" htmlFor="quick-note-folder" style={{ marginTop: 8 }}>Папка</label>
                   <select id="quick-note-folder" className="ei" value={editFolder} onChange={(e) => setEditFolder(e.target.value)}>
                     {!folders.some((f) => f.id === editFolder) && <option value={editFolder}>Без папки</option>}
-                    {folders.map((f) => <option value={f.id} key={f.id}>{f.ico || '📁'} {f.nm}</option>)}
+                    {folders.map((f) => <option value={f.id} key={f.id}>{f.ico ? `${f.ico} ` : ''}{f.nm}</option>)}
                   </select>
                   <p id="quick-note-keyboard-hint" style={{ fontSize: 12, color: 'var(--t2)', margin: '8px 0' }}>
                     Enter — новий рядок. Ctrl/⌘ + Enter — зберегти. Escape — скасувати.

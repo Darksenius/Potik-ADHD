@@ -1,6 +1,7 @@
 import { useStore } from '../state/store';
 import { fmtDate } from '../utils/date';
 import { nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
+import { buildQuestTimeline } from '../utils/questPolicy';
 
 /** One scheduler for the visible app and the persisted native alarm snapshot. */
 export function checkReminders(): void {
@@ -14,9 +15,16 @@ export function checkReminders(): void {
   useStore.getState().checkZoneRepeats(now);
   const dueIds: number[] = [];
   let changed = false;
+  const latest = useStore.getState();
+  const questTimeline = buildQuestTimeline({
+    zones: latest.zones,
+    planDayOff: latest.planDayOff,
+    dayBlocks: day => latest.dayBlocks(day),
+    now,
+  });
   const tasks = useStore.getState().tasks.map(task => {
     if (task.trashed || task.someday) return task;
-    const due = nextTaskReminderAt(task, now);
+    const due = nextTaskReminderAt(task, now, questTimeline);
     if (due === undefined) return task;
     const pre = taskPreReminderAt(task, due);
     const inMinute = (time: number | undefined) => time !== undefined && now.getTime() >= time && now.getTime() < time + 60000;

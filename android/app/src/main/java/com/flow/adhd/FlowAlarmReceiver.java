@@ -18,6 +18,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -39,7 +42,8 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     public static final String ACTION_TASK_DUE    = "com.flow.adhd.TASK_DUE";
     static final String EXTRA_SNOOZE_DUE_MS = "snooze_due_ms";
     public static final String CHANNEL_REMIND      = "flow_remind";
-    private static final int   REMIND_BASE         = 5000;
+    public static final int REMIND_NOTIFICATION_ID = 5000;
+    private static final int REMIND_BASE = REMIND_NOTIFICATION_ID;
     private static final String LEGACY_ACTION_WATER = "com.flow.adhd.WATER_REMIND";
     private static final String LEGACY_CHANNEL_WATER = "flow_water";
     private static final int LEGACY_WATER_NOTIF_ID = 6001;
@@ -98,7 +102,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         if (notifJson == null || notifJson.isEmpty()) return;
         try {
             JSONObject j = new JSONObject(notifJson);
-            JSONArray sched = j.optJSONArray("schedList");
+            JSONArray sched = effectiveSchedList(j, bridge, now, zone);
             if (sched == null) return;
             SharedPreferences delivered = context.getSharedPreferences("flow_delivered_reminders", Context.MODE_PRIVATE);
             for (int i = 0; i < sched.length(); i++) {
@@ -162,12 +166,14 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             JSONObject state = new JSONObject(bridge.load());
             JSONArray tasks = state.optJSONArray("tasks");
             if (tasks == null) return true; // legacy state without task metadata
+            String taskId = id != null && id.endsWith("_pre") ? id.substring(0, id.length() - 4) : id;
             for (int i = 0; i < tasks.length(); i++) {
                 JSONObject task = tasks.optJSONObject(i);
-                if (task == null || !id.equals(task.optString("id", ""))) continue;
+                if (task == null || !taskId.equals(task.optString("id", ""))) continue;
                 String type = task.optString("type", "");
                 return !task.optBoolean("done", false) && !task.optBoolean("trashed", false)
-                        && !"someday".equals(type);
+                        && !task.optBoolean("someday", false) && !"someday".equals(type)
+                        && !"negative".equals(type);
             }
             return false;
         } catch (Exception unavailable) {
@@ -306,12 +312,11 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         try {
             JSONArray events = new JSONArray(bridge.getEventEnvelopes());
             String done = "task_done:" + taskId;
-            String skip = "task_skip:" + taskId;
             for (int i = 0; i < events.length(); i++) {
                 JSONObject event = events.optJSONObject(i);
                 if (event == null) continue;
                 String value = event.optString("event", "");
-                if ((done.equals(value) || skip.equals(value))
+                if (done.equals(value)
                         && sameLocalDate(event.optLong("createdAt", 0L), dueMs, zone)) return true;
             }
         } catch (Exception ignored) {}
@@ -326,12 +331,9 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             NotificationChannel channel = nm.getNotificationChannel(CHANNEL_REMIND);
             if (channel == null || channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return false;
         }
-        Intent open = new Intent(context, MainActivity.class);
-        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        open.putExtra("nav", "tasks");
-        int fImm = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
-        PendingIntent pi = PendingIntent.getActivity(context, 0, open,
-                fImm | PendingIntent.FLAG_UPDATE_CURRENT);
+        String taskId = id != null && id.endsWith("_pre") ? id.substring(0, id.length() - 4) : id;
+        String tag = FlowNotifService.TASK_REMINDER_TAG + id;
+        PendingIntent pi = FlowNotifService.openTaskPendingIntent(context, taskId);
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_REMIND)
                 .setSmallIcon(R.drawable.ic_notification)
@@ -343,7 +345,14 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                 .setAutoCancel(true)
                 .setContentIntent(pi);
 
-        try { nm.notify("flow-task:" + id, REMIND_BASE, b.build()); return true; }
+        b.addAction(FlowNotifService.taskAction(context, android.R.drawable.checkbox_on_background,
+                        "Виконано", FlowNotifService.ACTION_TASK_DONE, taskId, tag, REMIND_BASE))
+                .addAction(FlowNotifService.taskAction(context, android.R.drawable.ic_media_next,
+                        "Не зараз", FlowNotifService.ACTION_TASK_NEXT_ZONE, taskId, tag, REMIND_BASE))
+                .addAction(FlowNotifService.taskAction(context, android.R.drawable.ic_menu_close_clear_cancel,
+                        "Не сьогодні", FlowNotifService.ACTION_TASK_NOT_TODAY, taskId, tag, REMIND_BASE));
+
+        try { nm.notify(tag, REMIND_BASE, b.build()); return true; }
         catch (SecurityException denied) { return false; }
     }
 
@@ -403,10 +412,10 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     public static void scheduleNextDue(Context ctx, FlowBridge bridge) {
         try {
             String notifJson = bridge.getNotifJson();
-            if (notifJson == null || notifJson.isEmpty()) return;
+            if (notifJson == null || notifJson.isEmpty()) { cancelNextDue(ctx); return; }
             JSONObject j = new JSONObject(notifJson);
-            JSONArray sched = j.optJSONArray("schedList");
-            if (sched == null) return;
+            JSONArray sched = effectiveSchedList(j, bridge, System.currentTimeMillis(), TimeZone.getDefault());
+            if (sched == null) { cancelNextDue(ctx); return; }
             long now = System.currentTimeMillis(), next = Long.MAX_VALUE;
             for (int i = 0; i < sched.length(); i++) {
                 JSONObject s = sched.optJSONObject(i);
@@ -416,7 +425,83 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                 if ((isCalendarRepeat(s) || !s.optBoolean("fired", false)) && due > now && due < next) next = due;
             }
             if (next != Long.MAX_VALUE) schedule(ctx, ACTION_TASK_DUE, next, 3);
-        } catch (Exception ignored) {}
+            else cancelNextDue(ctx);
+        } catch (Exception ignored) { cancelNextDue(ctx); }
+    }
+
+    /**
+     * Overlays durable native commands on the last JS reminder snapshot. This
+     * prevents an old scheduled alarm from firing while the WebView is closed
+     * and installs the one-off time derived from a pending deferral.
+     */
+    static JSONArray effectiveSchedList(JSONObject snapshot, FlowBridge bridge, long now, TimeZone zone) {
+        try {
+            JSONArray original = snapshot.optJSONArray("schedList");
+            JSONArray output = new JSONArray();
+            List<QuestPolicy.Segment> timeline = QuestPolicy.timelineFromJson(snapshot.optJSONArray("questTimeline"));
+            List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(snapshot.optJSONArray("questTasks"));
+            JSONArray rawEvents;
+            try { rawEvents = new JSONArray(bridge.getEventEnvelopes()); }
+            catch (Exception ignored) { rawEvents = new JSONArray(); }
+            List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
+                    QuestPolicy.eventsFromJson(rawEvents), now, timeline, zone);
+            Map<String, QuestPolicy.Task> byId = new HashMap<>();
+            for (QuestPolicy.Task task : projected) {
+                byId.put(task.id, task);
+            }
+            if (original != null) for (int i = 0; i < original.length(); i++) {
+                JSONObject row = original.optJSONObject(i);
+                if (row == null) continue;
+                String id = row.optString("id", "");
+                String taskId = id.endsWith("_pre") ? id.substring(0, id.length() - 4) : id;
+                QuestPolicy.Task task = byId.get(taskId);
+                if (task != null && (task.deferral != null || task.done || task.trashed || task.someday
+                        || "negative".equals(task.type))) continue;
+                output.put(row);
+            }
+            for (QuestPolicy.Task task : projected) {
+                if (task.deferral == null || !("sched".equals(task.type) || "alarm".equals(task.type))
+                        || !task.reminderEnabled || task.done || task.trashed || task.someday
+                        || "negative".equals(task.type)) continue;
+                boolean fired = "sched".equals(task.type) ? task.firedSched : task.alarmFired;
+                if (fired) continue;
+                long due = deferredReminderAt(task, timeline);
+                if (due <= 0) continue;
+                JSONObject row = new JSONObject();
+                row.put("id", task.id);
+                row.put("title", task.title);
+                row.put("dueMs", due);
+                row.put("fired", false);
+                output.put(row);
+            }
+            return output;
+        } catch (Exception ignored) {
+            return snapshot == null ? null : snapshot.optJSONArray("schedList");
+        }
+    }
+
+    private static long deferredReminderAt(QuestPolicy.Task task, List<QuestPolicy.Segment> timeline) {
+        QuestPolicy.Deferral deferral = task.deferral;
+        if (deferral == null) return -1L;
+        if (QuestPolicy.DEFERRAL_NEXT_ZONE.equals(deferral.kind) || !task.hasZone) return deferral.startAt;
+        long first = Long.MAX_VALUE;
+        for (QuestPolicy.Segment segment : timeline) {
+            if (segment.zoneId == deferral.targetZoneId && segment.startAt >= deferral.startAt)
+                first = Math.min(first, segment.startAt);
+        }
+        return first == Long.MAX_VALUE ? -1L : first;
+    }
+
+    private static void cancelNextDue(Context context) {
+        AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        Intent intent = new Intent(context, FlowAlarmReceiver.class);
+        intent.setAction(ACTION_TASK_DUE);
+        int flags = (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0) | PendingIntent.FLAG_NO_CREATE;
+        PendingIntent existing = PendingIntent.getBroadcast(context, 3, intent, flags);
+        if (existing != null) {
+            if (manager != null) manager.cancel(existing);
+            existing.cancel();
+        }
     }
 
     /** Cancel the old hourly water alarm and notification left by earlier versions. */

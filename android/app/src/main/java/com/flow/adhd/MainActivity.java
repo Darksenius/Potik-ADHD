@@ -43,6 +43,14 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void handleNotifIntent(android.content.Intent intent) {
+        if (intent != null) {
+            String taskId = intent.getStringExtra("openTaskId");
+            if (taskId != null && !taskId.trim().isEmpty() && taskId.indexOf(':') < 0) {
+                // Navigation is durable through Room if the WebView is not ready yet.
+                // The JS bridge handles focus; native never mutates the task itself.
+                flowBridge.pushEvent("open_task:" + taskId.trim());
+            }
+        }
         if (intent != null && "tasks".equals(intent.getStringExtra("nav"))) {
             android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
             h.postDelayed(new Runnable() {

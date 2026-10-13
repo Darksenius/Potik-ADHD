@@ -3,6 +3,7 @@ import { useStore } from '../../state/store';
 import { ruleFor } from '../../state/slices/plannerSlice';
 import type { DateKey } from '../../types';
 import { normalizeTime } from '../../utils/date';
+import Icon from '../common/Icon';
 
 export default function DayZones({ ds }: { ds: DateKey }) {
   const zones = useStore((s) => s.zones);
@@ -44,12 +45,12 @@ export default function DayZones({ ds }: { ds: DateKey }) {
   return (
     <div style={{ margin: '4px 0 8px' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
-        🕐 Часові зони дня
+        <Icon name="zones" /> Часові зони дня
       </div>
 
       {dayExplicit && dayRule && (
         <div style={{ fontSize: 10, color: 'var(--t3)', padding: '1px 0 4px' }}>
-          ✍ ручні правки ·{' '}
+          <Icon name="edit" /> ручні правки ·{' '}
           <span onClick={() => resetDayToRule(ds)} style={{ color: 'var(--z)', cursor: 'pointer', textDecoration: 'underline' }}>
             повернути графік «{dayRule.name}»
           </span>
@@ -57,7 +58,7 @@ export default function DayZones({ ds }: { ds: DateKey }) {
       )}
       {!dayExplicit && dayRule && !!dayZones.length && (
         <div style={{ fontSize: 10, color: 'var(--t3)', padding: '1px 0 4px' }}>
-          📋 за графіком «{dayRule.name}» — правка створить виняток лише для цього дня
+          <Icon name="calendar" /> за графіком «{dayRule.name}» — правка створить виняток лише для цього дня
         </div>
       )}
 
@@ -79,7 +80,7 @@ export default function DayZones({ ds }: { ds: DateKey }) {
         if (!z) return null;
         return (
           <div key={zid} style={{ fontSize: 10, color: 'var(--t3)', padding: '2px 0 2px 8px' }}>
-            💤 {z.nm} вимкнена цього дня ·{' '}
+            <Icon name="moon" /> {z.nm} вимкнена цього дня ·{' '}
             <span onClick={() => restoreDailyZone(ds, zid)} style={{ color: 'var(--z)', cursor: 'pointer', textDecoration: 'underline' }}>
               повернути
             </span>
@@ -117,7 +118,7 @@ export default function DayZones({ ds }: { ds: DateKey }) {
         >
           <option value="">— зона —</option>
           {zsort.map((z) => (
-            <option value={z.id} key={z.id}>{z.nm}{z.active === false ? ' 💤' : ''}</option>
+            <option value={z.id} key={z.id}>{z.nm}{z.active === false ? ' — вимкнена' : ''}</option>
           ))}
         </select>
         <input type="time" value={addStart} onChange={(e) => setAddStart(e.target.value)} style={{ background: 'var(--s3)', border: '1px solid var(--b2)', borderRadius: 6, color: 'var(--t1)', fontSize: 11, padding: '3px 5px' }} />

@@ -59,12 +59,12 @@ test('removed task types reject the entire import without changing current tasks
   }
 });
 
-test('Inbox capture is excluded from Android daily snapshot until planned, simple tasks never schedule alarms', () => {
+test('undated capture is available immediately; assigning a day preserves identity and simple tasks never schedule alarms', () => {
   const captured = useStore.getState().createTask('Купити батарейки', 'simple');
   useStore.getState().addQuickTaskFromShade('Думка зі шторки');
-  expect(buildForegroundNotifPayload().taskList).toHaveLength(0);
+  expect(buildForegroundNotifPayload().taskList.map(t => t.title)).toEqual(['Думка зі шторки', captured.title]);
   useStore.getState().saveTask(captured.id, { title: captured.title, type: 'simple', planDate: fmtDate(new Date()) });
-  expect(buildForegroundNotifPayload().taskList.map(t => t.id)).toEqual([captured.id]);
+  expect(buildForegroundNotifPayload().taskList.map(t => t.id)).toContain(captured.id);
   expect(buildForegroundNotifPayload().schedList).toHaveLength(0);
 });
 
@@ -72,10 +72,10 @@ test('native capture, Today priority and moving day share the same eligibility w
   expect(handleNativeEvent('capture_task:Зателефонувати майстру')).toBe(true);
   const captured = useStore.getState().tasks[0];
   useStore.getState().setPriority(0, captured.id);
-  expect(useStore.getState().priorities).toEqual([null, null, null]);
+  expect(useStore.getState().priorities).toEqual([captured.id, null, null]);
   expect(handleNativeEvent('done_first')).toBe(false);
   expect(useStore.getState().tasks[0].done).toBe(false);
-  expect(buildForegroundNotifPayload().taskList).toHaveLength(0);
+  expect(buildForegroundNotifPayload().taskList.map(t => t.id)).toEqual([captured.id]);
   useStore.getState().saveTask(captured.id, { title: captured.title, type: 'simple', planDate: fmtDate(new Date()) });
   useStore.getState().setPriority(0, captured.id);
   useStore.getState().setPriority(1, captured.id);
@@ -83,11 +83,11 @@ test('native capture, Today priority and moving day share the same eligibility w
   const payload = buildForegroundNotifPayload();
   expect(payload.taskList[0].id).toBe(captured.id);
   expect(payload.urgentTasks).toContain(captured.title);
-  expect(payload.body).toContain('🎯 1');
+  expect(payload.body).toContain('Пріоритети: 1');
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   useStore.getState().saveTask(captured.id, { title: captured.title, type: 'simple', planDate: fmtDate(tomorrow) });
   expect(buildForegroundNotifPayload().taskList).toHaveLength(0);
-  expect(buildForegroundNotifPayload().body).not.toContain('🎯');
+  expect(buildForegroundNotifPayload().body).not.toContain('Пріоритети:');
   expect(useStore.getState().tasks[0]).toMatchObject({ id: captured.id, planDate: fmtDate(tomorrow), done: false });
 });
 

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from '../../state/store';
 import { useClock } from '../../hooks/useClock';
 import { hmToString } from '../../utils/date';
+import Icon from '../common/Icon';
 
 export default function ZoneCard() {
   const hm = useClock();
@@ -29,23 +30,12 @@ export default function ZoneCard() {
 
   return (
     <div id="zone-card">
-      {zones.length > 1 && pz.id !== 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 7 }}>
-          {zones.slice(0, 5).map((z) => (
-            <span
-              key={z.id}
-              style={{ width: 11, height: 11, borderRadius: '50%', background: z.color, display: 'inline-block', boxShadow: `0 0 4px ${z.color}` }}
-            />
-          ))}
-          <span style={{ fontSize: 10, color: 'var(--t3)', marginLeft: 3 }}>{zones.length} зони активні</span>
-        </div>
-      )}
-      {zones.slice(0, 3).map((z, i) => (
+      {zones.slice(0, 1).map((z, i) => (
         <div className="zl" key={z.id} style={{ borderLeftColor: z.color }}>
           <div>
             <h3 style={{ color: z.color }}>{z.nm}</h3>
             <p>{z.desc}</p>
-            {i === 0 && focusShort && <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>🧠 {focusShort}</div>}
+            {i === 0 && focusShort && <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}><Icon name="focus" /> {focusShort}</div>}
           </div>
           {i === 0 ? (
             <div id="clock">{t}</div>

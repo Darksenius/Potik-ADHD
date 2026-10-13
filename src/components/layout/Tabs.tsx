@@ -1,11 +1,12 @@
 import { useStore } from '../../state/store';
 import type { TabId } from '../../state/slices/uiSlice';
+import Icon from '../common/Icon';
 
-const TABS: { id: TabId; icon: string; label: string }[] = [
-  { id: 'tasks', icon: '☀', label: 'Сьогодні' },
-  { id: 'planner', icon: '📅', label: 'План' },
-  { id: 'inbox', icon: '↓', label: 'Вхідні' },
-  { id: 'more', icon: '⋯', label: 'Ще' },
+const TABS: { id: TabId; icon: 'quest' | 'calendar' | 'inbox' | 'more'; label: string }[] = [
+  { id: 'tasks', icon: 'quest', label: 'Зараз' },
+  { id: 'planner', icon: 'calendar', label: 'План' },
+  { id: 'inbox', icon: 'inbox', label: 'Вхідні' },
+  { id: 'more', icon: 'more', label: 'Ще' },
 ];
 
 export default function Tabs() {
@@ -13,17 +14,19 @@ export default function Tabs() {
   const switchTab = useStore((s) => s.switchTab);
 
   return (
-    <div id="tabs">
-      {TABS.map((t) => (
-        <button
+    <div id="tabs" role="group" aria-label="Розділи Потоку">
+      {TABS.map((t) => {
+        const active = currentTab === t.id || (t.id === 'more' && !['tasks', 'planner', 'inbox'].includes(currentTab));
+        return <button
+          type="button"
           key={t.id}
-          aria-current={currentTab === t.id || (t.id === 'more' && !['tasks', 'planner', 'inbox'].includes(currentTab)) ? 'page' : undefined}
-          className={'tb' + (currentTab === t.id || (t.id === 'more' && !['tasks', 'planner', 'inbox'].includes(currentTab)) ? ' active' : '')}
+          aria-current={active ? 'page' : undefined}
+          className={'tb' + (active ? ' active' : '')}
           onClick={() => switchTab(t.id)}
         >
-          <span className="tbi">{t.icon}</span>{t.label}
-        </button>
-      ))}
+          <span className="tbi"><Icon name={t.icon} /></span>{t.label}
+        </button>;
+      })}
     </div>
   );
 }

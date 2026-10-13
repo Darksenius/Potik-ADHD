@@ -55,7 +55,7 @@ export default function App() {
           <div id="app">
             <Topbar />
             <Tabs />
-            {currentTab === 'tasks' && <details className="today-context"><summary>Поточна зона й час дня</summary><ZoneCard /><ProgressBars /></details>}
+            {currentTab === 'tasks' && <><ZoneCard /><details className="today-context"><summary>Час і досвід</summary><ProgressBars /></details></>}
 
             {currentTab === 'tasks' && <TasksTab />}
             {currentTab === 'notes' && <NotesTab />}

@@ -2,7 +2,9 @@ import { useStore } from '../../state/store';
 import type { Task } from '../../types';
 import { TASK_TYPE_LABELS } from '../../constants';
 import TaskBody from './TaskBody';
+import Icon from '../common/Icon';
 import { taskPlanDate } from '../../utils/taskSchedule';
+import { questDeferralLabel } from '../../utils/questPolicy';
 import { fmtDate } from '../../utils/date';
 import { COUNTER_UNITS, hasTaskCounter, taskCounterTarget } from '../../utils/taskCounter';
 
@@ -20,14 +22,27 @@ function repeatLabel(t: Task): string {
   return '↺';
 }
 
-export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }: { t: Task; isPriority: boolean; visibleIds: number[]; allowMove?: boolean }) {
+export default function TaskItem({
+  t, isPriority, visibleIds, allowMove = true, questCard = false, canDefer = false, allView = false, availabilityMessage,
+}: {
+  t: Task;
+  isPriority: boolean;
+  visibleIds: number[];
+  allowMove?: boolean;
+  questCard?: boolean;
+  canDefer?: boolean;
+  allView?: boolean;
+  availabilityMessage?: string;
+}) {
   const toggleTask = useStore((s) => s.toggleTask);
   const toggleExpanded = useStore((s) => s.toggleExpanded);
   const moveTask = useStore((s) => s.moveTask);
+  const deferTask = useStore((s) => s.deferTask);
   const deleteTask = useStore((s) => s.deleteTask);
   const toSomeday = useStore((s) => s.toSomeday);
   const requestEditTask = useStore((s) => s.requestEditTask);
   const folders = useStore((s) => s.folders);
+  const zones = useStore((s) => s.zones);
 
   const isNeg = t.type === 'negative';
   const hasBody = t.type !== 'simple' || hasTaskCounter(t) || !!t.note || !!t.expanded;
@@ -35,6 +50,9 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
   const rep = repeatLabel(t);
   const date = taskPlanDate(t);
   const showXp = useStore(s => s.preferences.showGamification !== false);
+  const missingZone = t.zoneId != null && !zones.some(zone => zone.id === t.zoneId);
+  const deferralStatus = questDeferralLabel(t, zones);
+  const showDeferActions = canDefer && !t.done && !isNeg;
 
   return (
     <div
@@ -45,11 +63,11 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
         <button
           className={'ck' + (t.done && !isNeg ? ' on' : '') + (isNeg ? ' neg-ck' : '')}
           onClick={() => toggleTask(t.id)}
-          aria-label={(t.done ? 'Позначити невиконаною: ' : 'Виконати: ') + t.title}
+          aria-label={(isNeg ? 'Зафіксувати: ' : t.done ? 'Позначити невиконаною: ' : 'Виконати: ') + t.title}
           aria-pressed={t.done}
           style={{ marginTop: 2, flexShrink: 0 }}
         >
-          {!isNeg && t.done ? '✓' : ''}
+          {!isNeg && t.done ? <Icon name="check" /> : null}
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <button className="tt task-title-button" onClick={() => requestEditTask(t.id)}>{t.title}</button>
@@ -61,13 +79,15 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
         </div>
         {hasBody && (
           <button className="ab ghost" aria-label={(t.expanded ? 'Згорнути: ' : 'Розгорнути: ') + t.title} aria-expanded={t.expanded} onClick={() => toggleExpanded(t.id)} style={{ flexShrink: 0, marginTop: 1 }}>
-            {t.expanded ? '▲' : '▼'}
+            <Icon name="expand" />
           </button>
         )}
       </div>
       <div className="tc-meta">
         {hasTaskCounter(t) && <span className="badge">{t.counter || 0}{taskCounterTarget(t) > 0 ? '/' + taskCounterTarget(t) : ''} {COUNTER_UNITS[t.counterUnit || 'count']}</span>}
-        {t.zoneName && <span className="badge zbadge" style={{ borderLeftColor: t.zoneColor || undefined }}>{t.zoneName}</span>}
+        {t.zoneName && !missingZone && <span className="badge zbadge" style={{ borderLeftColor: t.zoneColor || undefined }}>{t.zoneName}</span>}
+        {missingZone && allView && <span className="badge" style={{ background: 'rgba(226,75,74,.12)', color: 'var(--neg)', border: '1px solid rgba(226,75,74,.25)' }} title={'Зону «' + (t.zoneName || ('#' + t.zoneId)) + '» видалено; задачу залишено в усіх задачах'}>Зону видалено · {t.zoneName || ('#' + t.zoneId)}</span>}
+        {allView && !missingZone && availabilityMessage && <span className="badge" title={availabilityMessage}>{availabilityMessage}</span>}
         {t.type === 'zonelinked' && !t.zoneId && (
           <span className="badge" style={{ background: 'rgba(226,75,74,.12)', color: 'var(--neg)', border: '1px solid rgba(226,75,74,.25)' }} title="Не вказано зону">! зона</span>
         )}
@@ -75,7 +95,8 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
         {rep && <span className="badge rep-b">{rep}</span>}
         <span className="badge" style={{ background: 'var(--s2)' }}>{TASK_TYPE_LABELS[t.type] || t.type}</span>
         {!!(t.tags || []).length && <span className="badge" style={{ color: 'var(--z)' }}>#{t.tags[0]}</span>}
-        {folder && <span className="badge" style={{ background: 'var(--s2)' }} title={folder.nm}>{folder.ico || '📁'}</span>}
+        {folder && <span className="badge" style={{ background: 'var(--s2)' }} title={folder.nm}>{folder.ico || <Icon name="folder" />}</span>}
+        {allView && deferralStatus && <span className="badge quest-deferral-status" title={deferralStatus}>{deferralStatus}</span>}
         {isNeg && <span className="badge" style={{ background: 'rgba(226,75,74,.12)', color: 'var(--neg)' }}>−{t.negXp || 5} досвіду</span>}
         {showXp && (isNeg ? (
           <span style={{ fontSize: 10, color: 'var(--neg)', fontFamily: "'Space Mono',monospace", flexShrink: 0 }}>−{t.negXp || 5}</span>
@@ -83,10 +104,16 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
           <span style={{ fontSize: 10, color: 'var(--xp)', fontFamily: "'Space Mono',monospace", flexShrink: 0 }}>+{TXP[t.type] ?? 10}</span>
         ))}
         <div className="tc-acts">
-          {allowMove && <><button className="ab" onClick={() => moveTask(t.id, -1, visibleIds)} title="Вгору" aria-label={'Підняти: ' + t.title}>↑</button><button className="ab" onClick={() => moveTask(t.id, 1, visibleIds)} title="Вниз" aria-label={'Опустити: ' + t.title}>↓</button></>}
-          <button className="ab eb" onClick={() => requestEditTask(t.id)} title="Редагувати" aria-label={'Редагувати: ' + t.title}>✎</button>
-          <button className="ab" onClick={() => toSomeday(t.id)} title="На колись" aria-label={'На колись: ' + t.title}>📦</button>
-          <button className="ab del" onClick={() => deleteTask(t.id)} title="У кошик" aria-label={'У кошик: ' + t.title}>✕</button>
+          {showDeferActions && <>
+            <button className="ab quest-defer-btn" onClick={() => deferTask(t.id, 'next-zone', Date.now())} title="Не зараз: перенести в наступну часову зону" aria-label={'Не зараз: ' + t.title}>Не зараз</button>
+            <button className="ab quest-defer-btn" onClick={() => deferTask(t.id, 'not-today', Date.now())} title="Не сьогодні: повернути пізніше" aria-label={'Не сьогодні: ' + t.title}>Не сьогодні</button>
+          </>}
+          {!questCard && <>
+            {allowMove && <><button className="ab" onClick={() => moveTask(t.id, -1, visibleIds)} title="Вгору" aria-label={'Підняти: ' + t.title}>↑</button><button className="ab" onClick={() => moveTask(t.id, 1, visibleIds)} title="Вниз" aria-label={'Опустити: ' + t.title}>↓</button></>}
+            <button className="ab eb" onClick={() => requestEditTask(t.id)} title="Редагувати" aria-label={'Редагувати: ' + t.title}><Icon name="edit" /></button>
+            <button className="ab" onClick={() => toSomeday(t.id)} title="На колись" aria-label={'На колись: ' + t.title}><Icon name="archive" /></button>
+            <button className="ab del" onClick={() => deleteTask(t.id)} title="У кошик" aria-label={'У кошик: ' + t.title}><Icon name="trash" /></button>
+          </>}
         </div>
       </div>
       {hasBody && (

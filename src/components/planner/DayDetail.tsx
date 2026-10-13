@@ -6,6 +6,7 @@ import { DayAnalysis, DayJournal } from './DayJournal';
 import DayZones from './DayZones';
 import DayTemplates from './DayTemplates';
 import { isCalendarRepeat, taskDoneOn, taskOccursOn } from '../../utils/taskSchedule';
+import Icon from '../common/Icon';
 
 export default function DayDetail({ ds }: { ds: DateKey }) {
   const dayIsRest = useStore((s) => s.dayIsRest);
@@ -52,14 +53,14 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
             className="pdd-add"
             onClick={() => {
               openKbdOverlay({
-                hint: '🎉 Подія на ' + fmtHuman(new Date(ds + 'T12:00:00')),
+                hint: 'Подія на ' + fmtHuman(new Date(ds + 'T12:00:00')),
                 placeholder: 'напр. ДН Оленки, Похід в кіно...',
                 showTaskHint: false,
                 onSend: (txt) => addPlanEvent(ds, txt),
               });
             }}
           >
-            🎉 Подія
+            <Icon name="idea" /> Подія
           </button>
         </div>
       </div>
@@ -76,7 +77,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
       {items.map((it, i) => (
         <div className={'plan-task-row' + (it.isEvent ? ' plan-event' : '')} key={i}>
           <button className={'plan-ck' + (it.done ? ' on' : '')} onClick={() => togglePlanItem(ds, i)}>
-            {it.done ? '✓' : it.isEvent ? '🎉' : ''}
+            {it.done ? <Icon name="check" /> : it.isEvent ? <Icon name="idea" /> : ''}
           </button>
           <span className="plan-task-nm" style={it.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{it.title || ''}</span>
           {it.time && <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{it.time}</span>}
@@ -91,7 +92,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
 
       <div style={{ margin: '4px 0 9px' }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
-          📝 Примітка дня
+          <Icon name="note" /> Примітка дня
         </div>
         <textarea
           value={noteText}
@@ -104,13 +105,13 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
       </div>
 
       <div className="rest-toggle" onClick={() => toggleRestDay(ds)}>
-        <span>🌙</span>
+        <Icon name="moon" />
         <span className="rt-lbl">Вихідний день</span>
         <div className={'rt-sw' + (isRest ? ' on' : '')} />
       </div>
 
       {isRest ? (
-        <div style={{ fontSize: 11, color: 'rgba(189,16,224,.7)', padding: '3px 0 6px' }}>📋 Нагадування: заплануй тиждень</div>
+        <div style={{ fontSize: 11, color: 'rgba(189,16,224,.7)', padding: '3px 0 6px' }}><Icon name="calendar" /> Нагадування: заплануй тиждень</div>
       ) : (
         <>
           <div className="plan-type-row">
@@ -123,7 +124,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
           </div>
           {sched && (() => {
             const tmpl = PLAN_TEMPLATES.find((t) => t.id === sched);
-            return tmpl ? <div style={{ fontSize: 10, color: 'var(--z)', padding: '2px 0 6px' }}>📋 Графік: {tmpl.label} ({tmpl.hours})</div> : null;
+            return tmpl ? <div style={{ fontSize: 10, color: 'var(--z)', padding: '2px 0 6px' }}><Icon name="calendar" /> Графік: {tmpl.label} ({tmpl.hours})</div> : null;
           })()}
           <DayZones key={ds} ds={ds} />
           <DayTemplates ds={ds} />

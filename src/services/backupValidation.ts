@@ -29,10 +29,21 @@ const booleans = array(bool);
 const slot = shape({ s: str, e: str }, ['s', 'e']);
 const block = shape({ zoneId: id, s: str, e: str, ov: bool }, ['zoneId', 's', 'e']);
 const ruleDay = shape({ tplId: str, rest: bool }, [], { tplId: '', rest: false });
+const questDeferralShape = shape({
+  kind: oneOf(['next-zone', 'not-today']), requestedAt: num, sourceZoneId: id, targetZoneId: id, startAt: num, endAt: num,
+}, ['kind', 'requestedAt', 'sourceZoneId', 'targetZoneId', 'startAt']);
+const questDeferral: Check = (value, path) => {
+  const result = questDeferralShape(value, path) as Obj;
+  if (result.kind === 'next-zone') {
+    if (typeof result.endAt !== 'number' || result.endAt <= (result.startAt as number)) fail(path + '.endAt');
+  } else if ('endAt' in result) fail(path + '.endAt');
+  return result;
+};
 const task = shape({
   id, title: str, type: oneOf(['simple', 'check', 'counter', 'note', 'alarm', 'sched', 'timewin', 'ctx', 'negative', 'zonelinked']),
   done: bool, someday: bool, zoneId: nullable(id), zoneColor: nullable(str), zoneName: nullable(str), folderId: nullable(str),
   expanded: bool, created: str, trashed: bool, doneDate: str, doneAt: str, completionCredited: bool, completionCreditDate: str, snoozeUntil: num,
+  questDeferral,
   items: array(shape({ text: str, done: bool, credited: bool }, ['text'], { done: false })),
   counter: num, counterTarget: num, cntHit: bool, negXp: num, note: str, alarmTime: str, alarmFired: bool,
   counterEnabled: bool, counterStep: num, counterUnit: oneOf(['count', 'ml', 'min']), counterCreditedProgress: num, counterDay: str,

@@ -58,6 +58,25 @@ export interface ChecklistItem {
   credited?: boolean;
 }
 
+export type QuestDeferralKind = 'next-zone' | 'not-today';
+
+/** A temporary move shown in the quest panel without changing permanent scheduling. */
+export interface QuestDeferral {
+  kind: QuestDeferralKind;
+  requestedAt: number;
+  sourceZoneId: number;
+  targetZoneId: number;
+  startAt: number;
+  endAt?: number;
+}
+
+/** Primary-zone interval used by the shared quest selector and native snapshot. */
+export interface QuestTimelineSegment {
+  zoneId: number;
+  startAt: number;
+  endAt: number;
+}
+
 /**
  * Задача. НЕ чистий discriminated union навмисно: оригінальний mkTask()
  * створює один об'єкт і заповнює лише релевантні полю типу поля (решта —
@@ -102,6 +121,8 @@ export interface Task {
   /** Разовий бонус XP уже нараховано за досягнення цілі (chgCnt) */
   cntHit?: boolean;
   negXp?: number;         // тільки 'negative' — скільки XP віднімається за клік
+  /** Temporary quest-panel deferral; never rewrites planDate or recurrence. */
+  questDeferral?: QuestDeferral;
 
   // Optional details shared by all task types
   note?: string;
@@ -340,6 +361,10 @@ export interface NotifTaskListItem {
   counterDay: string;
 }
 
+export type NotifQuestTask = Task & { priorityIndex: number };
+
+export type NotifQuestTimelineItem = QuestTimelineSegment;
+
 export interface NotifRoutineListItem {
   id: string;
   nm: string;
@@ -386,6 +411,10 @@ export interface ForegroundNotifPayload {
   desc: string;
   tasks: string;
   taskList: NotifTaskListItem[];
+  questTasks: NotifQuestTask[];
+  questTimeline: NotifQuestTimelineItem[];
+  questTimelineUntil: number;
+  questZones: { id: number; nm: string; desc: string; color: string }[];
   routine: string;
   routineList: NotifRoutineListItem[];
   schedList: NotifSchedListItem[];

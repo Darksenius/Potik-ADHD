@@ -14,6 +14,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import androidx.core.app.NotificationCompat;
@@ -29,7 +30,8 @@ public class FlowNotifService extends Service {
     public static final int    NOTIF_ID         = 42;
     public static final int    NOTIF_TASK_BASE  = 1000;          // 1000..1004 — задачі
     public static final int    NOTIF_RC_BASE    = 2000;          // 2000..2009 — рутина
-    public static final String GROUP_TASKS      = "com.flow.adhd.GROUP_TASKS";
+    public static final String TASK_REMINDER_TAG = "flow-task:";
+    public static final String GROUP_TASKS      = "com.flow.adhd.GROUP_QUESTS";
     public static final String GROUP_RC         = "com.flow.adhd.GROUP_RC";
 
     public static final String ACTION_DONE       = "com.flow.adhd.ACTION_DONE";
@@ -39,6 +41,8 @@ public class FlowNotifService extends Service {
     public static final String ACTION_SHOW_RC    = "com.flow.adhd.ACTION_SHOW_RC";
     public static final String ACTION_TASK_DONE  = "com.flow.adhd.ACTION_TASK_DONE";
     public static final String ACTION_TASK_SKIP  = "com.flow.adhd.ACTION_TASK_SKIP";
+    public static final String ACTION_TASK_NEXT_ZONE = "com.flow.adhd.ACTION_TASK_NEXT_ZONE";
+    public static final String ACTION_TASK_NOT_TODAY = "com.flow.adhd.ACTION_TASK_NOT_TODAY";
     public static final String ACTION_TASK_INC   = "com.flow.adhd.ACTION_TASK_INC";
     public static final String ACTION_TASK_DEC   = "com.flow.adhd.ACTION_TASK_DEC";
     public static final String ACTION_RC_INC     = "com.flow.adhd.ACTION_RC_INC";
@@ -74,6 +78,7 @@ public class FlowNotifService extends Service {
     private final Runnable refreshTick = new Runnable() {
         @Override public void run() {
             rebuildFromDb();
+            if (hasActiveQuestNotifications()) showTaskNotifications();
             handler.postDelayed(this, REFRESH_MS);
         }
     };
@@ -100,15 +105,27 @@ public class FlowNotifService extends Service {
                     setCaptureReceipt(isTask ? "Введи текст задачі" : "Введи текст нотатки");
                 } else {
                     try {
-                        String event = (isTask ? "capture_task:" : "capture_note:") + value;
-                        bridge.pushEvent(event);
-                        setCaptureReceipt(isTask ? "Запис задачі збережено" : "Нотатку збережено");
-                        broadcastEvent(event);
+                        if (isTask) {
+                            String event = bridge.queueCapturedTask(value);
+                            if (event == null) {
+                                setCaptureReceipt("Не вдалося зберегти задачу");
+                            } else {
+                                setCaptureReceipt("Запис задачі збережено");
+                                // queueCapturedTask already inserted this command in Room.
+                                broadcastEvent(event);
+                            }
+                        } else {
+                            String event = "capture_note:" + value;
+                            bridge.pushEvent(event);
+                            setCaptureReceipt("Нотатку збережено");
+                            broadcastEvent(event);
+                        }
                     } catch (Exception e) {
                         setCaptureReceipt("Не вдалося зберегти запис");
                     }
                 }
                 rebuildFromDb();
+                if (isTask && !value.isEmpty()) showTaskNotifications();
                 break;
             }
 
@@ -124,23 +141,39 @@ public class FlowNotifService extends Service {
 
             case ACTION_TASK_DONE: {
                 String id = intent.getStringExtra(EXTRA_ID);
-                if (isTaskActionAvailable(id)) pushAndNotify("task_done:" + id);
-                cancelNotif(intent.getIntExtra("notif_id", -1));
+                if (isTaskActionAvailable(id)) {
+                    pushAndNotify("task_done:" + id);
+                    FlowAlarmReceiver.scheduleNextDue(this, bridge);
+                }
+                cancelTaskNotification(intent, id);
                 rebuildFromDb();
                 showTaskNotifications();
                 break;
             }
-            case ACTION_TASK_SKIP: {
+            case ACTION_TASK_SKIP: // Older action IDs now map to the agreed "Не зараз" behavior.
+            case ACTION_TASK_NEXT_ZONE:
+            case ACTION_TASK_NOT_TODAY: {
                 String id = intent.getStringExtra(EXTRA_ID);
                 if (isTaskActionAvailable(id)) {
-                    // Cache before queueing Skip: the pending terminal event can
-                    // remove this task from the projected notification snapshot.
-                    String title = findTaskTitle(id);
-                    pushAndNotify("task_skip:" + id);
-                    // Match the persisted 15-minute snooze while the app is closed.
-                    FlowAlarmReceiver.scheduleSnooze(this, id, title, 15 * 60 * 1000L);
+                    QuestPolicy.Task task = findQuestTask(id);
+                    long actionAt = System.currentTimeMillis();
+                    java.util.TimeZone zone = java.util.TimeZone.getDefault();
+                    java.util.List<QuestPolicy.Segment> timeline = currentQuestTimeline();
+                    QuestPolicy.Selection snapshot = currentQuestSelection(actionAt);
+                    if (task != null && snapshot.valid) {
+                        QuestPolicy.Deferral deferral = ACTION_TASK_NOT_TODAY.equals(action)
+                                ? QuestPolicy.deferNotToday(task, timeline, actionAt, zone)
+                                : QuestPolicy.deferNextZone(task, timeline, actionAt, zone);
+                        if (deferral != null) {
+                            pushAndNotify(deferral.asEvent(id));
+                            // Replace any old date alarm immediately; the WebView may stay closed.
+                            FlowAlarmReceiver.scheduleNextDue(this, bridge);
+                        } else setCaptureReceipt("Відкрий Потік, щоб оновити зони");
+                    } else {
+                        setCaptureReceipt("Відкрий Потік, щоб оновити квести");
+                    }
                 }
-                cancelNotif(intent.getIntExtra("notif_id", -1));
+                cancelTaskNotification(intent, id);
                 rebuildFromDb();
                 showTaskNotifications();
                 break;
@@ -214,57 +247,75 @@ public class FlowNotifService extends Service {
                 energy    = j.optInt("energy", energy);
                 zoneColor = j.optString("zoneColor", "");
 
-                // ── Поточна зона + задачі під неї, перераховані щохвилини ──
-                // Знімок міг бути збережений давно; зона в ньому застаріває. tlDate==сьогодні
-                // → беремо повний таймлайн (із денними винятками плану); інакше (після
-                // опівночі, апку не відкривали) → базовий таймлайн зон, що повторюються щодня.
-                String tlDate = j.optString("tlDate", "");
-                boolean fresh = todayStr().equals(tlDate);
-                JSONArray tl = fresh ? j.optJSONArray("zoneTimeline") : j.optJSONArray("zoneBaseline");
-                if (tl == null) tl = j.optJSONArray("zoneTimeline"); // запасний варіант
-                if (tl != null) {
-                    java.util.Calendar cal = java.util.Calendar.getInstance();
-                    int cur = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60
-                            + cal.get(java.util.Calendar.MINUTE);
-                    JSONObject best = null;
-                    int bestPrio = -1;
-                    for (int i = 0; i < tl.length(); i++) {
-                        JSONObject seg = tl.optJSONObject(i);
-                        if (seg == null) continue;
-                        int s = toMin(seg.optString("s", ""));
-                        int e = toMin(seg.optString("e", ""));
-                        if (e == 0) e = 1440;
-                        if (s < 0 || e < 0) continue;
-                        int prio = seg.optInt("prio", 1);
-                        if (cur >= s && cur < e && prio > bestPrio) { best = seg; bestPrio = prio; }
-                    }
-                    if (best != null) {
-                        zone      = best.optString("nm", zone);
-                        slots     = best.optString("s", "") + "–" + best.optString("e", "");
-                        desc      = best.optString("desc", "");
-                        zoneColor = best.optString("color", zoneColor);
+                // New payloads carry the resolved 35-day primary-zone timeline. Use
+                // its current segment for the header as well as task eligibility, so
+                // a plan-day override tomorrow cannot be replaced by today's baseline.
+                JSONArray questTimelineRows = j.optJSONArray("questTimeline");
+                long now = System.currentTimeMillis();
+                if (questTimelineRows != null) {
+                    List<QuestPolicy.Segment> timeline = QuestPolicy.timelineFromJson(questTimelineRows);
+                    QuestPolicy.Segment current = QuestPolicy.segmentAt(timeline, now);
+                    time = localTime(now);
+                    if (current != null) {
+                        JSONObject zoneInfo = findQuestZone(j.optJSONArray("questZones"), current.zoneId);
+                        zone = current.zoneId == 0 ? "Вільний час"
+                                : zoneInfo == null ? "Зона" : zoneInfo.optString("nm", "Зона");
+                        desc = zoneInfo == null ? "" : zoneInfo.optString("desc", "");
+                        zoneColor = current.zoneId == 0 ? "#888888"
+                                : zoneInfo == null ? "" : zoneInfo.optString("color", "");
+                        slots = localTime(current.startAt) + "–" + localTime(current.endAt);
                     } else {
-                        zone = "Вільний час"; slots = ""; desc = "";
+                        // An expired or incomplete timeline must not borrow today's
+                        // zone label and imply that its quest snapshot is current.
+                        zone = "Потік"; slots = ""; desc = ""; zoneColor = "";
                     }
-                    time = String.format(java.util.Locale.US, "%02d:%02d",
-                            cal.get(java.util.Calendar.HOUR_OF_DAY),
-                            cal.get(java.util.Calendar.MINUTE));
-
-                    // Перебудувати список задач під поточну зону: термінові + задачі
-                    // цієї зони + позазональні (до 7). Працює і при закритій апці.
-                    JSONObject ztb = j.optJSONObject("zoneTasksById");
-                    JSONArray  zl  = j.optJSONArray("zonelessTasks");
-                    JSONArray  ur  = j.optJSONArray("urgentTasks");
-                    if (ztb != null || zl != null || ur != null) {
-                        StringBuilder sb = new StringBuilder();
-                        int[] n = {0};
-                        appendTasks(sb, ur, n);
-                        if (best != null) {
-                            int zid = best.optInt("id", 0);
-                            if (zid != 0 && ztb != null) appendTasks(sb, ztb.optJSONArray(String.valueOf(zid)), n);
+                } else {
+                    // Legacy payload fallback only. The old compact timeline describes
+                    // today's zones and cannot safely resolve a future local date.
+                    String tlDate = j.optString("tlDate", "");
+                    boolean fresh = todayStr().equals(tlDate);
+                    JSONArray tl = fresh ? j.optJSONArray("zoneTimeline") : j.optJSONArray("zoneBaseline");
+                    if (tl == null) tl = j.optJSONArray("zoneTimeline");
+                    if (tl != null) {
+                        java.util.Calendar cal = java.util.Calendar.getInstance();
+                        int cur = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60
+                                + cal.get(java.util.Calendar.MINUTE);
+                        JSONObject best = null;
+                        int bestPrio = -1;
+                        for (int i = 0; i < tl.length(); i++) {
+                            JSONObject seg = tl.optJSONObject(i);
+                            if (seg == null) continue;
+                            int s = toMin(seg.optString("s", ""));
+                            int e = toMin(seg.optString("e", ""));
+                            if (e == 0) e = 1440;
+                            if (s < 0 || e < 0) continue;
+                            int prio = seg.optInt("prio", 1);
+                            if (cur >= s && cur < e && prio > bestPrio) { best = seg; bestPrio = prio; }
                         }
-                        appendTasks(sb, zl, n);
-                        tasks = sb.toString();
+                        if (best != null) {
+                            zone      = best.optString("nm", zone);
+                            slots     = best.optString("s", "") + "–" + best.optString("e", "");
+                            desc      = best.optString("desc", "");
+                            zoneColor = best.optString("color", zoneColor);
+                        } else {
+                            zone = "Вільний час"; slots = ""; desc = "";
+                        }
+                        time = localTime(now);
+
+                        JSONObject ztb = j.optJSONObject("zoneTasksById");
+                        JSONArray  zl  = j.optJSONArray("zonelessTasks");
+                        JSONArray  ur  = j.optJSONArray("urgentTasks");
+                        if (ztb != null || zl != null || ur != null) {
+                            StringBuilder sb = new StringBuilder();
+                            int[] n = {0};
+                            appendTasks(sb, ur, n);
+                            if (best != null) {
+                                int zid = best.optInt("id", 0);
+                                if (zid != 0 && ztb != null) appendTasks(sb, ztb.optJSONArray(String.valueOf(zid)), n);
+                            }
+                            appendTasks(sb, zl, n);
+                            tasks = sb.toString();
+                        }
                     }
                 }
 
@@ -277,6 +328,14 @@ public class FlowNotifService extends Service {
                         done = Math.min(total, done + pendingDone);
                         body = applyPendingDoneToBody(body, pendingDone);
                     }
+                }
+                QuestPolicy.Selection quests = currentQuestSelection(System.currentTimeMillis());
+                if (quests.valid) {
+                    tasks = quests.tasks.isEmpty() ? "" : questTaskBrief(quests.tasks);
+                    body = questCountText(quests.tasks.size());
+                } else {
+                    tasks = quests.hint;
+                    body = quests.hint;
                 }
             } catch (Exception ignored) {}
         }
@@ -294,6 +353,30 @@ public class FlowNotifService extends Service {
             sb.append(t);
             n[0]++;
         }
+    }
+
+    private JSONObject findQuestZone(JSONArray zones, int id) {
+        if (zones == null || id <= 0) return null;
+        for (int i = 0; i < zones.length(); i++) {
+            JSONObject zone = zones.optJSONObject(i);
+            if (zone != null && zone.optInt("id", -1) == id) return zone;
+        }
+        return null;
+    }
+
+    private String localTime(long timestamp) {
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.setTimeInMillis(timestamp);
+        return String.format(java.util.Locale.US, "%02d:%02d",
+                cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE));
+    }
+
+    private String questCountText(int count) {
+        int lastTwo = count % 100;
+        int last = count % 10;
+        String noun = lastTwo >= 11 && lastTwo <= 14 ? "задач"
+                : last == 1 ? "задача" : last >= 2 && last <= 4 ? "задачі" : "задач";
+        return "Зараз: " + count + " " + noun;
     }
 
     /** "HH:MM" → хвилини доби; -1 якщо не парситься */
@@ -337,7 +420,7 @@ public class FlowNotifService extends Service {
             for (String t : tasks.split("\\|"))
                 if (!t.trim().isEmpty()) inbox.addLine("○  " + t.trim());
         } else {
-            inbox.addLine("✓  Всі задачі виконано");
+            inbox.addLine("Зараз немає доречних квестів");
         }
         if (!routine.isEmpty()) {
             inbox.addLine("─────────────────────────");
@@ -368,7 +451,7 @@ public class FlowNotifService extends Service {
                 .setStyle(inbox)
                 .addAction(buildCaptureAction(KEY_TASK, "+ Задача", "Назва задачі", ACTION_CAPTURE_TASK, 2))
                 .addAction(buildCaptureAction(KEY_NOTE, "+ Нотатка", "Текст нотатки", ACTION_CAPTURE_NOTE, 4))
-                .addAction(actionService(android.R.drawable.ic_menu_agenda, "☑ Задачі", ACTION_SHOW_TASKS, 3));
+                .addAction(actionService(android.R.drawable.ic_menu_agenda, "Розгорнути", ACTION_SHOW_TASKS, 3));
 
         if (total > 0) b.setProgress(100, done * 100 / total, false);
 
@@ -380,31 +463,26 @@ public class FlowNotifService extends Service {
     private void showTaskNotifications() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) return;
+        // Clear two legacy slots from the older seven-card panel as well.
         pruneNotificationRange(NOTIF_TASK_BASE, 7);
         cancelNotif(NOTIF_TASK_BASE + 100);
-        JSONArray arr = projectPendingTaskEvents(readArray("taskList"));
-        if (arr == null || arr.length() == 0) {
-            // нема задач — підказка
-            postTemp(NOTIF_TASK_BASE, GROUP_TASKS, "✓ Задач немає",
-                    "Всі активні задачі виконано", null);
+        QuestPolicy.Selection selection = currentQuestSelection(System.currentTimeMillis());
+        if (!selection.valid || selection.tasks.isEmpty()) {
+            String hint = selection.valid ? "Немає доступних квестів зараз" : selection.hint;
+            postTemp(NOTIF_TASK_BASE, GROUP_TASKS, "Квести", hint, null);
             scheduleTempCancel(NOTIF_TASK_BASE);
             return;
         }
-        int count = Math.min(arr.length(), 7);
+        int count = selection.tasks.size();
         for (int i = 0; i < count; i++) {
-            JSONObject t = arr.optJSONObject(i);
-            if (t == null) continue;
-            String id    = t.optString("id", "");
-            String ttl   = t.optString("title", "Задача");
-            boolean counterEnabled = isCounterTask(t);
-            int counterStep = Math.max(1, t.optInt("counterStep", 1));
-            String counterUnit = counterUnitLabel(t.optString("counterUnit", "count"));
-            int counter = t.optInt("counter", 0);
-            int counterTarget = Math.max(0, t.optInt("counterTarget", 0));
+            QuestPolicy.Task t = selection.tasks.get(i);
+            String id = t.id;
+            String ttl = t.title;
             int notifId  = NOTIF_TASK_BASE + i;
-            String content = counterEnabled
-                    ? counter + " " + counterUnit + (counterTarget > 0 ? " / " + counterTarget + " " + counterUnit : "")
-                    : "Зона: задача #" + (i + 1);
+            String content = t.counterEnabled
+                    ? t.counter + " " + counterUnitLabel(t.counterUnit)
+                        + (t.counterTarget > 0 ? " · ціль " + t.counterTarget + " " + counterUnitLabel(t.counterUnit) : "")
+                    : "Квест " + (i + 1) + " із " + count;
 
             NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_TEMP)
                     .setSmallIcon(R.drawable.ic_notification)
@@ -417,20 +495,13 @@ public class FlowNotifService extends Service {
                     .setSilent(true)
                     .setTimeoutAfter(TEMP_MS)
                     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setContentIntent(openTasksPI());
-            if (counterEnabled) {
-                b.addAction(actionItem(android.R.drawable.ic_input_add, "+" + counterStep + " " + counterUnit,
-                            ACTION_TASK_INC, id, notifId))
-                        .addAction(actionItem(android.R.drawable.ic_delete, "−" + counterStep + " " + counterUnit,
-                                ACTION_TASK_DEC, id, notifId));
-                b.addAction(actionItem(android.R.drawable.checkbox_on_background, "✓ Виконати",
-                        ACTION_TASK_DONE, id, notifId));
-            } else {
-                b.addAction(actionItem(android.R.drawable.checkbox_on_background, "✓ Виконати",
-                        ACTION_TASK_DONE, id, notifId))
-                        .addAction(actionItem(android.R.drawable.ic_media_next, "→ Відкласти 15 хв",
-                                ACTION_TASK_SKIP, id, notifId));
-            }
+                    .setContentIntent(openTaskPendingIntent(this, id));
+            b.addAction(actionItem(android.R.drawable.checkbox_on_background, "Виконано",
+                            ACTION_TASK_DONE, id, notifId))
+                    .addAction(actionItem(android.R.drawable.ic_media_next, "Не зараз",
+                            ACTION_TASK_NEXT_ZONE, id, notifId))
+                    .addAction(actionItem(android.R.drawable.ic_menu_close_clear_cancel, "Не сьогодні",
+                            ACTION_TASK_NOT_TODAY, id, notifId));
 
             nm.notify(notifId, b.build());
             scheduleTempCancel(notifId);
@@ -439,14 +510,13 @@ public class FlowNotifService extends Service {
         NotificationCompat.Builder summary = new NotificationCompat.Builder(this, CHANNEL_TEMP)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setColor(lastZoneColor)
-                .setContentTitle("Задачі зони")
-                .setContentText(count + " активних")
+                .setContentTitle("Квести")
+                .setContentText(count + " доступних")
                 .setGroup(GROUP_TASKS)
                 .setGroupSummary(true)
                 .setSilent(true)
                 .setAutoCancel(true)
-                .setTimeoutAfter(TEMP_MS)
-                .addAction(actionService(android.R.drawable.ic_menu_rotate, "🔁 Рутина", ACTION_SHOW_RC, 4));
+                .setTimeoutAfter(TEMP_MS);
         nm.notify(NOTIF_TASK_BASE + 100, summary.build());
         scheduleTempCancel(NOTIF_TASK_BASE + 100);
     }
@@ -550,7 +620,96 @@ public class FlowNotifService extends Service {
     }
 
     private boolean isTaskActionAvailable(String id) {
-        return findCurrentTask(id) != null && !hasPendingTerminalTaskEvent(id);
+        QuestPolicy.Task task = findQuestTask(id);
+        return task != null && !"negative".equals(task.type)
+                && !task.done && !task.trashed && !task.someday
+                && !hasPendingTerminalTaskEvent(id);
+    }
+
+    private QuestPolicy.Task findQuestTask(String id) {
+        if (id == null || id.isEmpty()) return null;
+        JSONObject notif = readNotifObject();
+        if (notif == null) return null;
+        List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(notif.optJSONArray("questTasks"));
+        List<QuestPolicy.Segment> timeline = QuestPolicy.timelineFromJson(notif.optJSONArray("questTimeline"));
+        List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
+                QuestPolicy.eventsFromJson(readEventEnvelopes()), System.currentTimeMillis(), timeline,
+                java.util.TimeZone.getDefault());
+        for (QuestPolicy.Task task : projected) if (id.equals(task.id)) return task;
+        return null;
+    }
+
+    private java.util.List<QuestPolicy.Segment> currentQuestTimeline() {
+        JSONObject notif = readNotifObject();
+        return notif == null ? java.util.Collections.<QuestPolicy.Segment>emptyList()
+                : QuestPolicy.timelineFromJson(notif.optJSONArray("questTimeline"));
+    }
+
+    private QuestPolicy.Selection currentQuestSelection(long now) {
+        JSONObject notif = readNotifObject();
+        if (notif == null) return QuestPolicy.Selection.invalid("Відкрий Потік, щоб оновити квести");
+        JSONArray rows = notif.optJSONArray("questTasks");
+        JSONArray timelineRows = notif.optJSONArray("questTimeline");
+        if (rows == null || timelineRows == null)
+            return QuestPolicy.Selection.invalid("Відкрий Потік, щоб оновити квести");
+        List<QuestPolicy.Segment> timeline = QuestPolicy.timelineFromJson(timelineRows);
+        List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(rows);
+        List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
+                QuestPolicy.eventsFromJson(readEventEnvelopes()), now, timeline,
+                java.util.TimeZone.getDefault());
+        return QuestPolicy.select(projected, timeline, notif.optLong("questTimelineUntil", 0L),
+                now, java.util.TimeZone.getDefault(), QuestPolicy.MAX_CARDS);
+    }
+
+    private JSONObject readNotifObject() {
+        try {
+            String value = bridge.getNotifJson();
+            return value == null || value.isEmpty() ? null : new JSONObject(value);
+        } catch (Exception ignored) { return null; }
+    }
+
+    private JSONArray readEventEnvelopes() {
+        try { return new JSONArray(bridge.getEventEnvelopes()); }
+        catch (Exception ignored) { return new JSONArray(); }
+    }
+
+    private String questTaskBrief(java.util.List<QuestPolicy.Task> tasks) {
+        StringBuilder result = new StringBuilder();
+        if (tasks == null || tasks.isEmpty()) return "Немає доступних квестів зараз";
+        for (QuestPolicy.Task task : tasks) {
+            if (result.length() > 0) result.append('|');
+            result.append(task.title == null || task.title.trim().isEmpty() ? "Задача" : task.title.trim());
+            if (task.counterEnabled) result.append(" · ").append(task.counter).append(' ')
+                    .append(counterUnitLabel(task.counterUnit));
+        }
+        return result.toString();
+    }
+
+    private boolean hasActiveQuestNotifications() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm == null) return false;
+        try {
+            for (android.service.notification.StatusBarNotification item : nm.getActiveNotifications()) {
+                int id = item.getId();
+                if (id >= NOTIF_TASK_BASE && id < NOTIF_TASK_BASE + QuestPolicy.MAX_CARDS) return true;
+            }
+        } catch (SecurityException ignored) {}
+        return false;
+    }
+
+    private void cancelTaskNotification(Intent intent, String taskId) {
+        cancelNotif(intent.getIntExtra("notif_id", -1));
+        String tag = intent.getStringExtra("notif_tag");
+        int id = intent.getIntExtra("notif_id", -1);
+        if (tag != null && id >= 0) {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(tag, id);
+        }
+        if (taskId != null && !taskId.isEmpty()) {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(TASK_REMINDER_TAG + taskId, FlowAlarmReceiver.REMIND_NOTIFICATION_ID);
+        }
     }
 
     private boolean hasPendingTerminalTaskEvent(String id) {
@@ -564,7 +723,7 @@ public class FlowNotifService extends Service {
             for (int i = 0; i < events.length(); i++) {
                 JSONObject row = events.optJSONObject(i);
                 String event = row == null ? "" : row.optString("event", "");
-                if (done.equals(event) || skip.equals(event)) {
+                if (done.equals(event)) {
                     if (!recurring || (row != null && sameLocalDate(System.currentTimeMillis(), row.optLong("createdAt", 0L))))
                         return true;
                 }
@@ -780,9 +939,13 @@ public class FlowNotifService extends Service {
 
     private JSONObject findCurrentTask(String id) {
         if (id == null || id.isEmpty()) return null;
-        JSONArray arr = readArray("taskList");
-        if (arr == null) return null;
-        for (int i = 0; i < arr.length(); i++) {
+        JSONArray arr = readArray("questTasks");
+        if (arr != null) for (int i = 0; i < arr.length(); i++) {
+            JSONObject task = arr.optJSONObject(i);
+            if (task != null && id.equals(task.optString("id", ""))) return task;
+        }
+        arr = readArray("taskList");
+        if (arr != null) for (int i = 0; i < arr.length(); i++) {
             JSONObject task = arr.optJSONObject(i);
             if (task != null && id.equals(task.optString("id", ""))) return task;
         }
@@ -822,9 +985,6 @@ public class FlowNotifService extends Service {
                 .setAutoCancel(true)
                 .setTimeoutAfter(TEMP_MS)
                 .setContentIntent(openTasksPI());
-        if (GROUP_TASKS.equals(group)) {
-            b.addAction(actionService(android.R.drawable.ic_menu_rotate, "🔁 Рутина", ACTION_SHOW_RC, 4));
-        }
         nm.notify(notifId, b.build());
     }
 
@@ -876,6 +1036,16 @@ public class FlowNotifService extends Service {
                 flagImmutable() | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
+    public static PendingIntent openTaskPendingIntent(Context context, String taskId) {
+        Intent openIntent = new Intent(context, MainActivity.class);
+        openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        openIntent.putExtra("nav", "tasks");
+        openIntent.putExtra("openTaskId", taskId);
+        int requestCode = (0x6f170000 ^ (taskId == null ? 0 : taskId.hashCode())) & 0x7fffffff;
+        return PendingIntent.getActivity(context, requestCode, openIntent,
+                (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0) | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
     private NotificationCompat.Action buildCaptureAction(String inputKey, String actionLabel, String inputLabel, String action, int requestCode) {
         RemoteInput remoteInput = new RemoteInput.Builder(inputKey)
                 .setLabel(inputLabel)
@@ -921,15 +1091,22 @@ public class FlowNotifService extends Service {
 
     private NotificationCompat.Action actionItem(int icon, String label, String action,
                                                  String itemId, int notifId) {
-        Intent i = new Intent(this, FlowNotifService.class);
+        return taskAction(this, icon, label, action, itemId, null, notifId);
+    }
+
+    public static NotificationCompat.Action taskAction(Context context, int icon, String label,
+                                                        String action, String itemId, String notifTag, int notifId) {
+        Intent i = new Intent(context, FlowNotifService.class);
         i.setAction(action);
-        i.setData(android.net.Uri.parse("flow://action/" + android.net.Uri.encode(action) + "/" + android.net.Uri.encode(itemId == null ? "" : itemId)));
+        i.setData(android.net.Uri.parse("flow://quest/" + android.net.Uri.encode(action) + "/" + android.net.Uri.encode(itemId == null ? "" : itemId)
+                + "/" + android.net.Uri.encode(notifTag == null ? "" : notifTag) + "/" + notifId));
         i.putExtra(EXTRA_ID, itemId);
         i.putExtra("notif_id", notifId);
+        if (notifTag != null) i.putExtra("notif_tag", notifTag);
         // requestCode унікальний: action.hashCode ^ notifId ^ itemId.hashCode
         int rc = (action.hashCode() ^ notifId ^ (itemId == null ? 0 : itemId.hashCode())) & 0x7fffffff;
-        PendingIntent pi = PendingIntent.getService(this, rc, i,
-                flagImmutable() | PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent pi = PendingIntent.getService(context, rc, i,
+                (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0) | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Action.Builder(icon, label, pi)
                 .setShowsUserInterface(false).build();
     }

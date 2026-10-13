@@ -1,4 +1,4 @@
-import type { Task } from '../types';
+import type { QuestTimelineSegment, Task } from '../types';
 import { fmtDate, isDateKey, localDateTimeMs, normalizeTime, toMinutes } from './date';
 
 /** A scheduled task has one day for both its calendar entry and its reminder. */
@@ -65,7 +65,6 @@ export function isTaskInTimeWindow(task: Task, now: Date): boolean {
 export function isTaskAvailable(task: Task, now = new Date()): boolean {
   if (task.trashed || task.someday) return false;
   if (task.done) return true;
-  if (isTaskInInbox(task)) return false;
   const day = taskPlanDate(task);
   if (day && day > fmtDate(now)) return false;
   if (task.snoozeUntil && task.snoozeUntil > now.getTime()) return false;
@@ -75,13 +74,14 @@ export function isTaskAvailable(task: Task, now = new Date()): boolean {
   return true;
 }
 
-/** Priorities select actionable tasks from today's plan; selecting one never
- * assigns a day to an Inbox task or overrides a future schedule. */
+/** Priorities are day-level choices. Quest selection separately enforces the
+ * active zone and exact time; an undated quick task can also be prioritized. */
 export function canPrioritizeTask(task: Task, now = new Date()): boolean {
-  return !task.done && task.type !== 'negative' && task.type !== 'zonelinked' && isTaskAvailable(task, now);
+  return !task.done && task.type !== 'negative' && isTaskAvailable(task, now);
 }
 
 export function taskPreReminderAt(task: Task, due: number): number | undefined {
+  if (task.questDeferral) return undefined;
   const minutes = task.remindBeforeMinutes || 0;
   if (task.type !== 'sched' || task.firedPre || task.reminderEnabled === false || !Number.isFinite(minutes) || minutes <= 0) return undefined;
   return due - minutes * 60000;
@@ -89,8 +89,22 @@ export function taskPreReminderAt(task: Task, due: number): number | undefined {
 
 /** Shared browser/native snapshot reminder eligibility. Alarm dates are searched
  * by calendar day, preserving weekday rules across month and DST boundaries. */
-export function nextTaskReminderAt(task: Task, now = new Date()): number | undefined {
+export function questDeferralReminderAt(task: Task, timeline?: readonly QuestTimelineSegment[]): number | undefined {
+  const deferral = task.questDeferral;
+  if (!deferral) return undefined;
+  if (deferral.kind === 'next-zone' || task.zoneId == null) return deferral.startAt;
+  // Eligibility begins tomorrow at local midnight, but a zone-bound alarm
+  // should ring only when that primary zone actually begins its next interval.
+  return timeline?.find(segment => segment.startAt >= deferral.startAt && segment.zoneId === deferral.targetZoneId)?.startAt;
+}
+
+export function nextTaskReminderAt(task: Task, now = new Date(), timeline?: readonly QuestTimelineSegment[]): number | undefined {
   if (task.done || task.trashed || task.someday || task.reminderEnabled === false) return undefined;
+  if (task.questDeferral && ['sched', 'alarm'].includes(task.type)) {
+    const fired = task.type === 'sched' ? task.firedSched : task.alarmFired;
+    if (fired) return undefined;
+    return questDeferralReminderAt(task, timeline);
+  }
   if (task.type === 'sched') {
     const due = localDateTimeMs(taskPlanDate(task), task.schedTime);
     if (due === undefined || (task.snoozeUntil && due < task.snoozeUntil)) return undefined;

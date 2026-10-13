@@ -1,4 +1,5 @@
 import { useStore } from '../../state/store';
+import Icon from '../common/Icon';
 
 export default function Nav() {
   const currentPage = useStore((s) => s.currentPage);
@@ -13,16 +14,13 @@ export default function Nav() {
   };
 
   return (
-    <div id="nav">
-      <button className={'nb' + (currentPage === 'main' ? ' act' : '')} onClick={goToTasks}>
-        <span className="ni">☑</span>Потік
+    <nav id="nav" aria-label="Основна навігація">
+      <button type="button" className={'nb' + (currentPage === 'main' ? ' act' : '')} aria-current={currentPage === 'main' ? 'page' : undefined} onClick={goToTasks}>
+        <Icon name="quest" />Потік
       </button>
-      <button className={'nb' + (currentPage === 'readme' ? ' act' : '')} onClick={() => showPage('readme')}>
-        <span className="ni">?</span>Довідка
+      <button type="button" className={'nb' + (currentPage !== 'main' ? ' act' : '')} aria-current={currentPage !== 'main' ? 'page' : undefined} onClick={() => showPage('settings')}>
+        <Icon name="settings" />Налаштування
       </button>
-      <button className={'nb' + (currentPage === 'settings' ? ' act' : '')} onClick={() => showPage('settings')}>
-        <span className="ni">⚙</span>Налаштування
-      </button>
-    </div>
+    </nav>
   );
 }

@@ -27,7 +27,7 @@ import org.junit.runner.RunWith;
 public class FlowWebViewTest {
     private static final long UI_TIMEOUT_MS = 45000;
 
-    @Test public void inboxCaptureNeedsAnExplicitDayBeforeAppearingToday() throws Exception {
+    @Test public void undatedInboxCaptureAppearsInNowAndRemainsInInboxUntilPlanned() throws Exception {
         String title = "Android r2 Inbox " + UUID.randomUUID();
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             awaitReady(scenario);
@@ -40,9 +40,13 @@ public class FlowWebViewTest {
             assertFalse("Capture must not silently assign today", captured.has("planDate"));
             click(scenario, "#tabs button:nth-child(1)");
             await(scenario, "document.querySelector('#tasks-list') !== null", "Today opens");
-            assertFalse(value(scenario, "return document.querySelector('#tasks-list').textContent.indexOf("
-                + JSONObject.quote(title) + ") >= 0;").getBoolean("value"));
+            await(scenario, "Array.prototype.some.call(document.querySelectorAll('#tasks-list .tc .tt'),"
+                + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";})",
+                "Undated simple capture is immediately available in Now");
             click(scenario, "#tabs button:nth-child(3)");
+            await(scenario, "Array.prototype.some.call(document.querySelectorAll('#inbox-sec .tt'),"
+                + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";})",
+                "Unplanned capture remains in Inbox for planning");
             value(scenario, "var button=Array.prototype.find.call(document.querySelectorAll('#inbox-sec .tt'),"
                 + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";});"
                 + "if(!button)throw new Error('Inbox task missing');button.click();return true;");
@@ -57,6 +61,7 @@ public class FlowWebViewTest {
             assertEquals(day, planned.getString("planDate"));
             scenario.recreate();
             awaitReady(scenario);
+            click(scenario, "#tabs button:nth-child(1)");
             await(scenario, "document.querySelector('#tasks-list').textContent.indexOf(" + JSONObject.quote(title)
                 + ") >= 0", "Planned capture appears Today after recreation");
             assertEquals(id, awaitTask(scenario, title, null).getLong("id"));

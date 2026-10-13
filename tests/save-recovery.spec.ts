@@ -33,6 +33,7 @@ test('automatically archives incompatible browser data, then creates and exports
   expect(saved.tasks.find((task: any) => task.title === 'Task after automatic recovery').note).toBe('Деталі збережені після відновлення.');
 
   await page.getByRole('button', { name: /Налаштування/ }).click();
+  await page.locator('.settings-group summary').filter({ hasText: 'Дані та резервні копії' }).click();
   const archiveSection = page.locator('#settings-page section').filter({ has: page.getByRole('heading', { name: 'Архів несумісних даних', exact: true }) });
   await expect(archiveSection).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 });

@@ -20,14 +20,14 @@ test('a newly created task cannot inherit an older queued command with a reused 
   expect(useStore.getState().tasks[0].snoozeUntil).toBeUndefined();
 });
 
-test('a queued notification snooze is measured from the tap, not a delayed reopening', () => {
-  const now = originalNow();
-  const tap = now - 30 * 60000;
+test('a queued legacy skip chooses the next zone from the tap, not a delayed reopening', () => {
+  const tap = new Date('2026-10-08T18:10:00').getTime();
   useStore.setState({ tasks: [task('sched')] });
   expect(handleNativeEvent('task_skip:41', tap)).toBe(true);
-  const snoozed = useStore.getState().tasks[0];
-  expect(snoozed.snoozeUntil).toBe(Math.ceil((tap + 15 * 60000) / 60000) * 60000);
-  expect(snoozed.snoozeUntil).toBeLessThan(now);
+  const deferred = useStore.getState().tasks[0];
+  expect(deferred.questDeferral).toMatchObject({ kind: 'next-zone', requestedAt: tap, sourceZoneId: 5, targetZoneId: 1,
+    startAt: new Date('2026-10-08T22:00:00').getTime(), endAt: new Date('2026-10-09T06:00:00').getTime() });
+  expect(deferred.snoozeUntil).toBe(0);
 });
 
 test('numeric snooze across midnight preserves an eligible reminder with seconds in the clock', () => {

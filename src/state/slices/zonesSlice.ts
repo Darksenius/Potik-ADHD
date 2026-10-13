@@ -106,7 +106,8 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
     (dayTemplates || []).forEach((tp) => {
       (tp.blocks || []).forEach((b) => {
         const x = u(b.zoneId);
-        x.bound = true;
+        // A stored template is only a reusable definition. It does not bind
+        // its zones until an actual day or date rule uses that template.
         if (x.tpls.indexOf(tp.name) < 0) x.tpls.push(tp.name);
       });
     });
@@ -279,7 +280,8 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
   deleteZone: (id) => {
     set((s) => ({
       zones: s.zones.filter((z) => z.id !== id),
-      tasks: s.tasks.map((t) => (t.zoneId === id ? { ...t, zoneId: null, zoneColor: null, zoneName: null } : t)),
+      // Keep the task's numeric zone link so All/Plan can explain the broken
+      // assignment and preserve it if the zone is later recreated/imported.
     }));
     get().recalculateZoneUsage();
   },

@@ -1,6 +1,10 @@
 import { useStore } from '../../state/store';
 import type { DateKey } from '../../types';
 import { ENERGY_LABELS } from '../../constants';
+import Icon from '../common/Icon';
+import type { IconName } from '../common/Icon';
+
+type JournalEntry = { tm: string; icon?: IconName; textIcon?: string; tx: string };
 
 function truncate18(s: string): string {
   return s.length > 18 ? s.slice(0, 18) + '…' : s;
@@ -32,9 +36,9 @@ export function DayAnalysis({ ds, isFuture }: { ds: DateKey; isFuture: boolean }
         {isFuture ? 'План на день' : 'Аналіз дня'}
       </div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <span title="Виконано задач">✅ {st.tasksDone} задач</span>
-        <span title="Додано нотаток">📝 {st.notes} нотаток</span>
-        <span title="Переключень гіперфокусу">🧠 {st.focusSwitches}</span>
+        <span title="Виконано задач"><Icon name="check" /> {st.tasksDone} задач</span>
+        <span title="Додано нотаток"><Icon name="note" /> {st.notes} нотаток</span>
+        <span title="Переключень гіперфокусу"><Icon name="focus" /> {st.focusSwitches}</span>
         <span title="Енергія">{ENERGY_LABELS[st.energy] || '—'} енергія</span>
       </div>
       {!!st.focusList.length && <div style={{ color: 'var(--t3)', marginTop: 4 }}>Фокус: {st.focusList.slice(0, 5).join(' · ')}</div>}
@@ -52,39 +56,39 @@ export function DayJournal({ ds }: { ds: DateKey }) {
   const dayBlocks = useStore((s) => s.dayBlocks);
   const zones = useStore((s) => s.zones);
 
-  const jr: { tm: string; ic: string; tx: string }[] = [];
-  tasks.filter((t) => t.created && dateOf(t.created) === ds).forEach((t) => jr.push({ tm: hmOf(t.created), ic: '🆕', tx: `створено «${truncate18(t.title)}»` }));
-  tasks.filter((t) => t.doneDate === ds).forEach((t) => jr.push({ tm: t.doneAt || '', ic: '✅', tx: t.title }));
+  const jr: JournalEntry[] = [];
+  tasks.filter((t) => t.created && dateOf(t.created) === ds).forEach((t) => jr.push({ tm: hmOf(t.created), icon: 'plus', tx: `створено «${truncate18(t.title)}»` }));
+  tasks.filter((t) => t.doneDate === ds).forEach((t) => jr.push({ tm: t.doneAt || '', icon: 'check', tx: t.title }));
   qnotes.filter((n) => n.date === ds).forEach((n) => {
     const f = folders.find((x) => x.id === n.folder);
-    jr.push({ tm: n.time || '', ic: f ? f.ico : '📝', tx: `створено «${truncate18(n.txt)}»` });
+    jr.push({ tm: n.time || '', icon: f?.ico ? undefined : 'note', textIcon: f?.ico || undefined, tx: `створено «${truncate18(n.txt)}»` });
   });
-  (focusLog || []).filter((f) => f.date === ds).forEach((f) => jr.push({ tm: f.time || '', ic: '🧠', tx: 'Фокус: ' + f.val }));
+  (focusLog || []).filter((f) => f.date === ds).forEach((f) => jr.push({ tm: f.time || '', icon: 'focus', tx: 'Фокус: ' + f.val }));
   jr.sort((a, b) => (a.tm || '').localeCompare(b.tm || ''));
 
-  const jrRight: { ic: string; tx: string }[] = [];
-  (planItems[ds] || []).filter((it) => it.isEvent).forEach((it) => jrRight.push({ ic: '🎉', tx: (it.time ? it.time + ' ' : '') + it.title }));
+  const jrRight: { icon: IconName; tx: string }[] = [];
+  (planItems[ds] || []).filter((it) => it.isEvent).forEach((it) => jrRight.push({ icon: 'idea', tx: (it.time ? it.time + ' ' : '') + it.title }));
   dayBlocks(ds).forEach((b) => {
     const z = zones.find((zz) => zz.id === b.zoneId);
-    jrRight.push({ ic: '🕐', tx: (z ? z.nm : 'зона') + ' ' + b.s + '–' + b.e });
+    jrRight.push({ icon: 'zones', tx: (z ? z.nm : 'зона') + ' ' + b.s + '–' + b.e });
   });
 
   return (
     <div className="pd-journal">
       <div className="pd-jrnl-h">
-        📜 Журнал дня <span style={{ color: 'var(--t3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· {jr.length}</span>
+        <Icon name="calendar" /> Журнал дня <span style={{ color: 'var(--t3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· {jr.length}</span>
       </div>
       {jrRight.map((e, i) => (
         <div className="jrow jrow-r" key={'r' + i}>
           <span className="jtxt jtxt-r">{e.tx}</span>
-          <span className="jic">{e.ic}</span>
+          <span className="jic"><Icon name={e.icon} /></span>
         </div>
       ))}
       {jr.length ? (
         jr.map((e, i) => (
           <div className="jrow" key={i}>
             <span className="jtime">{e.tm || '·'}</span>
-            <span className="jic">{e.ic}</span>
+            <span className="jic">{e.icon ? <Icon name={e.icon} /> : e.textIcon}</span>
             <span className="jtxt">{e.tx}</span>
           </div>
         ))

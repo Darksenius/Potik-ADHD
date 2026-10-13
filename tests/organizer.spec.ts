@@ -20,7 +20,7 @@ test('scheduled task is absent today, visible in its calendar day and uses the s
   await expect(page.locator('.schedule-preview')).toContainText('9 жовтня');
   await page.locator('#edit-save-fab').click();
   await expect(page.locator('#tasks-list')).not.toContainText('Забрати посилку');
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   const day = page.getByRole('button', { name: '9 жовтня 2026 р., є задачі', exact: true });
   await day.click();
   await expect(day.locator('.pd-dot')).toHaveClass(/has/);
@@ -36,7 +36,7 @@ test('scheduled task is absent today, visible in its calendar day and uses the s
 
 test('calendar creation keeps selected day and past time requires an explicit choice', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.getByRole('button', { name: '+ Задача', exact: true }).click();
   await expect(page.getByLabel('Дата', { exact: true })).toHaveValue('2026-10-08');
   await page.getByLabel('Що зробити?').fill('Ранкова справа');
@@ -57,12 +57,14 @@ test('scheduled task rejects missing date/time and snooze saves draft before mov
   await expect(page.getByRole('alert')).toContainText('Вибери дату й час');
   await page.getByLabel('Час *', { exact: true }).fill('14:00');
   await page.locator('#edit-save-fab').click();
-  await page.locator('.tc .eb').click();
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await page.locator('.tc').filter({ hasText: 'Початкова назва' }).locator('.task-title-button').click();
   await page.getByLabel('Що зробити?').fill('Змінена назва');
   await page.getByText('Додаткові можливості', { exact: true }).click();
   await page.getByRole('button', { name: 'На завтра', exact: true }).click();
   const state = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(state.tasks[0]).toMatchObject({ title: 'Змінена назва', planDate: '2026-10-09', schedDate: '2026-10-09', schedTime: '14:00' });
+  await page.getByRole('button', { name: 'Зараз', exact: true }).click();
   await expect(page.locator('#tasks-list')).not.toContainText('Змінена назва');
 });
 
@@ -76,21 +78,22 @@ test('all tasks finds hidden future, snoozed, someday and inactive zone tasks', 
 
 test('week shift keeps selected weekday in view, Today restores current week', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.getByRole('button', { name: 'Наступний →' }).click();
   await expect(page.locator('.pdd-date')).toContainText('15 Жов');
   await expect(page.locator('.plan-day.sel .pd-num')).toHaveText('15');
-  await page.getByRole('button', { name: 'Сьогодні', exact: true }).click();
+  await page.locator('.week-dates').getByRole('button', { name: 'Сьогодні', exact: true }).click();
   await expect(page.locator('.pdd-date')).toContainText('8 Жов');
 });
 
-test('inbox captures simple task and settings persist independently of legacy theme', async ({ page }, info) => {
+test('inbox capture is available immediately and settings persist independently of legacy theme', async ({ page }, info) => {
   await boot(page);
-  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await page.getByLabel('Нова проста задача').fill('Не забути зарядку');
   await page.getByRole('button', { name: 'Додати', exact: true }).click();
   await expect(page.locator('.tt')).toHaveText('Не забути зарядку');
-  await page.getByRole('button', { name: '⚙ Налаштування', exact: true }).click();
+  await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
+  await page.locator('#settings-page details.settings-group').filter({ hasText: 'Вигляд' }).locator('summary').click();
   await page.getByLabel('Тема', { exact: true }).selectOption('light');
   await page.getByLabel('Зменшити анімації').check();
   await page.getByLabel('Показувати досвід і рівень').uncheck();
@@ -114,7 +117,7 @@ test('overnight window is visible at 23:00 but hidden during daytime', async ({ 
 
 test('day-only zone edit opens real inputs and cancel keeps original day rules', async ({ page }) => {
   await boot(page, { weekTplSeeded: true });
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   const edit = page.getByTitle('Змінити час лише цього дня', { exact: true }).first();
   await edit.click();
   await page.getByLabel('Початок зони', { exact: true }).fill('05:00');
@@ -130,21 +133,21 @@ test('day-only zone edit opens real inputs and cancel keeps original day rules',
   expect(data.zones.find((z: any) => z.id === data.planDayZones['2026-10-08'][0].zoneId).slots[0].s).not.toBe('05:00');
 });
 
-test('capture stays in Inbox until assigned a day, calendar edits the same task, clearing date returns it', async ({ page }, info) => {
+test('Inbox retains its capture while it is available immediately; date edits and clearing preserve the task', async ({ page }, info) => {
   await boot(page);
-  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await page.getByLabel('Нова проста задача').fill('Купити батарейки');
   await page.getByRole('button', { name: 'Додати', exact: true }).click();
   const id = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!).tasks[0].id);
-  await page.getByRole('button', { name: '☀ Сьогодні', exact: true }).click();
-  await expect(page.locator('#tasks-list .tc')).toHaveCount(0);
-  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Зараз', exact: true }).click();
+  await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
-  await expect(page.locator('.schedule-preview')).toContainText('Без дати — у Вхідних');
+  await expect(page.locator('.schedule-preview')).toContainText('Без дати — доступна, коли підходять зона й умови задачі.');
   await page.getByRole('button', { name: 'Завтра', exact: true }).click();
   await page.locator('#edit-save-fab').click();
   await expect(page.locator('#inbox-sec .tc')).toHaveCount(0);
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.getByRole('button', { name: '9 жовтня 2026 р., є задачі', exact: true }).click();
   await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
   await page.locator('#edit-body').getByRole('button', { name: 'Сьогодні', exact: true }).click();
@@ -156,8 +159,8 @@ test('capture stays in Inbox until assigned a day, calendar edits the same task,
   await page.getByRole('button', { name: 'Без дати', exact: true }).click();
   await page.locator('#edit-save-fab').click();
   await page.reload();
-  await expect(page.locator('#tasks-list .tc')).toHaveCount(0);
-  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await expect(page.locator('#inbox-sec .tt')).toHaveText('Купити батарейки');
   const state = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(state.tasks).toHaveLength(1);
@@ -193,6 +196,7 @@ test('scheduled and simple tasks reject dates outside repeat days, repeat edits 
   await page.getByRole('button', { name: 'Запланована На точну дату й час' }).click();
   await page.getByLabel('Дата *', { exact: true }).fill('2026-10-08');
   await page.locator('#edit-save-fab').click();
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   await page.getByRole('button', { name: 'Розгорнути: Перевірити пошту', exact: true }).click();
   await page.getByRole('button', { name: 'Змінити розклад', exact: true }).click();
   await page.getByText('Додаткові можливості', { exact: true }).click();
@@ -202,21 +206,26 @@ test('scheduled and simple tasks reject dates outside repeat days, repeat edits 
   await page.getByRole('button', { name: 'Чт', exact: true }).click();
   await page.locator('#edit-save-fab').click();
   await page.reload();
+  await page.getByRole('button', { name: 'Зараз', exact: true }).click();
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   await expect(page.locator('#tasks-list .tt')).toHaveText('Перевірити пошту');
 });
 
-test('moving a task reorders visible neighbors across hidden Inbox and future tasks', async ({ page }) => {
+test('moving a task reorders neighbors in All tasks while Inbox keeps its capture', async ({ page }) => {
   await boot(page, { tasks: [task(1, 'Перша на сьогодні', { planDate: '2026-10-08' }), task(2, 'Ще не запланована'), task(3, 'На майбутнє', { planDate: '2026-10-12' }), task(4, 'Друга на сьогодні', { planDate: '2026-10-08' })] });
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   await page.getByRole('button', { name: 'Опустити: Перша на сьогодні', exact: true }).click();
-  await expect(page.locator('#tasks-list .tt')).toHaveText(['Друга на сьогодні', 'Перша на сьогодні']);
+  await expect(page.locator('#tasks-list .tt')).toHaveText(['Ще не запланована', 'Перша на сьогодні', 'На майбутнє', 'Друга на сьогодні']);
   await page.clock.runFor(1000);
   await page.reload();
-  await expect(page.locator('#tasks-list .tt')).toHaveText(['Друга на сьогодні', 'Перша на сьогодні']);
-  await page.getByRole('button', { name: '↓ Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Зараз', exact: true }).click();
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await expect(page.locator('#tasks-list .tt')).toHaveText(['Ще не запланована', 'Перша на сьогодні', 'На майбутнє', 'Друга на сьогодні']);
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await expect(page.locator('#inbox-sec .tt')).toHaveText('Ще не запланована');
 });
 
-test('active zone hides unavailable tasks and keeps today completion available for undo', async ({ page }) => {
+test('Today shows only an active-zone task and All tasks keeps today completion available for undo', async ({ page }) => {
   const zone = { id: 88, nm: 'Тестова зона', color: '#3388ff', slots: [{ s: '00:00', e: '23:59' }], active: true };
   await boot(page, { weekTplSeeded: true, zones: [zone], tasks: [
     task(1, 'Зараз у зоні', { type: 'zonelinked', zoneId: 88, planDate: '2026-10-08' }),
@@ -225,23 +234,29 @@ test('active zone hides unavailable tasks and keeps today completion available f
     task(4, 'Виконана зона', { type: 'zonelinked', zoneId: 88, done: true, doneDate: '2026-10-08' }),
     task(5, 'Вчора виконана зона', { type: 'zonelinked', zoneId: 88, done: true, doneDate: '2026-10-07' }),
   ] });
-  await expect(page.locator('#zone-tasks-banner .ztb-title')).toHaveText(['Зараз у зоні', 'Виконана зона']);
+  await expect(page.locator('#tasks-list .tt')).toHaveText('Зараз у зоні');
+  await expect(page.locator('#tasks-list')).not.toContainText('Завтра у зоні');
+  await expect(page.locator('#tasks-list')).not.toContainText('Відкладена зона');
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await expect(page.locator('#tasks-list .tt')).toHaveText([
+    'Зараз у зоні', 'Завтра у зоні', 'Відкладена зона', 'Виконана зона', 'Вчора виконана зона',
+  ]);
   await expect(page.getByRole('button', { name: 'Позначити невиконаною: Виконана зона', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('priority picker offers only actionable Today tasks and hides a priority after moving it', async ({ page }) => {
   await boot(page, { tasks: [task(1, 'Моя справа', { planDate: '2026-10-08' }), task(2, 'Думка у Вхідних'), task(3, 'Майбутня справа', { planDate: '2026-10-10' }), task(4, 'Вже зроблено', { planDate: '2026-10-08', done: true, doneDate: '2026-10-08' })] });
-  await page.getByRole('button', { name: '⋯ Ще', exact: true }).click();
-  await page.getByRole('button', { name: '🫀 Стан', exact: true }).click();
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Стан', exact: true }).click();
   await page.locator('.prio-slot').first().click();
-  await expect(page.locator('.tp-item-title')).toHaveText(['Моя справа']);
-  await page.locator('.tp-item').click();
+  await expect(page.locator('.tp-item-title')).toHaveText(['Моя справа', 'Думка у Вхідних']);
+  await page.locator('.tp-item').filter({ hasText: 'Моя справа' }).click();
   await expect(page.locator('.prio-task')).toHaveText('Моя справа');
-  await page.getByRole('button', { name: '☀ Сьогодні', exact: true }).click();
+  await page.getByRole('button', { name: 'Зараз', exact: true }).click();
   await page.getByRole('button', { name: 'Моя справа', exact: true }).click();
   await page.getByRole('button', { name: 'Завтра', exact: true }).click();
   await page.locator('#edit-save-fab').click();
-  await page.getByRole('button', { name: '⋯ Ще', exact: true }).click();
-  await page.getByRole('button', { name: '🫀 Стан', exact: true }).click();
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Стан', exact: true }).click();
   await expect(page.locator('.prio-task')).toHaveCount(0);
 });

@@ -1,5 +1,6 @@
 import { useStore } from '../../state/store';
 import type { DateKey } from '../../types';
+import Icon from '../common/Icon';
 
 export default function DayTemplates({ ds }: { ds: DateKey }) {
   const dayTemplates = useStore((s) => s.dayTemplates);
@@ -10,7 +11,7 @@ export default function DayTemplates({ ds }: { ds: DateKey }) {
   return (
     <div style={{ margin: '4px 0 8px' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
-        📋 Шаблони дня
+        <Icon name="archive" /> Шаблони дня
       </div>
       {dayTemplates.length ? (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
@@ -39,7 +40,7 @@ export default function DayTemplates({ ds }: { ds: DateKey }) {
           if (nm && nm.trim()) saveDayTemplate(ds, nm.trim());
         }}
       >
-        💾 Зберегти зони як шаблон
+        <Icon name="archive" /> Зберегти зони як шаблон
       </button>
     </div>
   );

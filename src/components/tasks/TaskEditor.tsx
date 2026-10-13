@@ -3,7 +3,7 @@ import { useStore } from '../../state/store';
 import type { Task, TaskType } from '../../types';
 import { fmtDate, WD } from '../../utils/date';
 import { saveState, saveIsBlocked, getSaveErrorMessage, showRecoveryBanner } from '../../services/persistence';
-import { isTaskInInbox, repeatDueOn } from '../../utils/taskSchedule';
+import { repeatDueOn } from '../../utils/taskSchedule';
 import { hasTaskCounter } from '../../utils/taskCounter';
 
 const TYPE_OPTIONS: { value: TaskType; label: string }[] = [
@@ -11,9 +11,21 @@ const TYPE_OPTIONS: { value: TaskType; label: string }[] = [
   { value: 'check', label: 'Чекліст' }, { value: 'counter', label: 'Лічильник' },
   { value: 'note', label: 'З нотаткою' }, { value: 'alarm', label: 'Будильник' },
   { value: 'timewin', label: 'Вікно часу' },
-  { value: 'ctx', label: 'Контекст' }, { value: 'negative', label: 'Шкідлива звичка' },
+  { value: 'ctx', label: 'З мітками' }, { value: 'negative', label: 'Журнал подій' },
   { value: 'zonelinked', label: 'До зони' },
 ];
+const TYPE_HINTS: Record<TaskType, string> = {
+  simple: 'Одна дія. Без дати доступна одразу; зона визначає, коли її доречно показати.',
+  sched: 'Одна дія на точну дату й час. До цього моменту вона доступна в Плані.',
+  check: 'Кілька кроків однієї справи. Галочки зберігають поступ; завершення всієї справи — окрема дія.',
+  counter: 'Рахує повторення або обсяг. Крок і ціль налаштовуються нижче; завершення — вручну.',
+  note: 'Дія з розгорнутими деталями. Для вільної думки без виконання використовуй Блокнот.',
+  alarm: 'Нагадування у заданий час. Для щоденного сигналу вибери повторення «Щодня».',
+  timewin: 'Показує справу лише в обраному проміжку часу та її зоні, якщо вона задана.',
+  ctx: 'Дія з ручними мітками. Напрямок і час показу визначає зона, а не мітки.',
+  negative: 'Фіксує подію, а не виконання квесту. Натискання збільшує журнал і віднімає заданий досвід.',
+  zonelinked: 'Дія для конкретної зони. Для нового входження обери «Кожна зона»; без повтору вона разова.',
+};
 const REPEATS: { value: Task['repeat']; label: string }[] = [
   { value: 'none', label: 'Без повторення' }, { value: 'daily', label: 'Щодня' },
   { value: 'weekly', label: 'Щотижня' }, { value: 'weekdays', label: 'Понеділок — п’ятниця' },
@@ -48,6 +60,7 @@ export default function TaskEditor() {
   const [winStart, setWinStart] = useState(existing?.windowStart || '07:00');
   const [winEnd, setWinEnd] = useState(existing?.windowEnd || '09:00');
   const [note, setNote] = useState(existing?.note || '');
+  const [checklistDraft, setChecklistDraft] = useState('');
   const [cntTgt, setCntTgt] = useState(existing?.counterTarget ?? (existing?.type === 'counter' ? 10 : 0));
   const [counterEnabled, setCounterEnabled] = useState(existing ? hasTaskCounter(existing) : false);
   const [counterStep, setCounterStep] = useState(existing?.counterStep || 1);
@@ -61,8 +74,6 @@ export default function TaskEditor() {
   const [savedNewId, setSavedNewId] = useState<number | null>(null);
   const scheduled = type === 'sched';
   const special = type !== 'simple' && type !== 'sched';
-  const inboxDraft = isTaskInInbox({ type, repeat, planDate: date || undefined,
-    zoneId: zoneId ? Number(zoneId) : null, done: false, someday: false, trashed: false } as Task);
   const today = fmtDate(new Date());
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const pastTime = scheduled && date && time && new Date(date + 'T' + time).getTime() < Date.now();
@@ -99,6 +110,7 @@ export default function TaskEditor() {
       windowStart: winStart, windowEnd: winEnd, note, counterTarget: cntTgt, negXp,
       counterEnabled, counterStep, counterUnit,
       reminderEnabled: reminder, remindBeforeMinutes: Number(advance),
+      ...(isNew && type === 'check' ? { items: checklistDraft.split('\n').map(text => text.trim()).filter(Boolean).map(text => ({ text, done: false })) } : {}),
     };
     if (saveIsBlocked() || useStore.getState().backupBanner) {
       saveState(); setError(getSaveErrorMessage()); return;
@@ -141,10 +153,13 @@ export default function TaskEditor() {
             <option value="0">Без додаткового нагадування</option><option value="5">За 5 хвилин</option><option value="15">За 15 хвилин</option><option value="60">За годину</option><option value="1440">За добу</option>
           </select></label>}
         </div>}
+        <div className="ef"><label className="el" htmlFor="task-zone">У якій зоні?</label><select id="task-zone" className="ei" value={zoneId} onChange={e => setZoneId(e.target.value)}><option value="">Будь-яка зона</option>{zoneId && !zones.some(z => String(z.id) === zoneId) && <option value={zoneId}>Зону видалено — вибери іншу</option>}{zones.map(z => <option value={z.id} key={z.id}>{z.nm}</option>)}</select><p className="editor-hint">Наприклад, «Підмести підлогу» у Вечорі. В інший час задача є в Плані та всіх задачах.</p></div>
       </section>
       <details className="editor-section" open={special || counterEnabled || undefined}>
         <summary>Додаткові можливості{special ? ' · ' + TYPE_OPTIONS.find(o => o.value === type)?.label : ''}</summary>
         <div className="ef"><label className="el" htmlFor="task-type">Тип задачі</label><select id="task-type" className="ei" value={type} onChange={e => chooseType(e.target.value as TaskType)}>{TYPE_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}</select></div>
+        <p className="editor-hint">{TYPE_HINTS[type]}</p>
+        {isNew && type === 'check' && <label className="el" htmlFor="task-checklist">Кроки — кожен із нового рядка<textarea id="task-checklist" className="ei" rows={4} value={checklistDraft} onChange={e => setChecklistDraft(e.target.value)} placeholder={'Зібрати речі\nПеревірити документи\nВийти з дому'} /></label>}
         <div className="ef"><label className="el" htmlFor="task-repeat">Повторення</label><select id="task-repeat" className="ei" value={repeat} onChange={e => setRepeat(e.target.value as Task['repeat'])}>{REPEATS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
         {repeat === 'interval' && <div className="editor-row"><label className="el">Інтервал<input type="number" className="ei" min="1" value={repeatInterval} onChange={e => setRepeatInterval(Math.max(1, Number(e.target.value)))} /></label><label className="el">Одиниця<select className="ei" value={repeatUnit} onChange={e => setRepeatUnit(e.target.value as typeof repeatUnit)}><option value="sec">секунд</option><option value="min">хвилин</option><option value="hour">годин</option><option value="day">днів</option><option value="week">тижнів</option><option value="month">місяців (30 днів)</option></select></label></div>}
         {repeat === 'custom' && <div className="rep-days">{WD.map((day, i) => <button className={'rd' + (repeatDays[i] ? ' on' : '')} type="button" aria-pressed={repeatDays[i]} key={day} onClick={() => { setRepeatDays(days => days.map((v, j) => j === i ? !v : v)); setDirty(true); }}>{day}</button>)}</div>}
@@ -158,16 +173,16 @@ export default function TaskEditor() {
           <p className="editor-hint">Наприклад, «Розтяжка»: крок 5 хв. Ціль обираєш сам; досягнення цілі не завершує задачу автоматично.</p>
         </>}
         {type === 'negative' && <label className="el">Штраф досвіду<input type="number" className="ei" min="1" value={negXp} onChange={e => setNegXp(Math.max(1, Number(e.target.value)))} /></label>}
-        <div className="ef"><label className="el" htmlFor="task-zone">Зона</label><select id="task-zone" className="ei" value={zoneId} onChange={e => setZoneId(e.target.value)}><option value="">Без зони</option>{zones.map(z => <option value={z.id} key={z.id}>{z.nm}</option>)}</select></div>
         <div className="ef"><label className="el" htmlFor="task-folder">Папка</label><div className="editor-row"><select id="task-folder" className="ei" value={folderId} onChange={e => setFolderId(e.target.value)}><option value="">Без папки</option>{folders.map(f => <option value={f.id} key={f.id}>{f.ico} {f.nm}</option>)}</select><button type="button" onClick={() => { const name = window.prompt('Назва нової папки:'); if (name?.trim()) { const id = addFolder(name.trim(), '📁'); if (id) { setFolderId(id); setDirty(true); } } }}>+ Папка</button></div></div>
         <div className="ef"><label className="el" htmlFor="task-tags">Теги через кому</label><input id="task-tags" className="ei" value={tagsText} onChange={e => setTagsText(e.target.value)} /></div>
         {!isNew && <div className="ef"><span className="el">Зберегти зміни й перенести</span><div className="editor-actions">{[15, 60, 180].map(min => <button key={min} type="button" onClick={() => submit(min)}>+{min < 60 ? min + ' хв' : min / 60 + ' год'}</button>)}<button type="button" onClick={() => submit('tomorrow')}>На завтра</button></div></div>}
       </details>
       <div className="schedule-preview" aria-live="polite">
-        {date ? <>У плані: <strong>{dateLabel}{scheduled && time ? ', ' + time : ''}</strong>. </> : inboxDraft ? <>Без дати — у Вхідних. Вибери день, щоб додати у план. </> : <>Показ за додатковими умовами задачі. </>}
-        {scheduled && date && <>У списку на сьогодні — від початку вибраного дня, щоб можна було підготуватися. </>}
+        {date ? <>У плані: <strong>{dateLabel}{scheduled && time ? ', ' + time : ''}</strong>. </> : <>Без дати — доступна, коли підходять зона й умови задачі. </>}
+        {zoneId && <>У «Зараз» лише в зоні <strong>{zones.find(z => String(z.id) === zoneId)?.nm || 'яку видалено'}</strong>. </>}
+        {scheduled && date && <>У «Зараз» — після заданого часу. До нього — в Плані та всіх задачах. </>}
         {type === 'simple' && <>Без сповіщення. Для сигналу на точний час вибери «Запланована». </>}
-        {(scheduled || type === 'alarm') && (reminder ? <>Нагадаю {scheduled ? time || 'після вибору часу' : alarmTime || 'після вибору часу'}{advance !== '0' && scheduled ? ' і за ' + advance + ' хв' : ''}. </> : <>Без сповіщення. </>)}
+        {(scheduled || type === 'alarm') && (reminder ? <>Нагадаю {scheduled ? time || 'після вибору часу' : alarmTime || 'після вибору часу'}{advance !== '0' && scheduled ? ' і за ' + advance + ' хв' : ''}. {zoneId && <>Сигнал іде за заданим часом; зона визначає показ у «Зараз». </>}</> : <>Без сповіщення. </>)}
         {repeat !== 'none' && <>{REPEATS.find(r => r.value === repeat)?.label}.</>}
       </div>
       {error && <div className="editor-error" role="alert"><p>{error}</p>{saveIsBlocked() && <button type="button" onClick={showRecoveryBanner}>Відкрити відновлення</button>}</div>}

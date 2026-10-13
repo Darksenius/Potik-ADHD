@@ -3,6 +3,7 @@ import type { Task } from '../../types';
 import { WD } from '../../utils/date';
 import { REPEAT_LABELS, CONTEXT_TAGS } from '../../constants';
 import { COUNTER_UNITS, hasTaskCounter, taskCounterStep, taskCounterTarget } from '../../utils/taskCounter';
+import Icon from '../common/Icon';
 
 
 export default function TaskBody({ t }: { t: Task }) {
@@ -28,7 +29,7 @@ export default function TaskBody({ t }: { t: Task }) {
             <div className={'ci' + (it.done ? ' cid' : '')} key={i}>
               <input type="checkbox" aria-label={it.text} checked={it.done} disabled={t.done} onChange={() => toggleChecklistItem(t.id, i)} />
               <input key={it.text} className="ei" aria-label={'Текст пункту ' + (i + 1)} defaultValue={it.text} onBlur={e => { editChecklistItem(t.id, i, e.target.value); e.target.value = e.target.value.trim() || it.text; }} />
-              <button className="ab" aria-label={'Видалити пункт: ' + it.text} onClick={() => deleteChecklistItem(t.id, i)}>✕</button>
+              <button className="ab" aria-label={'Видалити пункт: ' + it.text} onClick={() => deleteChecklistItem(t.id, i)}><Icon name="close" /></button>
             </div>
           ))}
           <ChecklistAdd taskId={t.id} onAdd={addChecklistItem} autoFocus={!t.items?.length && Date.now() - new Date(t.created).getTime() < 5000} />
@@ -78,12 +79,12 @@ export default function TaskBody({ t }: { t: Task }) {
 
       {t.type === 'ctx' && (
         <>
-          <div className="bl">Контексти (ручні мітки)</div>
+          <div className="bl">Ручні мітки</div>
           <div className="ctx-tags">
             {CONTEXT_TAGS.map((tg) => (
-              <div className={'ctx-tag' + ((t.ctxTags || []).includes(tg) ? ' sel' : '')} key={tg} onClick={() => toggleCtxTag(t.id, tg)}>
+              <button type="button" aria-pressed={(t.ctxTags || []).includes(tg)} className={'ctx-tag' + ((t.ctxTags || []).includes(tg) ? ' sel' : '')} key={tg} onClick={() => toggleCtxTag(t.id, tg)}>
                 {tg}
-              </div>
+              </button>
             ))}
           </div>
         </>
@@ -95,7 +96,7 @@ export default function TaskBody({ t }: { t: Task }) {
           <div className="neg-counter">
             <div className="neg-cnt-v">{t.counter || 0}</div>
             <span style={{ fontSize: 11, color: 'var(--t3)' }}>раз сьогодні</span>
-            <button className="neg-tap-btn" onClick={() => toggleTask(t.id)}>⚠ Зафіксувати (−{t.negXp} досвіду)</button>
+            <button className="neg-tap-btn" onClick={() => toggleTask(t.id)}><Icon name="note" /> Зафіксувати (−{t.negXp} досвіду)</button>
           </div>
         </>
       )}

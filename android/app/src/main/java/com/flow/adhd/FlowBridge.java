@@ -21,6 +21,9 @@ import android.util.Base64;
 
 public class FlowBridge {
 
+    private static final long MAX_SAFE_JS_INTEGER = 9_007_199_254_740_991L;
+    private static final long MAX_CAPTURED_TASK_ID = MAX_SAFE_JS_INTEGER - 1L;
+
     private final FlowDao dao;
     private final Context ctx;
     private final File publicBackupOverride;
@@ -245,6 +248,104 @@ public class FlowBridge {
     /** Викликається з Java-коду (не JS) */
     public void pushEvent(String event) {
         dao.insertEvent(new PendingEvent(event));
+    }
+
+    /**
+     * Durably queues a quick task with a stable numeric ID that JS can later
+     * materialize exactly once. The notification snapshot is never edited here.
+     */
+    public String queueCapturedTask(String title) {
+        if (title == null || title.trim().isEmpty()) return null;
+        synchronized (FlowBridge.class) {
+            long createdAt = System.currentTimeMillis();
+            try {
+                String stateJson = dao.getStateJson();
+                org.json.JSONObject state = new org.json.JSONObject(
+                        stateJson == null || stateJson.isEmpty() ? "{}" : stateJson);
+                long taskId = allocateCapturedTaskId(createdAt, state.optLong("nid", 0L),
+                        state.optJSONArray("tasks"), dao.getPendingEvents());
+                if (taskId <= 0 || taskId > MAX_CAPTURED_TASK_ID) return null;
+
+                org.json.JSONObject payload = new org.json.JSONObject();
+                payload.put("title", title);
+                payload.put("createdAt", createdAt);
+                String event = "capture_task_v2:" + taskId + ":" + payload.toString();
+                PendingEvent queued = new PendingEvent(event);
+                queued.createdAt = createdAt;
+                dao.insertEvent(queued);
+                return event;
+            } catch (Exception e) {
+                android.util.Log.w("FlowBridge", "Quick task queue failed", e);
+                return null;
+            }
+        }
+    }
+
+    static long allocateCapturedTaskId(long now, long savedNextId,
+                                       org.json.JSONArray savedTasks, List<PendingEvent> pendingEvents) {
+        return allocateCapturedTaskId(now, savedNextId, savedTaskIds(savedTasks), pendingCaptureTaskIds(pendingEvents));
+    }
+
+    static long allocateCapturedTaskId(long now, long savedNextId,
+                                       long[] savedTaskIds, long[] pendingCaptureTaskIds) {
+        long fromClock = now > 0 && now <= MAX_SAFE_JS_INTEGER / 1024L
+                ? now * 1024L : MAX_SAFE_JS_INTEGER + 1L;
+        long next = Math.max(fromClock, Math.max(1L, savedNextId));
+        if (savedTaskIds != null) for (long id : savedTaskIds)
+            if (id > 0 && id <= MAX_SAFE_JS_INTEGER) next = Math.max(next, id + 1L);
+        if (pendingCaptureTaskIds != null) for (long id : pendingCaptureTaskIds)
+            if (id > 0 && id <= MAX_SAFE_JS_INTEGER) next = Math.max(next, id + 1L);
+        return next <= MAX_CAPTURED_TASK_ID ? next : -1L;
+    }
+
+    private static long[] savedTaskIds(org.json.JSONArray savedTasks) {
+        if (savedTasks == null) return new long[0];
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < savedTasks.length(); i++) {
+            org.json.JSONObject task = savedTasks.optJSONObject(i);
+            long id = task == null ? -1L : safeNumericId(task.opt("id"));
+            if (id > 0) ids.add(id);
+        }
+        return toLongArray(ids);
+    }
+
+    private static long[] pendingCaptureTaskIds(List<PendingEvent> pendingEvents) {
+        if (pendingEvents == null) return new long[0];
+        List<Long> ids = new ArrayList<>();
+        for (PendingEvent event : pendingEvents) {
+            long id = captureTaskId(event == null ? null : event.event);
+            if (id > 0) ids.add(id);
+        }
+        return toLongArray(ids);
+    }
+
+    private static long[] toLongArray(List<Long> values) {
+        long[] result = new long[values.size()];
+        for (int i = 0; i < values.size(); i++) result[i] = values.get(i);
+        return result;
+    }
+
+    private static long safeNumericId(Object value) {
+        if (value instanceof Number) {
+            double number = ((Number) value).doubleValue();
+            if (!Double.isFinite(number) || number <= 0 || number > MAX_SAFE_JS_INTEGER || number != Math.rint(number)) return -1L;
+            return (long) number;
+        }
+        if (value instanceof String) {
+            try {
+                long id = Long.parseLong((String) value);
+                return id > 0 && id <= MAX_SAFE_JS_INTEGER ? id : -1L;
+            } catch (NumberFormatException ignored) {}
+        }
+        return -1L;
+    }
+
+    private static long captureTaskId(String event) {
+        String prefix = "capture_task_v2:";
+        if (event == null || !event.startsWith(prefix)) return -1L;
+        int separator = event.indexOf(':', prefix.length());
+        if (separator <= prefix.length()) return -1L;
+        return safeNumericId(event.substring(prefix.length(), separator));
     }
 
     public String getNotifJson() {

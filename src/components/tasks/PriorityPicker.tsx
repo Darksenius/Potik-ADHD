@@ -17,7 +17,7 @@ export default function PriorityPicker({ slot, onClose }: { slot: number; onClos
 
   return (
     <Modal title={`Пріоритет #${slot + 1}`} onClose={onClose}>
-      <p className="section-hint">Обери невиконану справу зі «Сьогодні». Справі з Вхідних спочатку признач день.</p>
+      <p className="section-hint">Обери важливу справу. У «Зараз» вона буде першою, коли підходять її зона, дата й час.</p>
       <input
         type="text"
         value={query}

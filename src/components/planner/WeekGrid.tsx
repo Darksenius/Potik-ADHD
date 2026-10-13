@@ -2,6 +2,7 @@ import { useStore } from '../../state/store';
 import { getWeekStart } from '../../state/slices/plannerSlice';
 import { fmtDate, WD } from '../../utils/date';
 import { taskOccursOn } from '../../utils/taskSchedule';
+import Icon from '../common/Icon';
 
 export default function WeekGrid() {
   const weekOffset = useStore((s) => s.planWeekOffset);
@@ -60,7 +61,7 @@ export default function WeekGrid() {
               <div className="pd-rest">вих</div>
             ) : (
               <>
-                {hasEvents && <div style={{ fontSize: 8, marginTop: 1 }}>🎉</div>}
+                {hasEvents && <div style={{ fontSize: 8, marginTop: 1 }}><Icon name="idea" /></div>}
                 {sched && <div style={{ fontSize: 7, color: 'var(--z)', marginTop: 1 }}>{sched}</div>}
               </>
             )}

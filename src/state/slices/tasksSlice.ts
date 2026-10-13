@@ -1,7 +1,8 @@
 import type { AppSlice } from '../store';
-import type { Task, TaskType, ChecklistItem } from '../../types';
+import type { Task, TaskType, ChecklistItem, QuestDeferral, QuestDeferralKind } from '../../types';
 import { fmtDate, nowHM, normalizeTime, hmToString } from '../../utils/date';
 import { hasTaskCounter, resetTaskProgress, taskCounterTarget } from '../../utils/taskCounter';
+import { buildQuestTimeline, createQuestDeferral, isValidQuestDeferral } from '../../utils/questPolicy';
 
 /** TXP — рядок 1239: базова нагорода XP за тип задачі при виконанні. */
 const TASK_XP: Record<TaskType, number> = {
@@ -23,7 +24,7 @@ export interface TasksSlice {
   skipTask: (id: number) => void;
   toSomeday: (id: number) => void;
   fromSomeday: (id: number) => void;
-  addQuickTaskFromShade: (title: string) => void;
+  addQuickTaskFromShade: (title: string, requestedId?: number, createdAt?: number) => void;
   markScheduledFired: (id: number) => void;
   markPreReminderFired: (id: number) => void;
 
@@ -45,6 +46,7 @@ export interface TasksSlice {
   saveTask: (id: number | null, patch: Partial<Task> & { title: string; type: TaskType }) => number;
   /** efSnooze(x) — рядки 2402–2411. x='tomorrow' або хвилини. */
   snoozeTask: (id: number, x: 'tomorrow' | number, requestedAt?: number) => void;
+  deferTask: (id: number, kind: QuestDeferralKind, requestedAt?: number, explicitDeferral?: QuestDeferral) => void;
   /** updNote(tid,v) — рядок 2250 */
   updateNote: (id: number, text: string) => void;
   /** updAlarm(tid,v) — рядок 2251 */
@@ -131,6 +133,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           updated.doneDate = fmtDate(now);
           updated.doneAt = now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
           updated.snoozeUntil = 0;
+          updated.questDeferral = undefined;
           updated.nextRepeatAt = x.repeat === 'interval' && x.repeatMs ? Date.now() + x.repeatMs : 0;
         } else {
           updated.doneDate = undefined;
@@ -140,6 +143,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         return updated;
       }),
       priorities: done ? s.priorities.map((pid) => (pid === id ? null : pid)) : s.priorities,
+      alarmTaskIds: done ? s.alarmTaskIds.filter(taskId => taskId !== id) : s.alarmTaskIds,
     }));
 
     if (shouldCredit) {
@@ -163,6 +167,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set((s) => ({
       tasks: s.tasks.map((x) => (x.id === id ? {
         ...x, someday: true, done: false,
+        questDeferral: undefined,
         completionCredited: x.completionCredited ?? x.done,
         completionCreditDate: (x.completionCredited ?? x.done) ? (x.completionCreditDate || x.doneDate || fmtDate(new Date())) : x.completionCreditDate,
         doneDate: undefined, doneAt: undefined, nextRepeatAt: 0,
@@ -179,7 +184,19 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set((s) => ({ tasks: s.tasks.map((x) => (x.id === id ? { ...x, someday: false } : x)) }));
   },
 
-  addQuickTaskFromShade: (title) => {
+  addQuickTaskFromShade: (title, requestedId, createdAt) => {
+    if (Number.isSafeInteger(requestedId) && requestedId! > 0) {
+      // Room's durable capture id also identifies actions taken before the WebView opens.
+      if (get().tasks.some(task => task.id === requestedId)) return;
+      const created = get().createTask(title, 'simple', null, '');
+      set(state => ({
+        tasks: state.tasks.map(task => task.id === created.id ? {
+          ...task, id: requestedId!, created: Number.isFinite(createdAt) ? new Date(createdAt!).toISOString() : task.created,
+        } : task),
+        nid: Math.max(state.nid, requestedId! + 1),
+      }));
+      return;
+    }
     get().createTask(title, 'simple', null, '');
   },
 
@@ -247,6 +264,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const copy: Task = {
       ...JSON.parse(JSON.stringify(t)), id: nid, done: false, completionCredited: false,
       completionCreditDate: undefined, doneDate: undefined, doneAt: undefined, nextRepeatAt: 0, snoozeUntil: 0,
+      questDeferral: undefined,
       completedToday: t.type === 'timewin' ? false : t.completedToday,
       zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
       expanded: false, title: t.title + ' (копія)',
@@ -419,7 +437,20 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         if (next.type === 'negative') next.negXp = patch.negXp || 5;
         next.tags = (patch.tags || []).map((s) => s.trim()).filter(Boolean);
 
+        if (next.type === 'check' && (!t.items || t.items.length === 0) && Array.isArray(patch.items)) {
+          next.items = patch.items
+            .filter(item => typeof item?.text === 'string' && item.text.trim())
+            .map(item => ({ text: item.text.trim(), done: false, credited: false }));
+        }
+
         if (isNew && next.type === 'check') next.expanded = true;
+
+        if (next.type !== t.type || next.zoneId !== t.zoneId || next.planDate !== t.planDate
+          || next.repeat !== t.repeat || JSON.stringify(next.repeatDays) !== JSON.stringify(t.repeatDays)
+          || next.schedDate !== t.schedDate || next.schedTime !== t.schedTime
+          || next.alarmTime !== t.alarmTime || next.windowStart !== t.windowStart || next.windowEnd !== t.windowEnd) {
+          next.questDeferral = undefined;
+        }
 
         return next;
       }),
@@ -454,6 +485,34 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       }),
       xpPopup: { text: '⏳ Відкладено', tone: 'muted' },
     }));
+  },
+
+  deferTask: (id, kind, requestedAt, explicitDeferral) => {
+    const task = get().tasks.find(candidate => candidate.id === id);
+    if (!task || task.trashed || task.done || task.someday) return;
+    const baseAt = Number.isFinite(requestedAt) ? requestedAt! :
+      (explicitDeferral && Number.isFinite(explicitDeferral.requestedAt) ? explicitDeferral.requestedAt : Date.now());
+    let deferral: QuestDeferral;
+    if (explicitDeferral && isValidQuestDeferral(explicitDeferral) && explicitDeferral.kind === kind) {
+      deferral = explicitDeferral;
+    } else {
+      const now = new Date(baseAt);
+      const timeline = buildQuestTimeline({
+        zones: get().zones,
+        planDayOff: get().planDayOff,
+        dayBlocks: day => get().dayBlocks(day),
+        now,
+      });
+      deferral = createQuestDeferral(task, kind, { requestedAt: baseAt, timeline, zones: get().zones });
+    }
+    set(state => ({
+      tasks: state.tasks.map(candidate => candidate.id === id
+        ? { ...candidate, questDeferral: deferral, snoozeUntil: 0, firedSched: false, firedPre: false, alarmFired: false }
+        : candidate),
+      alarmTaskIds: state.alarmTaskIds.filter(taskId => taskId !== id),
+      xpPopup: { text: deferral.kind === 'next-zone' ? '⏳ До наступної зони' : '⏳ Не сьогодні', tone: 'muted' },
+    }));
+    get().showToast(deferral.kind === 'next-zone' ? 'Повернеться у наступній зоні' : 'Повернеться пізніше');
   },
 
   updateNote: (id, text) => {

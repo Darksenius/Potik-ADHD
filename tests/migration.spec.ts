@@ -20,11 +20,11 @@ const task = (id: number, title: string, extra = {}) => ({
 test('editor loads the selected task and clears cancelled drafts', async ({ page }) => {
   page.on('dialog', d => d.accept());
   await boot(page, { tasks: [task(401, 'Перша'), task(402, 'Друга')] });
-  await page.locator('.tc').filter({ hasText: 'Перша' }).locator('.eb').click();
+  await page.locator('.tc').filter({ hasText: 'Перша' }).locator('.task-title-button').click();
   await expect(page.locator('#edit-body input').first()).toHaveValue('Перша');
   await page.locator('#edit-body input').first().fill('Не зберігати');
   await page.getByRole('button', { name: '← Назад' }).click();
-  await page.locator('.tc').filter({ hasText: 'Друга' }).locator('.eb').click();
+  await page.locator('.tc').filter({ hasText: 'Друга' }).locator('.task-title-button').click();
   await expect(page.locator('#edit-body input').first()).toHaveValue('Друга');
   await page.getByRole('button', { name: '← Назад' }).click();
   await page.locator('#add-fab').click();
@@ -45,7 +45,7 @@ test('new task survives reload within seconds, before minute autosave', async ({
 test('planner selects the local calendar day near midnight', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-16T00:30:00+03:00') });
   await page.goto('/');
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   await expect(page.locator('.pdd-date')).toContainText('16 Вер');
 });
 
@@ -68,7 +68,7 @@ test('all sections remain reachable through the four primary tabs and render wit
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await boot(page);
-  for (const label of ['☀ Сьогодні', '📝 Блокнот', '📅 План', '🫀 Стан', '🕐 Зони', '💡 Ідеї', '📊 Стат']) {
+  for (const label of ['Зараз', 'Блокнот', 'План', 'Стан', 'Зони', 'Ідеї', 'Стат']) {
     await openTab(page, label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label).toBe(true);
   }
@@ -86,7 +86,7 @@ test('all 10 supported task types can be created in separate editor sessions', a
     await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
     if (type === 'sched') await page.getByLabel('Час *', { exact: true }).fill('15:30');
     if (type === 'alarm') await page.getByLabel('Час будильника', { exact: true }).fill('16:00');
-    if (type === 'zonelinked') await page.getByLabel('Зона', { exact: true }).selectOption('3');
+    if (type === 'zonelinked') await page.getByLabel('У якій зоні?', { exact: true }).selectOption('3');
     await page.locator('#edit-save-fab').click();
   }
   await page.clock.runFor(2000);
@@ -112,7 +112,7 @@ test('native notification events are subscribed and drained on startup', async (
 
 test('day journal stays attached to its selected day', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   const journal = page.getByPlaceholder('Запиши, що згадав про цей день…');
   await journal.fill('Запис середи');
   await page.locator('.plan-day').filter({ has: page.locator('.pd-num', { hasText: /^17$/ }) }).click();
@@ -124,14 +124,14 @@ test('day journal stays attached to its selected day', async ({ page }) => {
 
 test('rest-day toggle immediately updates the calendar', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.locator('.rest-toggle').click();
   await expect(page.locator('.plan-day.sel')).toHaveClass(/rest-day/);
 });
 
 test('zones can be edited and disabled without losing their tasks', async ({ page }) => {
   await boot(page, { weekTplSeeded: true, tasks: [task(401, 'Задача зони', { zoneId: 3, zoneName: 'Робота', zoneColor: '#7ed321' })] });
-  await openTab(page, '🕐 Зони');
+  await openTab(page, 'Зони');
   await page.getByRole('button', { name: 'Редагувати зону Робота', exact: true }).click();
   await page.getByLabel('Назва зони').fill('Робочий фокус');
   await page.getByLabel('Початок 1', { exact: true }).fill('10:00');
@@ -143,10 +143,12 @@ test('zones can be edited and disabled without losing their tasks', async ({ pag
   expect(saved.tasks[0]).toMatchObject({ title: 'Задача зони', zoneId: 3, zoneName: 'Робочий фокус' });
 });
 
-test('deleting a zone task removes it from the active banner', async ({ page }) => {
+test('deleting a zone task removes it from All tasks', async ({ page }) => {
   await boot(page, { weekTplSeeded: true, tasks: [task(401, 'Прибрати банер', { type: 'zonelinked', zoneId: 3 })] });
-  await page.locator('#zone-tasks-banner').getByTitle('Видалити', { exact: true }).click();
-  await expect(page.locator('#zone-tasks-banner')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  const card = page.locator('#tasks-list .tc').filter({ has: page.getByRole('button', { name: 'Прибрати банер', exact: true }) });
+  await card.getByRole('button', { name: 'У кошик: Прибрати банер', exact: true }).click();
+  await expect(page.locator('#tasks-list')).not.toContainText('Прибрати банер');
 });
 
 test('legacy saved state keeps task details, notes, statistics and planner data', async ({ page }) => {
@@ -207,7 +209,7 @@ test('Android backup remains intact when native archiving is unavailable', async
 test('5/2 schedule applies for two weeks and a manual exception affects only one day', async ({ page }) => {
   await boot(page);
   page.on('dialog', d => d.accept());
-  await page.getByRole('button', { name: '📅 План', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.locator('.wkc-head').click();
   await page.locator('.wkc-row').filter({ hasText: '5/2' }).getByRole('button', { name: '▶', exact: true }).click();
   await page.locator('.wkc-panel input[type=date]').fill('2026-09-14');
@@ -249,10 +251,13 @@ test('scheduled reminders fire once and trashed alarms stay silent', async ({ pa
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('notification navigation returns from help to tasks', async ({ page }) => {
+test('help returns to settings and the main navigation returns to tasks', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: '? Довідка', exact: true }).click();
-  await page.evaluate(() => (window as any).swTab('tasks'));
+  await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
+  await page.locator('#settings-page details.settings-group').filter({ hasText: 'Про застосунок і допомога' }).locator('summary').click();
+  await page.getByRole('button', { name: 'Відкрити довідку', exact: true }).click();
+  await page.getByRole('button', { name: 'Назад до налаштувань', exact: true }).click();
+  await page.getByRole('button', { name: 'Потік', exact: true }).click();
   await expect(page.locator('#add-fab')).toBeVisible();
 });
 
@@ -260,17 +265,18 @@ test('mobile screens at 320 and 390 pixels remain usable with screenshots', asyn
   await boot(page, { tasks: [task(401, 'Довга назва задачі для перевірки перенесення тексту без втрати кнопок та горизонтального прокручування')] });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const label of ['☀ Сьогодні', '📝 Блокнот', '📅 План', '🫀 Стан', '🕐 Зони']) {
+    for (const label of ['Зараз', 'Блокнот', 'План', 'Стан', 'Зони']) {
       await openTab(page, label);
       await page.clock.runFor(400);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), width + ' ' + label).toBe(true);
-      await page.screenshot({ path: testInfo.outputPath(width + '-' + label.slice(3) + '.png'), fullPage: true });
+      await page.screenshot({ path: testInfo.outputPath(width + '-' + label.replaceAll(' ', '-') + '.png'), fullPage: true });
     }
   }
 });
 
 test('accidentally deleted tasks can be restored from trash', async ({ page }) => {
   await boot(page, { tasks: [task(401, 'Повернути задачу')] });
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   await page.locator('#tasks-list .del').click();
   await page.getByText('Кошик (1)', { exact: true }).click();
   await page.getByRole('button', { name: 'Відновити', exact: true }).click();
@@ -282,7 +288,7 @@ test('accidentally deleted tasks can be restored from trash', async ({ page }) =
 
 test('new routine supports millilitres instead of forcing a count', async ({ page }) => {
   await boot(page);
-  await openTab(page, '🫀 Стан');
+  await openTab(page, 'Стан');
   await page.getByRole('button', { name: '+ Корисна', exact: true }).click();
   await page.getByLabel('Назва звички').fill('Чай');
   await page.getByLabel('Одиниця виміру').selectOption('ml');
@@ -294,6 +300,6 @@ test('new routine supports millilitres instead of forcing a count', async ({ pag
 });
 
 async function openTab(page: Page, label: string) {
-  if (!['☀ Сьогодні', '📅 План', '↓ Вхідні', '⋯ Ще'].includes(label)) await page.getByRole('button', { name: '⋯ Ще', exact: true }).click();
+  if (!['Зараз', 'План', 'Вхідні', 'Ще'].includes(label)) await page.getByRole('button', { name: 'Ще', exact: true }).click();
   await page.getByRole('button', { name: label, exact: true }).click();
 }
