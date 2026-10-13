@@ -10,7 +10,7 @@ async function createTaskWithNote(page: Page, title: string) {
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?').fill(title);
   await page.getByText('Нотатка (необов’язково)', { exact: true }).click();
-  await page.getByLabel('Нотатка до задачі').fill('Деталі збережені після відновлення.');
+  await page.locator('#edit-body').getByLabel('Нотатка до задачі').fill('Деталі збережені після відновлення.');
   await page.locator('#edit-save-fab').click();
 }
 

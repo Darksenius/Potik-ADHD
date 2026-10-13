@@ -1,7 +1,35 @@
-import { canPrioritizeTask, isTaskAvailable, nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
+import { canPrioritizeTask, isCalendarRepeat, isTaskAvailable, nextTaskReminderAt, repeatDueOn, taskPlanDate, taskPreReminderAt } from '../utils/taskSchedule';
 import { useStore } from '../state/store';
-import { nowHM, fmtDate, hmToString } from '../utils/date';
-import type { ForegroundNotifPayload, NotifZoneTimelineItem } from '../types';
+import { hasTaskCounter, taskCounterStep, taskCounterTarget } from '../utils/taskCounter';
+import { nowHM, fmtDate, hmToString, localDateTimeMs, normalizeTime } from '../utils/date';
+import type { ForegroundNotifPayload, NotifSchedListItem, NotifZoneTimelineItem, Task } from '../types';
+
+/** Native alarms retain their calendar rules when the WebView is absent. */
+export function recurringReminderRows(task: Task, now = new Date()): NotifSchedListItem[] {
+  if (!isCalendarRepeat(task) || !['sched', 'alarm'].includes(task.type) || task.trashed || task.someday || task.reminderEnabled === false) return [];
+  const localTime = normalizeTime(task.type === 'sched' ? task.schedTime : task.alarmTime);
+  if (!localTime) return [];
+  const today = fmtDate(now);
+  const first = taskPlanDate(task) || fmtDate(new Date(task.created));
+  const rows: NotifSchedListItem[] = [];
+  const lead = task.type === 'sched' ? Math.max(0, task.remindBeforeMinutes || 0) : 0;
+  for (const pre of lead > 0 ? [false, true] : [false]) {
+    for (let offset = 0; offset < 370; offset++) {
+      const date = new Date(now); date.setDate(date.getDate() + offset);
+      const day = fmtDate(date);
+      if (day < first || !repeatDueOn(task, date) || (task.done && day <= (task.doneDate || today))) continue;
+      const mainDue = localDateTimeMs(day, localTime)!;
+      if (task.snoozeUntil && mainDue < task.snoozeUntil) continue;
+      if (day === today && (pre ? task.firedPre : task.type === 'sched' ? task.firedSched : task.alarmFired)) continue;
+      if (pre && mainDue <= now.getTime()) continue;
+      rows.push({ id: pre ? task.id + '_pre' : task.id, title: pre ? 'Незабаром: ' + task.title : task.title,
+        dueMs: mainDue - (pre ? lead * 60000 : 0), fired: false, repeat: task.repeat,
+        repeatDays: task.repeatDays.slice(), anchorDate: day, localTime, advanceMinutes: pre ? lead : 0 });
+      break;
+    }
+  }
+  return rows;
+}
 
 /** colorDot() — рядки 3932-3947. Hex-колір → найближчий емодзі-кружечок. */
 export function colorDot(hex: string | null | undefined): string {
@@ -69,7 +97,7 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const taskLines = topN.map((t) => t.title).join('|');
   // Journal entries record an event, rather than completing a task. Do not
   // offer the native "Done" action for them.
-  const taskList = topN.filter(t => t.type !== 'negative').map((t) => ({ id: t.id, title: t.title, type: t.type || 'simple', counter: t.counter || 0, counterTarget: t.counterTarget || 10 }));
+  const taskList = topN.filter(t => t.type !== 'negative').map((t) => ({ id: t.id, title: t.title, type: t.type || 'simple', counter: t.counter || 0, counterTarget: taskCounterTarget(t), counterEnabled: hasTaskCounter(t), counterStep: taskCounterStep(t), counterUnit: t.counterUnit || 'count', repeat: t.repeat, repeatDays: t.repeatDays.slice(), anchorDate: taskPlanDate(t) || fmtDate(new Date(t.created)), counterDay: t.counterDay || t.completionCreditDate || fmtDate(new Date(t.created)) }));
 
   const routineParts: string[] = [];
   s.recur.forEach((r) => {
@@ -79,8 +107,9 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
   const routine = routineParts.join('  ·  ');
   const routineList = s.recur.map((r) => ({ id: r.id, nm: r.nm, ico: '', unit: r.unit || '', val: r.val || 0, step: r.step || 1, done: !!r.done }));
 
-  const schedList: { id: number | string; title: string; dueMs: number; fired: boolean }[] = [];
+  const schedList: NotifSchedListItem[] = [];
   for (const task of s.tasks) {
+    if (isCalendarRepeat(task)) { schedList.push(...recurringReminderRows(task)); continue; }
     const due = nextTaskReminderAt(task);
     if (due === undefined) continue;
     schedList.push({ id: task.id, title: task.title, dueMs: due, fired: task.type === 'sched' ? !!task.firedSched : !!task.alarmFired && fmtDate(new Date(due)) === todayStr });

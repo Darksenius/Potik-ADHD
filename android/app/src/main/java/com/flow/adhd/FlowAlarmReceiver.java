@@ -18,6 +18,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Calendar;
+import java.util.Locale;
+import java.util.TimeZone;
 
 /**
  * Обробляє два типи будильників навіть коли апка закрита:
@@ -35,12 +37,13 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     public static final String ACTION_SNOOZE      = "com.flow.adhd.SNOOZE_FIRE";
     // Точний будильник РІВНО на час найближчої задачі (а не 15-хв полінг)
     public static final String ACTION_TASK_DUE    = "com.flow.adhd.TASK_DUE";
-    // Щогодинне нагадування про воду (09:00–21:00)
-    public static final String ACTION_WATER       = "com.flow.adhd.WATER_REMIND";
+    static final String EXTRA_SNOOZE_DUE_MS = "snooze_due_ms";
     public static final String CHANNEL_REMIND      = "flow_remind";
-    public static final String CHANNEL_WATER       = "flow_water";
     private static final int   REMIND_BASE         = 5000;
-    private static final int   WATER_NOTIF_ID      = 6001;
+    private static final String LEGACY_ACTION_WATER = "com.flow.adhd.WATER_REMIND";
+    private static final String LEGACY_CHANNEL_WATER = "flow_water";
+    private static final int LEGACY_WATER_NOTIF_ID = 6001;
+    private static final int LEGACY_WATER_REQUEST_CODE = 4;
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -62,23 +65,17 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             checkSched(context, bridge);
             scheduleNextDue(context, bridge);
             FlowNotifService.start(context);
-        } else if (ACTION_WATER.equals(action)) {
-            waterRemind(context, bridge);
-            scheduleWater(context);
         } else if (ACTION_DAILY_RESET.equals(action)) {
             // пишемо маркер у Room + broadcast — апка обробить миттєво або при відкритті
             pushAndNotify(context, bridge, "daily_reset");
             FlowNotifService.start(context);
-            // переплановуємо на завтра 00:10 (+ страхуємо водяний цикл)
+            // переплановуємо на завтра 00:10
             scheduleDailyReset(context);
-            scheduleWater(context);
         } else if (ACTION_SNOOZE.equals(action)) {
-            // Відкладена задача: окреме нагадування через 1 годину (працює і коли апка закрита)
             String id = intent.getStringExtra("snooze_id");
             String title = intent.getStringExtra("snooze_title");
-            fireReminder(context, id != null ? id : "", title != null && !title.isEmpty() ? title : "Відкладена задача");
-            // маркер у застосунок (якщо відкритий — підсвітить задачу)
-            pushAndNotify(context, bridge, "task_remind:" + (id != null ? id : ""));
+            long due = intent.getLongExtra(EXTRA_SNOOZE_DUE_MS, 0L);
+            deliverSnoozeAt(context, bridge, id, title, due);
         }
     }
 
@@ -93,29 +90,232 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
 
     /** Перевіряє notif_json (масив schedList), чи настав час якоїсь задачі */
     private void checkSched(Context context, FlowBridge bridge) {
+        checkSchedAt(context, bridge, System.currentTimeMillis(), TimeZone.getDefault());
+    }
+
+    void checkSchedAt(Context context, FlowBridge bridge, long now, TimeZone zone) {
         String notifJson = bridge.getNotifJson();
         if (notifJson == null || notifJson.isEmpty()) return;
         try {
             JSONObject j = new JSONObject(notifJson);
             JSONArray sched = j.optJSONArray("schedList");
             if (sched == null) return;
-            long now = System.currentTimeMillis();
             SharedPreferences delivered = context.getSharedPreferences("flow_delivered_reminders", Context.MODE_PRIVATE);
             for (int i = 0; i < sched.length(); i++) {
                 JSONObject s = sched.optJSONObject(i);
                 if (s == null) continue;
-                long due = s.optLong("dueMs", 0);
-                boolean fired = s.optBoolean("fired", false);
-                String deliveryKey = "due:" + s.optString("id", "");
-                if (!fired && due > 0 && due <= now && delivered.getLong(deliveryKey, -1) != due) {
-                    if (!fireReminder(context, s.optString("id", ""), s.optString("title", "Нагадування"))) continue;
+                String id = s.optString("id", "");
+                boolean recurring = isCalendarRepeat(s);
+                long due = recurring ? dueOccurrenceToday(s, now, zone) : s.optLong("dueMs", 0);
+                boolean fired = !recurring && s.optBoolean("fired", false);
+                String deliveryKey = deliveryKey(id, due);
+                long deliveredDue = delivered.getLong(deliveryKey, -1);
+                if (!recurring && deliveredDue != due) {
+                    deliveredDue = delivered.getLong("due:" + id, -1); // v1.7 one-off compatibility
+                }
+                if (!fired && due > 0 && due <= now && deliveredDue != due
+                        && !suppressedBySameDayAction(bridge, id, due, zone)) {
+                    if (!isReminderTaskEligible(bridge, id)
+                            || !fireReminder(context, id, s.optString("title", "Нагадування"))) continue;
                     // Keep delivery deduplication available when the WebView is closed.
-                    delivered.edit().putLong(deliveryKey, due).commit();
+                    SharedPreferences.Editor editor = delivered.edit().putLong(deliveryKey, due);
+                    if (!recurring) editor.putLong("due:" + id, due);
+                    editor.commit();
                     // JS state is acknowledged through the durable command queue.
-                    pushAndNotify(context, bridge, "sched_fired:" + s.optString("id", "") + ":" + due);
+                    pushAndNotify(context, bridge, "sched_fired:" + id + ":" + due);
                 }
             }
         } catch (Exception ignored) {}
+    }
+
+    static String deliveryKey(String id, long occurrenceMs) { return "due:" + id + ":" + occurrenceMs; }
+
+    static long roundUpToMinute(long timestampMs) {
+        return ((timestampMs + 59_999L) / 60_000L) * 60_000L;
+    }
+
+    static Intent createSnoozeIntent(Context context, String id, String title, long dueMs) {
+        Intent intent = new Intent(context, FlowAlarmReceiver.class);
+        intent.setAction(ACTION_SNOOZE);
+        intent.setData(Uri.parse("flow://snooze/" + Uri.encode(id == null ? "" : id)));
+        intent.putExtra("snooze_id", id);
+        intent.putExtra("snooze_title", title);
+        intent.putExtra(EXTRA_SNOOZE_DUE_MS, dueMs);
+        return intent;
+    }
+
+    boolean deliverSnoozeAt(Context context, FlowBridge bridge, String id, String title, long dueMs) {
+        if (id == null || id.isEmpty() || dueMs <= 0 || !isReminderTaskEligible(bridge, id)) return false;
+        SharedPreferences delivered = context.getSharedPreferences("flow_delivered_reminders", Context.MODE_PRIVATE);
+        String key = deliveryKey(id, dueMs);
+        if (delivered.getLong(key, -1L) == dueMs) return false;
+        String shownTitle = title == null || title.isEmpty() ? "Відкладена задача" : title;
+        if (!fireReminder(context, id, shownTitle)) return false;
+        if (!delivered.edit().putLong(key, dueMs).commit()) return false;
+        pushAndNotify(context, bridge, "sched_fired:" + id + ":" + dueMs);
+        pushAndNotify(context, bridge, "task_remind:" + id);
+        return true;
+    }
+
+    private boolean isReminderTaskEligible(FlowBridge bridge, String id) {
+        try {
+            JSONObject state = new JSONObject(bridge.load());
+            JSONArray tasks = state.optJSONArray("tasks");
+            if (tasks == null) return true; // legacy state without task metadata
+            for (int i = 0; i < tasks.length(); i++) {
+                JSONObject task = tasks.optJSONObject(i);
+                if (task == null || !id.equals(task.optString("id", ""))) continue;
+                String type = task.optString("type", "");
+                return !task.optBoolean("done", false) && !task.optBoolean("trashed", false)
+                        && !"someday".equals(type);
+            }
+            return false;
+        } catch (Exception unavailable) {
+            return true; // Preserve delivery for older snapshots that cannot be parsed.
+        }
+    }
+
+    static boolean isCalendarRepeat(JSONObject row) {
+        String repeat = row == null ? "" : row.optString("repeat", "none");
+        return "daily".equals(repeat) || "weekly".equals(repeat) || "weekdays".equals(repeat)
+                || "weekend".equals(repeat) || "custom".equals(repeat);
+    }
+
+    /** Next recurring trigger strictly after `afterMs`; anchorDate is the first eligible task day. */
+    static long nextOccurrenceAfter(JSONObject row, long afterMs, TimeZone zone) {
+        if (!isCalendarRepeat(row) || zone == null || !hasValidLocalTime(row)) return -1L;
+        if ("custom".equals(row.optString("repeat", ""))) {
+            JSONArray days = row.optJSONArray("repeatDays");
+            boolean selected = false;
+            if (days != null) for (int i = 0; i < Math.min(7, days.length()); i++) selected |= days.optBoolean(i, false);
+            if (!selected) return -1L;
+        }
+        Calendar candidate = Calendar.getInstance(zone, Locale.US);
+        candidate.setTimeInMillis(afterMs);
+        clearTime(candidate);
+        Calendar anchor = parseDate(row.optString("anchorDate", ""), zone);
+        if (anchor == null) return -1L;
+        if (candidate.before(anchor)) candidate.setTimeInMillis(anchor.getTimeInMillis());
+        for (;;) {
+            if (isEligibleDate(row, candidate, anchor)) {
+                long due = triggerForDate(row, candidate, zone);
+                if (due > afterMs) return due;
+            }
+            candidate.add(Calendar.DAY_OF_YEAR, 1);
+        }
+    }
+
+    /** Latest recurring trigger from today, or -1; delayed receivers never replay older days. */
+    static long dueOccurrenceToday(JSONObject row, long nowMs, TimeZone zone) {
+        if (!isCalendarRepeat(row) || zone == null || !hasValidLocalTime(row)) return -1L;
+        Calendar today = Calendar.getInstance(zone, Locale.US);
+        today.setTimeInMillis(nowMs);
+        clearTime(today);
+        Calendar anchor = parseDate(row.optString("anchorDate", ""), zone);
+        if (anchor == null) return -1L;
+        long latest = -1L;
+        Calendar target = (Calendar) today.clone();
+        long leadDays = Math.max(0L, row.optLong("advanceMinutes", 0L) / (24L * 60L)) + 1L;
+        for (long i = 0; i <= leadDays; i++) {
+            if (!target.before(anchor) && isEligibleDate(row, target, anchor)) {
+                long due = triggerForDate(row, target, zone);
+                if (sameLocalDate(due, nowMs, zone) && due <= nowMs) latest = Math.max(latest, due);
+            }
+            target.add(Calendar.DAY_OF_YEAR, 1);
+        }
+        return latest;
+    }
+
+    private static boolean isEligibleDate(JSONObject row, Calendar date, Calendar anchor) {
+        int weekday = (date.get(Calendar.DAY_OF_WEEK) + 5) % 7; // Monday=0 .. Sunday=6
+        switch (row.optString("repeat", "")) {
+            case "daily": return true;
+            case "weekly": return date.get(Calendar.DAY_OF_WEEK) == anchor.get(Calendar.DAY_OF_WEEK);
+            case "weekdays": return weekday < 5;
+            case "weekend": return weekday >= 5;
+            case "custom":
+                JSONArray days = row.optJSONArray("repeatDays");
+                return days != null && weekday < days.length() && days.optBoolean(weekday, false);
+            default: return false;
+        }
+    }
+
+    private static long triggerForDate(JSONObject row, Calendar date, TimeZone zone) {
+        String[] time = row.optString("localTime", "").split(":");
+        if (time.length != 2) return -1L;
+        try {
+            int hour = Integer.parseInt(time[0]);
+            int minute = Integer.parseInt(time[1]);
+            if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return -1L;
+            Calendar trigger = Calendar.getInstance(zone, Locale.US);
+            trigger.setLenient(true); // Java's local-time normalization handles DST gaps.
+            trigger.clear();
+            trigger.set(date.get(Calendar.YEAR), date.get(Calendar.MONTH), date.get(Calendar.DAY_OF_MONTH), hour, minute, 0);
+            trigger.set(Calendar.MILLISECOND, 0);
+            long lead = Math.max(0, row.optLong("advanceMinutes", 0L));
+            return trigger.getTimeInMillis() - lead * 60_000L;
+        } catch (NumberFormatException ignored) { return -1L; }
+    }
+
+    private static boolean hasValidLocalTime(JSONObject row) {
+        String[] time = row.optString("localTime", "").split(":");
+        if (time.length != 2) return false;
+        try {
+            int hour = Integer.parseInt(time[0]);
+            int minute = Integer.parseInt(time[1]);
+            return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+        } catch (NumberFormatException ignored) { return false; }
+    }
+
+    private static Calendar parseDate(String text, TimeZone zone) {
+        String[] parts = text.split("-");
+        if (parts.length != 3) return null;
+        try {
+            int year = Integer.parseInt(parts[0]);
+            int month = Integer.parseInt(parts[1]);
+            int day = Integer.parseInt(parts[2]);
+            Calendar value = Calendar.getInstance(zone, Locale.US);
+            value.clear();
+            value.setLenient(false);
+            value.set(year, month - 1, day, 0, 0, 0);
+            value.getTimeInMillis(); // validate normalized date components
+            return value;
+        } catch (Exception ignored) { return null; }
+    }
+
+    private static void clearTime(Calendar value) {
+        value.set(Calendar.HOUR_OF_DAY, 0);
+        value.set(Calendar.MINUTE, 0);
+        value.set(Calendar.SECOND, 0);
+        value.set(Calendar.MILLISECOND, 0);
+    }
+
+    private static boolean sameLocalDate(long first, long second, TimeZone zone) {
+        Calendar a = Calendar.getInstance(zone, Locale.US);
+        Calendar b = Calendar.getInstance(zone, Locale.US);
+        a.setTimeInMillis(first);
+        b.setTimeInMillis(second);
+        return a.get(Calendar.YEAR) == b.get(Calendar.YEAR)
+                && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR);
+    }
+
+    private boolean suppressedBySameDayAction(FlowBridge bridge, String reminderId, long dueMs, TimeZone zone) {
+        String taskId = reminderId != null && reminderId.endsWith("_pre")
+                ? reminderId.substring(0, reminderId.length() - 4) : reminderId;
+        if (taskId == null || taskId.isEmpty()) return false;
+        try {
+            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+            String done = "task_done:" + taskId;
+            String skip = "task_skip:" + taskId;
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject event = events.optJSONObject(i);
+                if (event == null) continue;
+                String value = event.optString("event", "");
+                if ((done.equals(value) || skip.equals(value))
+                        && sameLocalDate(event.optLong("createdAt", 0L), dueMs, zone)) return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
     }
 
     private boolean fireReminder(Context context, String id, String title) {
@@ -154,79 +354,6 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             NotificationChannel ch = new NotificationChannel(
                     CHANNEL_REMIND, "Потік — нагадування", NotificationManager.IMPORTANCE_HIGH);
             ch.setDescription("Heads-up нагадування про заплановані задачі");
-            ch.enableVibration(true);
-            nm.createNotificationChannel(ch);
-        }
-    }
-
-    // ════════════════ ВОДА ЩОГОДИНИ ════════════════
-
-    /**
-     * Сповіщення про воду: щогодини 09:00–21:00. Бере першу рутину з unit=="ml"
-     * зі знімка (routineList) — кнопка «+крок мл» працює без відкриття апки
-     * через стандартний шлях ACTION_RC_INC сервісу.
-     */
-    private void waterRemind(Context context, FlowBridge bridge) {
-        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        if (hour < 9 || hour > 21) return;
-        String notifJson = bridge.getNotifJson();
-        if (notifJson == null || notifJson.isEmpty()) return;
-        try {
-            JSONObject j = new JSONObject(notifJson);
-            JSONArray rl = j.optJSONArray("routineList");
-            if (rl == null) return;
-            JSONObject water = null;
-            for (int i = 0; i < rl.length(); i++) {
-                JSONObject r = rl.optJSONObject(i);
-                if (r != null && "ml".equals(r.optString("unit", ""))) { water = r; break; }
-            }
-            if (water == null) return; // водної рутини немає — нічого нагадувати
-            String id   = water.optString("id", "");
-            String nm   = water.optString("nm", "Вода");
-            int    val  = water.optInt("val", 0);
-            int    step = water.optInt("step", 100);
-
-            createWaterChannel(context);
-            Intent open = new Intent(context, MainActivity.class);
-            open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            int fImm = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
-            PendingIntent openPi = PendingIntent.getActivity(context, 0, open,
-                    fImm | PendingIntent.FLAG_UPDATE_CURRENT);
-
-            // кнопка «+step мл» → той самий механізм, що в сповіщеннях рутини
-            Intent inc = new Intent(context, FlowNotifService.class);
-            inc.setAction(FlowNotifService.ACTION_RC_INC);
-            inc.putExtra(FlowNotifService.EXTRA_ID, id);
-            inc.putExtra("notif_id", WATER_NOTIF_ID);
-            PendingIntent incPi = PendingIntent.getService(context,
-                    (FlowNotifService.ACTION_RC_INC.hashCode() ^ WATER_NOTIF_ID) & 0x7fffffff,
-                    inc, fImm | PendingIntent.FLAG_UPDATE_CURRENT);
-
-            NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_WATER)
-                    .setSmallIcon(R.drawable.ic_notification)
-                    .setContentTitle("💧 " + nm + ": " + val + " мл")
-                    .setContentText("Час випити води")
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                    .setAutoCancel(true)
-                    .setTimeoutAfter(55 * 60_000L)
-                    .setContentIntent(openPi)
-                    .addAction(new NotificationCompat.Action.Builder(
-                            android.R.drawable.ic_input_add, "＋" + step + " мл", incPi)
-                            .setShowsUserInterface(false).build());
-
-            NotificationManager nm2 = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm2 != null) nm2.notify(WATER_NOTIF_ID, b.build());
-        } catch (Exception ignored) {}
-    }
-
-    private void createWaterChannel(Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm == null || nm.getNotificationChannel(CHANNEL_WATER) != null) return;
-            NotificationChannel ch = new NotificationChannel(
-                    CHANNEL_WATER, "Потік — вода", NotificationManager.IMPORTANCE_DEFAULT);
-            ch.setDescription("Щогодинне нагадування про воду (09:00–21:00)");
             ch.enableVibration(true);
             nm.createNotificationChannel(ch);
         }
@@ -284,31 +411,44 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             for (int i = 0; i < sched.length(); i++) {
                 JSONObject s = sched.optJSONObject(i);
                 if (s == null) continue;
-                long due = s.optLong("dueMs", 0);
-                if (!s.optBoolean("fired", false) && due > now && due < next) next = due;
+                long due = isCalendarRepeat(s)
+                        ? nextOccurrenceAfter(s, now, TimeZone.getDefault()) : s.optLong("dueMs", 0);
+                if ((isCalendarRepeat(s) || !s.optBoolean("fired", false)) && due > now && due < next) next = due;
             }
             if (next != Long.MAX_VALUE) schedule(ctx, ACTION_TASK_DUE, next, 3);
         } catch (Exception ignored) {}
     }
 
-    /** Наступне щогодинне нагадування про воду: найближча повна година в межах 09–21 */
-    public static void scheduleWater(Context ctx) {
-        Calendar c = Calendar.getInstance();
-        c.add(Calendar.HOUR_OF_DAY, 1);
-        c.set(Calendar.MINUTE, 0);
-        c.set(Calendar.SECOND, 0);
-        c.set(Calendar.MILLISECOND, 0);
-        int h = c.get(Calendar.HOUR_OF_DAY);
-        if (h < 9) { c.set(Calendar.HOUR_OF_DAY, 9); }
-        else if (h > 21) { c.add(Calendar.DAY_OF_YEAR, 1); c.set(Calendar.HOUR_OF_DAY, 9); }
-        schedule(ctx, ACTION_WATER, c.getTimeInMillis(), 4);
+    /** Cancel the old hourly water alarm and notification left by earlier versions. */
+    static void cancelLegacyWater(Context ctx) {
+        Intent intent = new Intent(ctx, FlowAlarmReceiver.class);
+        intent.setAction(LEGACY_ACTION_WATER);
+        int immutable = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
+        PendingIntent legacy = PendingIntent.getBroadcast(ctx, LEGACY_WATER_REQUEST_CODE, intent,
+                immutable | PendingIntent.FLAG_NO_CREATE);
+        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        if (legacy != null) {
+            if (am != null) am.cancel(legacy);
+            legacy.cancel();
+        }
+        Intent oldIncrement = new Intent(ctx, FlowNotifService.class);
+        oldIncrement.setAction(FlowNotifService.ACTION_RC_INC);
+        int oldIncrementCode = (FlowNotifService.ACTION_RC_INC.hashCode() ^ LEGACY_WATER_NOTIF_ID) & 0x7fffffff;
+        PendingIntent oldIncrementIntent = PendingIntent.getService(ctx, oldIncrementCode, oldIncrement,
+                immutable | PendingIntent.FLAG_NO_CREATE);
+        if (oldIncrementIntent != null) oldIncrementIntent.cancel();
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            nm.cancel(LEGACY_WATER_NOTIF_ID);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm.deleteNotificationChannel(LEGACY_CHANNEL_WATER);
+        }
     }
 
     /** Викликати при старті апки — запускає всі цикли */
     public static void scheduleAll(Context ctx) {
+        cancelLegacyWater(ctx);
         schedule(ctx, ACTION_SCHED_CHECK, System.currentTimeMillis() + 60_000L, 1);
         scheduleDailyReset(ctx);
-        scheduleWater(ctx);
         scheduleNextDue(ctx, new FlowBridge(ctx));
     }
 
@@ -316,15 +456,11 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     public static void scheduleSnooze(Context ctx, String id, String title, long delayMs) {
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
-        Intent i = new Intent(ctx, FlowAlarmReceiver.class);
-        i.setAction(ACTION_SNOOZE);
-        i.setData(Uri.parse("flow://snooze/" + Uri.encode(id == null ? "" : id)));
-        i.putExtra("snooze_id", id);
-        i.putExtra("snooze_title", title);
+        long at = roundUpToMinute(System.currentTimeMillis() + Math.max(0L, delayMs));
+        Intent i = createSnoozeIntent(ctx, id, title, at);
         int fImm = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
         int rc = 7000 + (id != null ? (id.hashCode() & 0xfff) : 0);
         PendingIntent pi = PendingIntent.getBroadcast(ctx, rc, i, fImm | PendingIntent.FLAG_UPDATE_CURRENT);
-        long at = System.currentTimeMillis() + delayMs;
         try {
             if (Build.VERSION.SDK_INT >= 23) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
             else am.setExact(AlarmManager.RTC_WAKEUP, at, pi);

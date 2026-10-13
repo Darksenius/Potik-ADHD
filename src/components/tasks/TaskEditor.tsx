@@ -4,6 +4,7 @@ import type { Task, TaskType } from '../../types';
 import { fmtDate, WD } from '../../utils/date';
 import { saveState, saveIsBlocked, getSaveErrorMessage, showRecoveryBanner } from '../../services/persistence';
 import { isTaskInInbox, repeatDueOn } from '../../utils/taskSchedule';
+import { hasTaskCounter } from '../../utils/taskCounter';
 
 const TYPE_OPTIONS: { value: TaskType; label: string }[] = [
   { value: 'simple', label: 'Проста' }, { value: 'sched', label: 'Запланована' },
@@ -47,7 +48,10 @@ export default function TaskEditor() {
   const [winStart, setWinStart] = useState(existing?.windowStart || '07:00');
   const [winEnd, setWinEnd] = useState(existing?.windowEnd || '09:00');
   const [note, setNote] = useState(existing?.note || '');
-  const [cntTgt, setCntTgt] = useState(existing?.counterTarget || 10);
+  const [cntTgt, setCntTgt] = useState(existing?.counterTarget ?? (existing?.type === 'counter' ? 10 : 0));
+  const [counterEnabled, setCounterEnabled] = useState(existing ? hasTaskCounter(existing) : false);
+  const [counterStep, setCounterStep] = useState(existing?.counterStep || 1);
+  const [counterUnit, setCounterUnit] = useState<Task['counterUnit']>(existing?.counterUnit || 'count');
   const [negXp, setNegXp] = useState(existing?.negXp || 5);
   const [reminder, setReminder] = useState(existing?.reminderEnabled !== false);
   const [advance, setAdvance] = useState(String(existing?.remindBeforeMinutes || 0));
@@ -67,6 +71,7 @@ export default function TaskEditor() {
 
   function chooseType(value: TaskType) {
     setType(value); setDirty(true); setError('');
+    if (value === 'counter') { setCounterEnabled(true); if (!cntTgt) setCntTgt(10); }
     if (value === 'sched' && !date) setDate(today);
   }
   function close() {
@@ -82,12 +87,17 @@ export default function TaskEditor() {
       setError('Вибрана дата не входить у дні повторення. Зміни першу дату або дні повторення.'); return;
     }
     if (type === 'zonelinked' && !zoneId) { setError('Вибери зону для цієї задачі.'); return; }
+    if (repeat === 'everyzone' && !zoneId) { setError('Для повторення при вході в зону вибери зону.'); return; }
+    if ((counterEnabled || type === 'counter') && type !== 'negative' && (!Number.isSafeInteger(counterStep) || counterStep <= 0 || !Number.isSafeInteger(cntTgt) || cntTgt < 0)) {
+      setError('Введи цілий крок, більший за 0, і цілу ціль — 0 або більше.'); return;
+    }
     if (pastTime && !keepPast && snooze === undefined) { setError('Цей час уже минув. Залиши його свідомо або зміни дату чи час.'); return; }
     const patch: Partial<Task> & { title: string; type: TaskType } = {
       title: title.trim(), type, zoneId: zoneId ? Number(zoneId) : null, folderId: folderId || null,
       repeat, repeatDays, repeatInterval, repeatUnit, tags: tagsText.split(',').map(t => t.trim()).filter(Boolean),
       planDate: date || undefined, alarmTime, schedDate: scheduled ? date : '', schedTime: scheduled ? time : '',
       windowStart: winStart, windowEnd: winEnd, note, counterTarget: cntTgt, negXp,
+      counterEnabled, counterStep, counterUnit,
       reminderEnabled: reminder, remindBeforeMinutes: Number(advance),
     };
     if (saveIsBlocked() || useStore.getState().backupBanner) {
@@ -132,7 +142,7 @@ export default function TaskEditor() {
           </select></label>}
         </div>}
       </section>
-      <details className="editor-section" open={special || undefined}>
+      <details className="editor-section" open={special || counterEnabled || undefined}>
         <summary>Додаткові можливості{special ? ' · ' + TYPE_OPTIONS.find(o => o.value === type)?.label : ''}</summary>
         <div className="ef"><label className="el" htmlFor="task-type">Тип задачі</label><select id="task-type" className="ei" value={type} onChange={e => chooseType(e.target.value as TaskType)}>{TYPE_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}</select></div>
         <div className="ef"><label className="el" htmlFor="task-repeat">Повторення</label><select id="task-repeat" className="ei" value={repeat} onChange={e => setRepeat(e.target.value as Task['repeat'])}>{REPEATS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
@@ -140,7 +150,13 @@ export default function TaskEditor() {
         {repeat === 'custom' && <div className="rep-days">{WD.map((day, i) => <button className={'rd' + (repeatDays[i] ? ' on' : '')} type="button" aria-pressed={repeatDays[i]} key={day} onClick={() => { setRepeatDays(days => days.map((v, j) => j === i ? !v : v)); setDirty(true); }}>{day}</button>)}</div>}
         {type === 'alarm' && <label className="el">Час будильника<input className="ei" type="time" value={alarmTime} onChange={e => setAlarmTime(e.target.value)} /></label>}
         {type === 'timewin' && <div className="editor-row"><label className="el">Початок вікна<input className="ei" type="time" value={winStart} onChange={e => setWinStart(e.target.value)} /></label><label className="el">Кінець вікна<input className="ei" type="time" value={winEnd} onChange={e => setWinEnd(e.target.value)} /></label></div>}
-        {type === 'counter' && <label className="el">Ціль лічильника<input type="number" className="ei" min="1" value={cntTgt} onChange={e => setCntTgt(Math.max(1, Number(e.target.value)))} /></label>}
+        {type !== 'negative' && <label className="editor-check"><input id="task-counter-enabled" type="checkbox" checked={type === 'counter' || counterEnabled} disabled={type === 'counter'} onChange={e => setCounterEnabled(e.target.checked)} /> Лічильник прогресу</label>}
+        {type !== 'negative' && (type === 'counter' || counterEnabled) && <>
+          <div className="editor-row"><label className="el" htmlFor="task-counter-step">Крок + / −<input id="task-counter-step" type="number" className="ei" min="1" value={counterStep} onChange={e => setCounterStep(Number(e.target.value))} /></label>
+            <label className="el" htmlFor="task-counter-unit">Одиниця<select id="task-counter-unit" className="ei" value={counterUnit} onChange={e => setCounterUnit(e.target.value as Task['counterUnit'])}><option value="count">раз</option><option value="ml">мл</option><option value="min">хв</option></select></label></div>
+          <label className="el" htmlFor="task-counter-target">Ціль лічильника (0 — без цілі)<input id="task-counter-target" type="number" className="ei" min="0" value={cntTgt} onChange={e => setCntTgt(Number(e.target.value))} /></label>
+          <p className="editor-hint">Наприклад, «Вода»: крок 100 мл, повторення щодня. Ціль обираєш сам; досягнення цілі не завершує задачу автоматично.</p>
+        </>}
         {type === 'negative' && <label className="el">Штраф досвіду<input type="number" className="ei" min="1" value={negXp} onChange={e => setNegXp(Math.max(1, Number(e.target.value)))} /></label>}
         <div className="ef"><label className="el" htmlFor="task-zone">Зона</label><select id="task-zone" className="ei" value={zoneId} onChange={e => setZoneId(e.target.value)}><option value="">Без зони</option>{zones.map(z => <option value={z.id} key={z.id}>{z.nm}</option>)}</select></div>
         <div className="ef"><label className="el" htmlFor="task-folder">Папка</label><div className="editor-row"><select id="task-folder" className="ei" value={folderId} onChange={e => setFolderId(e.target.value)}><option value="">Без папки</option>{folders.map(f => <option value={f.id} key={f.id}>{f.ico} {f.nm}</option>)}</select><button type="button" onClick={() => { const name = window.prompt('Назва нової папки:'); if (name?.trim()) { const id = addFolder(name.trim(), '📁'); if (id) { setFolderId(id); setDirty(true); } } }}>+ Папка</button></div></div>

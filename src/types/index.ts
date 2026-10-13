@@ -55,6 +55,7 @@ export type TaskType =
 export interface ChecklistItem {
   text: string;
   done: boolean;
+  credited?: boolean;
 }
 
 /**
@@ -92,7 +93,12 @@ export interface Task {
 
   // type === 'counter' | 'negative'
   counter?: number;
-  counterTarget?: number; // тільки 'counter'
+  counterTarget?: number; // 0 means no goal; completing the task is a separate action
+  counterEnabled?: boolean;
+  counterStep?: number;
+  counterUnit?: 'count' | 'ml' | 'min';
+  counterCreditedProgress?: number;
+  counterDay?: string;
   /** Разовий бонус XP уже нараховано за досягнення цілі (chgCnt) */
   cntHit?: boolean;
   negXp?: number;         // тільки 'negative' — скільки XP віднімається за клік
@@ -123,6 +129,7 @@ export interface Task {
 
   // type === 'zonelinked'
   zoneDoneToday?: boolean;
+  zoneOccurrenceKey?: string;
 
   // спільне для повторюваних задач будь-якого типу
   repeat: 'none' | 'daily' | 'weekly' | 'weekdays' | 'weekend' | 'everyzone' | 'interval' | 'custom';
@@ -324,6 +331,13 @@ export interface NotifTaskListItem {
   type: TaskType;
   counter: number;
   counterTarget: number;
+  counterEnabled: boolean;
+  counterStep: number;
+  counterUnit: string;
+  repeat: Task['repeat'];
+  repeatDays: boolean[];
+  anchorDate: string;
+  counterDay: string;
 }
 
 export interface NotifRoutineListItem {
@@ -341,6 +355,11 @@ export interface NotifSchedListItem {
   title: string;
   dueMs: number;
   fired: boolean;
+  repeat?: Task['repeat'];
+  repeatDays?: boolean[];
+  anchorDate?: string;
+  localTime?: string;
+  advanceMinutes?: number;
 }
 
 export interface NotifZoneTimelineItem {

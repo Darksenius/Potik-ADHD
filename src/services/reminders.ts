@@ -10,17 +10,12 @@ export function checkReminders(): void {
   const store = useStore.getState();
   store.checkDailyReset();
   if (store.zoneUsageDay !== date) store.recalculateZoneUsage();
+  useStore.getState().resetRepeatingTasksFor(now);
+  useStore.getState().checkZoneRepeats(now);
   const dueIds: number[] = [];
   let changed = false;
   const tasks = useStore.getState().tasks.map(task => {
     if (task.trashed || task.someday) return task;
-    if (task.done && task.repeat === 'interval' && task.repeatMs && task.nextRepeatAt && now.getTime() >= task.nextRepeatAt) {
-      changed = true;
-      return { ...task, done: false, doneDate: undefined, doneAt: undefined, nextRepeatAt: 0, alarmFired: false, firedSched: false, firedPre: false,
-        ...(task.type === 'sched' ? { schedDate: date, planDate: date } : {}),
-        ...(task.type === 'counter' ? { counter: 0, cntHit: false } : {}),
-        ...(task.items ? { items: task.items.map(item => ({ ...item, done: false })) } : {}) };
-    }
     const due = nextTaskReminderAt(task, now);
     if (due === undefined) return task;
     const pre = taskPreReminderAt(task, due);

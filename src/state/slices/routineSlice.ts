@@ -7,7 +7,6 @@ export const ULBL: Record<string, string> = { check: '', count: 'раз', ml: '�
 
 /** Початкові рутини — перенесено 1:1 з www/index.html, рядки 1180–1184 (сідові дані). */
 const SEED_RECUR: RecurItem[] = [
-  { id: 'r1', nm: 'Вода', color: '#4f8ef7', unit: 'ml', val: 0, done: false, step: 100, neg: false, negXp: 0 },
   { id: 'r2', nm: 'Розтяжка', color: '#7ed321', unit: 'min', val: 0, done: false, step: 2, neg: false, negXp: 0 },
   { id: 'r3', nm: 'Перекур', color: '#e24b4a', unit: 'count', val: 0, done: false, step: 1, neg: true, negXp: 5 },
 ];

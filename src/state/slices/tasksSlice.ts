@@ -1,6 +1,7 @@
 import type { AppSlice } from '../store';
 import type { Task, TaskType, ChecklistItem } from '../../types';
 import { fmtDate, nowHM, normalizeTime, hmToString } from '../../utils/date';
+import { hasTaskCounter, resetTaskProgress, taskCounterTarget } from '../../utils/taskCounter';
 
 /** TXP — рядок 1239: базова нагорода XP за тип задачі при виконанні. */
 const TASK_XP: Record<TaskType, number> = {
@@ -36,12 +37,14 @@ export interface TasksSlice {
 
   toggleChecklistItem: (taskId: number, index: number) => void;
   addChecklistItem: (taskId: number, text: string) => void;
+  editChecklistItem: (taskId: number, index: number, text: string) => void;
+  deleteChecklistItem: (taskId: number, index: number) => void;
   changeCounter: (taskId: number, delta: number) => void;
   updateCounterTarget: (taskId: number, target: number) => void;
   toggleCtxTag: (taskId: number, tag: string) => void;
   saveTask: (id: number | null, patch: Partial<Task> & { title: string; type: TaskType }) => number;
   /** efSnooze(x) — рядки 2402–2411. x='tomorrow' або хвилини. */
-  snoozeTask: (id: number, x: 'tomorrow' | number) => void;
+  snoozeTask: (id: number, x: 'tomorrow' | number, requestedAt?: number) => void;
   /** updNote(tid,v) — рядок 2250 */
   updateNote: (id: number, text: string) => void;
   /** updAlarm(tid,v) — рядок 2251 */
@@ -71,6 +74,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       items: type === 'check' ? [] : undefined,
       counter: type === 'counter' || type === 'negative' ? 0 : undefined,
       counterTarget: type === 'counter' ? 10 : undefined,
+      counterEnabled: type === 'counter', counterStep: 1, counterUnit: 'count',
       negXp: type === 'negative' ? 5 : undefined,
       note: type === 'note' ? '' : undefined,
       alarmTime: type === 'alarm' ? alarmTime || '' : undefined,
@@ -98,7 +102,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
     if (t.type === 'negative') {
       set((s) => ({
-        tasks: s.tasks.map((x) => (x.id === id ? { ...x, counter: (x.counter || 0) + 1 } : x)),
+        tasks: s.tasks.map((x) => (x.id === id ? { ...x, counter: (x.counter || 0) + 1, counterDay: fmtDate(new Date()) } : x)),
       }));
       get().incrementNegCount();
       get().award(-(t.negXp || 5));
@@ -168,6 +172,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       priorities: s.priorities.map((pid) => (pid === id ? null : pid)),
       xpPopup: { text: '→ Колись', tone: 'muted' },
     }));
+    get().showToast('Задачу перенесено в «Колись»');
   },
 
   fromSomeday: (id) => {
@@ -245,6 +250,8 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       completedToday: t.type === 'timewin' ? false : t.completedToday,
       zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
       expanded: false, title: t.title + ' (копія)',
+      ...resetTaskProgress(t), alarmFired: false, firedSched: false, firedPre: false,
+      created: new Date().toISOString(), zoneOccurrenceKey: undefined,
     };
     set((s) => {
       const idx = s.tasks.findIndex((x) => x.id === id);
@@ -260,39 +267,56 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   toggleChecklistItem: (taskId, index) => {
     const t = get().tasks.find((x) => x.id === taskId);
-    if (!t || !t.items) return;
+    if (!t || t.trashed || t.done || t.type !== 'check' || !t.items?.[index]) return;
     const willBeDone = !t.items[index].done;
+    const shouldCredit = willBeDone && !t.items[index].credited;
     set((s) => ({
       tasks: s.tasks.map((x) =>
-        x.id === taskId ? { ...x, items: (x.items || []).map((it, i) => (i === index ? { ...it, done: willBeDone } : it)) } : x
+        x.id === taskId ? { ...x, counterDay: fmtDate(new Date()), items: (x.items || []).map((it, i) => (i === index ? { ...it, done: willBeDone, credited: shouldCredit || it.credited } : it)) } : x
       ),
     }));
-    if (willBeDone) get().award(3);
+    if (shouldCredit) get().award(3);
   },
 
   addChecklistItem: (taskId, text) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    const task = get().tasks.find(t => t.id === taskId);
+    if (!trimmed || !task || task.trashed || task.type !== 'check') return;
     const item: ChecklistItem = { text: trimmed, done: false };
     set((s) => ({
       tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, items: [...(t.items || []), item] } : t)),
     }));
   },
 
+  editChecklistItem: (taskId, index, text) => {
+    if (!text.trim()) return;
+    set(s => ({ tasks: s.tasks.map(t => t.id === taskId && !t.trashed && t.type === 'check'
+      ? { ...t, items: t.items?.map((it, i) => i === index ? { ...it, text: text.trim() } : it) } : t) }));
+  },
+  deleteChecklistItem: (taskId, index) => {
+    set(s => ({ tasks: s.tasks.map(t => t.id === taskId && !t.trashed && t.type === 'check'
+      ? { ...t, items: t.items?.filter((_, i) => i !== index) } : t) }));
+  },
+
   changeCounter: (taskId, delta) => {
     const t = get().tasks.find((x) => x.id === taskId);
-    if (!t) return;
+    if (!t || t.trashed || t.done || !hasTaskCounter(t) || !Number.isFinite(delta) || !delta) return;
     const next = Math.max(0, (t.counter || 0) + delta);
-    const justHit = next >= (t.counterTarget || 10) && !t.cntHit;
+    if (!Number.isFinite(next)) return;
+    const target = taskCounterTarget(t);
+    const justHit = target > 0 && next >= target && !t.cntHit;
+    const credited = Math.max(t.counterCreditedProgress ?? (t.counter || 0), next);
+    const shouldCredit = next > (t.counterCreditedProgress ?? (t.counter || 0));
     set((s) => ({
-      tasks: s.tasks.map((x) => (x.id === taskId ? { ...x, counter: next, cntHit: justHit ? true : x.cntHit } : x)),
+      tasks: s.tasks.map((x) => (x.id === taskId ? { ...x, counter: next, counterDay: fmtDate(new Date()), counterCreditedProgress: credited, cntHit: justHit ? true : x.cntHit } : x)),
     }));
-    if (delta > 0) get().award(2);
+    if (shouldCredit) get().award(2);
     if (justHit) get().award(15);
   },
 
   updateCounterTarget: (taskId, target) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, counterTarget: target || 10 } : t)) }));
+    if (!Number.isFinite(target) || target < 0) return;
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId && hasTaskCounter(t) && !t.trashed ? { ...t, counterTarget: target } : t)) }));
   },
 
   toggleCtxTag: (taskId, tag) => {
@@ -348,6 +372,13 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         if (next.type !== 'sched') { next.schedDate = undefined; next.schedTime = undefined; }
         next.repeat = patch.repeat || 'none';
         next.repeatDays = patch.repeatDays ? patch.repeatDays.slice() : next.repeatDays;
+        if (next.type !== t.type || next.repeat !== t.repeat || next.zoneId !== t.zoneId || next.planDate !== t.planDate || JSON.stringify(next.repeatDays) !== JSON.stringify(t.repeatDays)) {
+          next.alarmFired = false; next.firedSched = false; next.firedPre = false;
+          next.zoneOccurrenceKey = undefined;
+        }
+        if (next.type !== 'alarm') next.alarmTime = undefined;
+        if (next.type !== 'timewin') { next.windowStart = undefined; next.windowEnd = undefined; }
+        if (next.repeat !== 'interval') { next.repeatMs = undefined; next.repeatInterval = undefined; next.repeatUnit = undefined; next.nextRepeatAt = 0; }
 
         if (next.type === 'sched') {
           next.schedDate = patch.schedDate || '';
@@ -378,7 +409,13 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           if (next.alarmTime !== t.alarmTime) { next.alarmFired = false; next.snoozeUntil = 0; }
         }
         if ('note' in patch) next.note = patch.note;
-        if (next.type === 'counter') next.counterTarget = patch.counterTarget || 10;
+        next.counterEnabled = next.type === 'counter' || (next.type !== 'negative' && (patch.counterEnabled ?? (t.type !== 'counter' && t.counterEnabled === true)));
+        if (hasTaskCounter(next)) {
+          next.counter = next.counter || 0;
+          next.counterTarget = Number.isFinite(patch.counterTarget) ? Math.max(0, patch.counterTarget!) : taskCounterTarget(next);
+          next.counterStep = Number.isSafeInteger(patch.counterStep) && patch.counterStep! > 0 ? patch.counterStep : next.counterStep || 1;
+          next.counterUnit = patch.counterUnit || next.counterUnit || 'count';
+        }
         if (next.type === 'negative') next.negXp = patch.negXp || 5;
         next.tags = (patch.tags || []).map((s) => s.trim()).filter(Boolean);
 
@@ -391,13 +428,14 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     return taskId;
   },
 
-  snoozeTask: (id, x) => {
+  snoozeTask: (id, x, requestedAt) => {
     set((s) => ({
       tasks: s.tasks.map((t) => {
         if (t.id !== id) return t;
         // The editor and Android snapshot use minute precision. Round forward
         // so the saved time is never earlier than the requested delay.
-        const d = new Date(x === 'tomorrow' ? Date.now() : Math.ceil((Date.now() + x * 60000) / 60000) * 60000);
+        const base = Number.isFinite(requestedAt) ? requestedAt! : Date.now();
+        const d = new Date(x === 'tomorrow' ? base : Math.ceil((base + x * 60000) / 60000) * 60000);
         if (x === 'tomorrow') d.setDate(d.getDate() + 1);
         const day = fmtDate(d);
         const time = x === 'tomorrow' ? normalizeTime(t.type === 'alarm' ? t.alarmTime : t.schedTime) : hmToString({ h: d.getHours(), m: d.getMinutes() });
@@ -423,8 +461,8 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   },
 
   updateAlarm: (id, time) => {
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, alarmTime: time, alarmFired: false } : t)) }));
-    // TODO: firedA.delete(tid) — Set дедуплікації, ще не перенесено (СИСТЕМА СПОВІЩЕНЬ)
+    const normalized = normalizeTime(time);
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id && !t.trashed && t.type === 'alarm' ? { ...t, alarmTime: normalized || '', alarmFired: false, snoozeUntil: 0 } : t)) }));
   },
 
   removeTag: (id, index) => {

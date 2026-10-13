@@ -8,7 +8,22 @@ export function taskPlanDate(task: Task): string | undefined {
 }
 
 export function taskOccursOn(task: Task, day: string): boolean {
-  return !task.trashed && !task.someday && taskPlanDate(task) === day;
+  if (task.trashed || task.someday || !isDateKey(day)) return false;
+  if (isCalendarRepeat(task)) {
+    const anchor = taskPlanDate(task) || fmtDate(new Date(task.created));
+    return day >= anchor && repeatDueOn(task, new Date(day + 'T12:00:00'));
+  }
+  if (task.repeat === 'interval' && task.done && task.nextRepeatAt) return fmtDate(new Date(task.nextRepeatAt)) === day;
+  return taskPlanDate(task) === day;
+}
+
+export function isCalendarRepeat(task: Task): boolean {
+  return ['daily', 'weekly', 'weekdays', 'weekend', 'custom'].includes(task.repeat);
+}
+
+/** Projection in the planner does not mark future occurrences as completed. */
+export function taskDoneOn(task: Task, day: string): boolean {
+  return task.done && (!isCalendarRepeat(task) || task.doneDate === day);
 }
 
 /** Capturing a thought does not put it on today's plan. Explicit recurring,
@@ -83,6 +98,7 @@ export function nextTaskReminderAt(task: Task, now = new Date()): number | undef
     return due;
   }
   if (task.type !== 'alarm' || !normalizeTime(task.alarmTime)) return undefined;
+  if ((!task.repeat || task.repeat === 'none') && task.alarmFired) return undefined;
   const minDue = Math.max(now.getTime() - 59999, task.snoozeUntil || 0);
   const plannedDay = taskPlanDate(task);
   for (let offset = 0; offset < 370; offset++) {

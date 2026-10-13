@@ -1,4 +1,5 @@
 import { useStore } from '../state/store';
+import { hasTaskCounter, taskCounterStep } from '../utils/taskCounter';
 import { buildForegroundNotifPayload } from './notifPayload';
 import { saveState, saveIsBlocked } from '../services/persistence';
 import { fmtDate } from '../utils/date';
@@ -89,25 +90,36 @@ function flowNotif(): FlowNotifPlugin | undefined {
  * Applies native notification commands through the current store actions.
  * The notification capture commands carry an explicit task or note kind.
  */
-export function handleNativeEvent(event: string | null | undefined): boolean {
+export function handleNativeEvent(event: string | null | undefined, createdAt?: number): boolean {
   if (!event) return false;
+  useStore.getState().checkDailyReset();
+  useStore.getState().resetRepeatingTasksFor(new Date());
   const store = useStore.getState();
   let changed = false;
+  // A fresh task must never inherit an old queued action merely by reusing an id.
+  const belongsToTask = (task: (typeof store.tasks)[number]) => !Number.isFinite(createdAt)
+    || !Number.isFinite(new Date(task.created).getTime()) || new Date(task.created).getTime() <= createdAt!;
 
   // Only explicit task IDs may complete tasks. The obsolete done_first event
   // cannot safely identify which row the user saw and is deliberately ignored.
   if (event.indexOf('task_done:') === 0) {
     const tid = event.slice(10);
     const pt = store.tasks.find((t) => String(t.id) === tid);
-    if (pt && !pt.done && !pt.trashed && pt.type !== 'negative') {
+    if (pt && belongsToTask(pt) && !pt.done && !pt.trashed && pt.type !== 'negative') {
       store.setTaskDone(pt.id, true);
       changed = true;
     }
   } else if (event.indexOf('task_skip:') === 0) {
     const sid = event.slice(10);
-    const si = store.tasks.findIndex((t) => String(t.id) === sid);
-    if (si >= 0) {
-      store.skipTask(store.tasks[si].id);
+    const task = store.tasks.find(t => String(t.id) === sid && !t.trashed && !t.done);
+    if (task && belongsToTask(task)) {
+      store.snoozeTask(task.id, 15, createdAt);
+      changed = true;
+    }
+  } else if (/^task_(inc|dec):/.test(event)) {
+    const task = store.tasks.find(t => String(t.id) === event.split(':')[1]);
+    if (task && belongsToTask(task) && !task.trashed && !task.done && !task.someday && hasTaskCounter(task)) {
+      store.changeCounter(task.id, taskCounterStep(task) * (event.startsWith('task_inc:') ? 1 : -1));
       changed = true;
     }
   } else if (event.indexOf('rc_inc:') === 0) {
@@ -187,11 +199,11 @@ export function drainNativeEvents(onChanged: () => void): void {
       const before = useStore.getState();
       try {
         for (const e of events) {
-          if (fmtDate(new Date(e.createdAt)) !== fmtDate(new Date()) && /^(rc_|task_done:|task_skip:)/.test(e.event)) {
+          if (fmtDate(new Date(e.createdAt)) !== fmtDate(new Date()) && /^(rc_|task_done:|task_skip:|task_inc:|task_dec:)/.test(e.event)) {
             // A stale toggle must never silently change today's reset routine.
             const task = before.tasks.find(t => String(t.id) === e.event.split(':')[1]);
             useStore.getState().addQuickNote('Дія зі сповіщення ' + new Date(e.createdAt).toLocaleString('uk') + ': ' + e.event + (task ? ' · ' + task.title : '') + '. Перевір і застосуй вручну: день уже змінився.', 'impulse');
-          } else handleNativeEvent(e.event);
+          } else handleNativeEvent(e.event, e.createdAt);
         }
         if (!saveState(events.map(e => e.id))) {
           useStore.setState(before);

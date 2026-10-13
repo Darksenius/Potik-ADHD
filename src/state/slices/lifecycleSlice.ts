@@ -1,119 +1,118 @@
 import type { AppSlice } from '../store';
 import type { Task } from '../../types';
 import { fmtDate } from '../../utils/date';
-
-/**
- * ══ ПОВТОРЮВАНІ ЗАДАЧІ ══ + ══ DAILY RESET ══
- * (www/index.html, рядки 2884–3062). Повністю перенесено, окрім firedA.clear()
- * (Set дедуплікації спрацьованих будильників — частина ще не перенесеної
- * СИСТЕМИ СПОВІЩЕНЬ, рядки 4190–4253).
- *
- * _lastResetDate — умисно НЕ в реактивному Zustand-стані (як і в оригіналі
- * це проста module-level змінна, не S.поле): це технічний guard для
- * ідемпотентності перевірки раз/хв, а не дані додатку.
- */
-let lastResetDate = new Date().toDateString();
-
-export { repeatDueOn } from '../../utils/taskSchedule';
+import { resetTaskProgress } from '../../utils/taskCounter';
 import { repeatDueOn, taskPlanDate } from '../../utils/taskSchedule';
 
+export { repeatDueOn } from '../../utils/taskSchedule';
+
+/** A day boundary and a reminder tick must apply the same occurrence reset. */
+let lastResetDate = new Date().toDateString();
+
+function resetOccurrence(task: Task, day: string): Task {
+  return {
+    ...task,
+    ...resetTaskProgress(task),
+    done: false,
+    completionCredited: false,
+    completionCreditDate: undefined,
+    doneDate: undefined,
+    doneAt: undefined,
+    alarmFired: false,
+    firedSched: false,
+    firedPre: false,
+    nextRepeatAt: 0,
+    counterDay: day,
+    ...(task.type === 'timewin' ? { completedToday: false } : {}),
+    ...(task.type === 'zonelinked' ? { zoneDoneToday: false } : {}),
+    ...(task.type === 'sched' ? { schedDate: day, planDate: day } :
+      taskPlanDate(task) ? { planDate: day } : {}),
+  };
+}
+
+function progressDay(task: Task): string {
+  // Undo retains its completion credit date. It must not reset today's
+  // occurrence merely because its earlier counter progress was yesterday.
+  return [task.counterDay, task.completionCreditDate, task.doneDate,
+    taskPlanDate(task), fmtDate(new Date(task.created))]
+    .filter((day): day is string => !!day).sort().pop() || '';
+}
+
 export interface LifecycleSlice {
-  /** resetRepeatingTasksFor(dt) — рядки 2902–2913 */
-  resetRepeatingTasksFor: (dt: Date) => void;
-  /** dailyResetIfNeeded(savedDate) — рядки 2914–2929. Викликати ОДИН РАЗ при завантаженні. */
+  resetRepeatingTasksFor: (date: Date) => void;
+  checkZoneRepeats: (date: Date) => void;
   dailyResetIfNeeded: (savedDate: string | null) => boolean;
-  /** checkDailyReset() — рядки 3037–3052. Викликати з setInterval(...,60000) — фоновий скид опівночі. */
   checkDailyReset: () => void;
 }
 
 export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
-  resetRepeatingTasksFor: (dt) => {
-    const ds = fmtDate(dt);
-    set((s) => ({
-      tasks: s.tasks.map((t) => {
-        if (t.trashed) return t;
-        if (!t.repeat || t.repeat === 'none' || t.repeat === 'everyzone') return t;
-        if (!t.done) {
-          const anchor = taskPlanDate(t);
-          const creditDue = t.repeat !== 'interval'
-            && !t.someday
-            && !!t.completionCredited
-            && !!t.completionCreditDate
-            && t.completionCreditDate < ds
-            && (!anchor || anchor <= ds)
-            && repeatDueOn(t, dt);
-          if (!creditDue) return t;
-          return { ...t, completionCredited: false, completionCreditDate: undefined };
+  resetRepeatingTasksFor: (date) => {
+    const day = fmtDate(date);
+    set((state) => {
+      let changed = false;
+      const tasks = state.tasks.map((task) => {
+        if (task.trashed || task.someday || !task.repeat || task.repeat === 'none' || task.repeat === 'everyzone') return task;
+        const anchor = taskPlanDate(task);
+        if ((anchor && anchor > day) || (task.snoozeUntil && task.snoozeUntil > date.getTime())) return task;
+        if (!repeatDueOn(task, date)) return task;
+        if (task.repeat === 'interval') {
+          if (!task.done) return task;
+        } else if (progressDay(task) >= day) {
+          return task;
         }
-        if (t.repeat !== 'interval' && t.doneDate && t.doneDate >= ds) return t; // дата виконання сьогодні або в майбутньому — не скидати
-        if (!repeatDueOn(t, dt)) return t; // сьогодні не за графіком — лишити як є
-        const next: Task = { ...t, done: false, completionCredited: false, completionCreditDate: undefined, doneDate: '', doneAt: undefined, alarmFired: false, firedSched: false, firedPre: false, nextRepeatAt: 0 };
-        if (next.type === 'timewin') next.completedToday = false;
-        if (next.type === 'zonelinked') next.zoneDoneToday = false;
-        if (next.type === 'sched' && taskPlanDate(next) && taskPlanDate(next)! <= ds) { next.schedDate = ds; next.planDate = ds; }
-        if (next.type === 'counter') next.cntHit = false;
-        if (Array.isArray(next.items)) next.items = next.items.map((it) => ({ ...it, done: false }));
-        if (next.type === 'counter') next.counter = 0;
-        return next;
-      }),
-    }));
+        // Calendar occurrences also reset unfinished counter/checklist
+        // progress, but only on an eligible day, never on a weekend/off day.
+        changed = true;
+        return resetOccurrence(task, day);
+      });
+      return changed ? { tasks } : state;
+    });
+  },
+
+  checkZoneRepeats: (date) => {
+    const day = fmtDate(date);
+    set((state) => {
+      let changed = false;
+      const tasks = state.tasks.map((task) => {
+        if (task.trashed || task.someday || task.repeat !== 'everyzone' || !task.zoneId) return task;
+        const anchor = taskPlanDate(task);
+        if ((anchor && anchor > day) || (task.snoozeUntil && task.snoozeUntil > date.getTime())) return task;
+        const key = get().getZoneOccurrenceKey(task.zoneId, date);
+        if (!key || key === task.zoneOccurrenceKey) return task;
+        changed = true;
+        // First observation identifies the current occurrence. Reopening or
+        // manually toggling a zone within the same slot cannot farm XP.
+        if (!task.zoneOccurrenceKey) return { ...task, zoneOccurrenceKey: key };
+        return { ...resetOccurrence(task, day), zoneOccurrenceKey: key };
+      });
+      return changed ? { tasks } : state;
+    });
   },
 
   dailyResetIfNeeded: (savedDate) => {
-    const today = new Date().toDateString();
-    if (savedDate && savedDate !== today) {
-      set((s) => ({
-        recur: s.recur.map((r) => ({ ...r, val: 0, done: false })),
-        tasks: s.tasks.map((t) => {
-          if (t.type !== 'zonelinked' && t.type !== 'timewin' && t.type !== 'sched' && t.type !== 'alarm') return t;
-          const next = { ...t };
-          if (next.type === 'timewin') {
-            next.completedToday = false;
-            next.done = false;
-            next.completionCredited = false;
-            next.completionCreditDate = undefined;
-            next.doneDate = undefined;
-            next.doneAt = undefined;
-            next.nextRepeatAt = 0;
-          }
-          if (next.type === 'sched') next.firedSched = false;
-          if (next.type === 'alarm') next.alarmFired = false;
-          return next;
-        }),
-      }));
-      get().resetRepeatingTasksFor(new Date());
-      // TODO: firedA.clear() — Set дедуплікації будильників, ще не перенесено
-      // (СИСТЕМА СПОВІЩЕНЬ, рядки 4190–4253).
-      return true;
-    }
-    return false;
+    const now = new Date();
+    const today = now.toDateString();
+    lastResetDate = today;
+    if (!savedDate || savedDate === today) return false;
+    const day = fmtDate(now);
+    set((state) => ({
+      recur: state.recur.map((routine) => ({ ...routine, val: 0, done: false })),
+      tasks: state.tasks.map((task) => {
+        if (task.trashed) return task;
+        // A negative task is a daily journal, not a completable occurrence.
+        // A click already recorded today must survive a delayed reset.
+        if (task.type === 'negative' && (!task.counterDay || task.counterDay < day)) {
+          return { ...task, counter: 0, counterCreditedProgress: 0, counterDay: day };
+        }
+        // Alarms and time windows reset only through their chosen repeat.
+        return task;
+      }),
+    }));
+    get().resetRepeatingTasksFor(now);
+    return true;
   },
 
   checkDailyReset: () => {
-    const today = new Date().toDateString();
-    if (today === lastResetDate) return;
-    lastResetDate = today;
-    set((s) => ({
-      recur: s.recur.map((r) => ({ ...r, val: 0, done: false })),
-      tasks: s.tasks.map((t) => {
-        if (t.type !== 'zonelinked' && t.type !== 'timewin' && t.type !== 'sched' && t.type !== 'alarm') return t;
-        const next = { ...t };
-        if (next.type === 'timewin') {
-          next.completedToday = false;
-          next.done = false;
-          next.completionCredited = false;
-          next.completionCreditDate = undefined;
-          next.doneDate = undefined;
-          next.doneAt = undefined;
-          next.nextRepeatAt = 0;
-        }
-        if (next.type === 'sched') next.firedSched = false;
-        if (next.type === 'alarm') next.alarmFired = false; // щоденний будильник знову спрацює
-        return next;
-      }),
-    }));
-    get().resetRepeatingTasksFor(new Date());
-    // TODO: firedA.clear() — див. коментар вище.
-    console.log('FLOW: daily reset (фоновий)');
+    get().dailyResetIfNeeded(lastResetDate);
   },
 });

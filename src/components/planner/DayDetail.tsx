@@ -5,7 +5,7 @@ import type { DateKey } from '../../types';
 import { DayAnalysis, DayJournal } from './DayJournal';
 import DayZones from './DayZones';
 import DayTemplates from './DayTemplates';
-import { taskOccursOn } from '../../utils/taskSchedule';
+import { isCalendarRepeat, taskDoneOn, taskOccursOn } from '../../utils/taskSchedule';
 
 export default function DayDetail({ ds }: { ds: DateKey }) {
   const dayIsRest = useStore((s) => s.dayIsRest);
@@ -66,8 +66,8 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
 
       {dayTasks.map((t) => (
         <div className="plan-task-row" key={t.id}>
-          <button aria-label={(t.done ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (t.done ? ' on' : '')} onClick={() => toggleTask(t.id)}>{t.done ? '✓' : ''}</button>
-          <button onClick={() => editTask(t.id)} className="plan-task-nm" style={t.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}</button>
+          <button disabled={isCalendarRepeat(t) && ds !== todayStr} title={isCalendarRepeat(t) && ds !== todayStr ? 'Виконання повтору позначається в його день' : undefined} aria-label={(t.type === 'negative' ? 'Зафіксувати: ' : taskDoneOn(t, ds) ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (taskDoneOn(t, ds) ? ' on' : '')} onClick={() => toggleTask(t.id)}>{taskDoneOn(t, ds) ? '✓' : ''}</button>
+          <button onClick={() => editTask(t.id)} className="plan-task-nm" style={taskDoneOn(t, ds) ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}{isCalendarRepeat(t) ? ' ↺' : ''}</button>
           {t.type === 'sched' && t.schedTime && <span style={{ fontSize: 10, color: 'var(--z)', fontFamily: 'monospace' }}>{t.schedTime}</span>}
           <button aria-label={'У кошик: ' + t.title} className="plan-rm" onClick={() => deleteTask(t.id)}>✕</button>
         </div>

@@ -12,6 +12,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.RemoteInput;
 
@@ -35,6 +39,8 @@ public class FlowNotifService extends Service {
     public static final String ACTION_SHOW_RC    = "com.flow.adhd.ACTION_SHOW_RC";
     public static final String ACTION_TASK_DONE  = "com.flow.adhd.ACTION_TASK_DONE";
     public static final String ACTION_TASK_SKIP  = "com.flow.adhd.ACTION_TASK_SKIP";
+    public static final String ACTION_TASK_INC   = "com.flow.adhd.ACTION_TASK_INC";
+    public static final String ACTION_TASK_DEC   = "com.flow.adhd.ACTION_TASK_DEC";
     public static final String ACTION_RC_INC     = "com.flow.adhd.ACTION_RC_INC";
     public static final String ACTION_RC_DEC     = "com.flow.adhd.ACTION_RC_DEC";
     public static final String ACTION_RC_DONE    = "com.flow.adhd.ACTION_RC_DONE";
@@ -55,6 +61,7 @@ public class FlowNotifService extends Service {
     private int        lastZoneColor = COLOR_FLOW;
     private String     captureReceipt = "";
     private long       captureReceiptAt = 0L;
+    private final Map<Integer, Runnable> tempCancelCallbacks = new HashMap<>();
 
     @Override
     public void onCreate() {
@@ -117,20 +124,38 @@ public class FlowNotifService extends Service {
 
             case ACTION_TASK_DONE: {
                 String id = intent.getStringExtra(EXTRA_ID);
-                if (id != null) pushAndNotify("task_done:" + id);
+                if (isTaskActionAvailable(id)) pushAndNotify("task_done:" + id);
                 cancelNotif(intent.getIntExtra("notif_id", -1));
                 rebuildFromDb();
+                showTaskNotifications();
                 break;
             }
             case ACTION_TASK_SKIP: {
                 String id = intent.getStringExtra(EXTRA_ID);
-                if (id != null) {
+                if (isTaskActionAvailable(id)) {
+                    // Cache before queueing Skip: the pending terminal event can
+                    // remove this task from the projected notification snapshot.
+                    String title = findTaskTitle(id);
                     pushAndNotify("task_skip:" + id);
-                    // «Відкласти» → окреме нагадування через 1 годину (навіть коли апка закрита)
-                    FlowAlarmReceiver.scheduleSnooze(this, id, findTaskTitle(id), 60 * 60 * 1000L);
+                    // Match the persisted 15-minute snooze while the app is closed.
+                    FlowAlarmReceiver.scheduleSnooze(this, id, title, 15 * 60 * 1000L);
                 }
                 cancelNotif(intent.getIntExtra("notif_id", -1));
                 rebuildFromDb();
+                showTaskNotifications();
+                break;
+            }
+            case ACTION_TASK_INC:
+            case ACTION_TASK_DEC: {
+                String id = intent.getStringExtra(EXTRA_ID);
+                JSONObject task = findCurrentTask(id);
+                if (task != null && isCounterTask(task) && isTaskActionAvailable(id)) {
+                    pushAndNotify((ACTION_TASK_INC.equals(action) ? "task_inc:" : "task_dec:") + id);
+                } else {
+                    cancelNotif(intent.getIntExtra("notif_id", -1));
+                }
+                rebuildFromDb();
+                if (task != null && isCounterTask(task)) showTaskNotifications();
                 break;
             }
             case ACTION_RC_INC: {
@@ -242,6 +267,17 @@ public class FlowNotifService extends Service {
                         tasks = sb.toString();
                     }
                 }
+
+                JSONArray sourceTaskList = j.optJSONArray("taskList");
+                if (hasPendingTaskCommandsForRows(sourceTaskList)) {
+                    JSONArray projectedTaskList = projectPendingTaskEvents(sourceTaskList);
+                    tasks = applyPendingTaskBrief(tasks, sourceTaskList, projectedTaskList);
+                    int pendingDone = pendingDoneCount(sourceTaskList);
+                    if (pendingDone > 0) {
+                        done = Math.min(total, done + pendingDone);
+                        body = applyPendingDoneToBody(body, pendingDone);
+                    }
+                }
             } catch (Exception ignored) {}
         }
         lastZoneColor = parseZoneColor(zoneColor);
@@ -344,7 +380,9 @@ public class FlowNotifService extends Service {
     private void showTaskNotifications() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) return;
-        JSONArray arr = readArray("taskList");
+        pruneNotificationRange(NOTIF_TASK_BASE, 7);
+        cancelNotif(NOTIF_TASK_BASE + 100);
+        JSONArray arr = projectPendingTaskEvents(readArray("taskList"));
         if (arr == null || arr.length() == 0) {
             // нема задач — підказка
             postTemp(NOTIF_TASK_BASE, GROUP_TASKS, "✓ Задач немає",
@@ -358,25 +396,41 @@ public class FlowNotifService extends Service {
             if (t == null) continue;
             String id    = t.optString("id", "");
             String ttl   = t.optString("title", "Задача");
-            String type  = t.optString("type", "simple");
+            boolean counterEnabled = isCounterTask(t);
+            int counterStep = Math.max(1, t.optInt("counterStep", 1));
+            String counterUnit = counterUnitLabel(t.optString("counterUnit", "count"));
+            int counter = t.optInt("counter", 0);
+            int counterTarget = Math.max(0, t.optInt("counterTarget", 0));
             int notifId  = NOTIF_TASK_BASE + i;
+            String content = counterEnabled
+                    ? counter + " " + counterUnit + (counterTarget > 0 ? " / " + counterTarget + " " + counterUnit : "")
+                    : "Зона: задача #" + (i + 1);
 
             NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_TEMP)
                     .setSmallIcon(R.drawable.ic_notification)
                     .setColor(lastZoneColor)
                     .setContentTitle((i + 1) + ".  " + ttl)
-                    .setContentText("Зона: задача #" + (i + 1))
+                    .setContentText(content)
                     .setGroup(GROUP_TASKS)
                     .setOngoing(false)
                     .setAutoCancel(true)
                     .setSilent(true)
                     .setTimeoutAfter(TEMP_MS)
                     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setContentIntent(openTasksPI())
-                    .addAction(actionItem(android.R.drawable.checkbox_on_background, "✓ Виконати",
-                            ACTION_TASK_DONE, id, notifId))
-                    .addAction(actionItem(android.R.drawable.ic_media_next, "→ Відкласти",
-                            ACTION_TASK_SKIP, id, notifId));
+                    .setContentIntent(openTasksPI());
+            if (counterEnabled) {
+                b.addAction(actionItem(android.R.drawable.ic_input_add, "+" + counterStep + " " + counterUnit,
+                            ACTION_TASK_INC, id, notifId))
+                        .addAction(actionItem(android.R.drawable.ic_delete, "−" + counterStep + " " + counterUnit,
+                                ACTION_TASK_DEC, id, notifId));
+                b.addAction(actionItem(android.R.drawable.checkbox_on_background, "✓ Виконати",
+                        ACTION_TASK_DONE, id, notifId));
+            } else {
+                b.addAction(actionItem(android.R.drawable.checkbox_on_background, "✓ Виконати",
+                        ACTION_TASK_DONE, id, notifId))
+                        .addAction(actionItem(android.R.drawable.ic_media_next, "→ Відкласти 15 хв",
+                                ACTION_TASK_SKIP, id, notifId));
+            }
 
             nm.notify(notifId, b.build());
             scheduleTempCancel(notifId);
@@ -402,6 +456,8 @@ public class FlowNotifService extends Service {
     private void showRoutineNotifications() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) return;
+        pruneNotificationRange(NOTIF_RC_BASE, 10);
+        cancelNotif(NOTIF_RC_BASE + 100);
         JSONArray arr = readArray("routineList");
         if (arr == null || arr.length() == 0) {
             postTemp(NOTIF_RC_BASE, GROUP_RC, "Рутина порожня", "Додай рутину в застосунку", null);
@@ -489,13 +545,259 @@ public class FlowNotifService extends Service {
 
     /** Знаходить назву задачі за id у знімку taskList (для тексту відкладеного нагадування) */
     private String findTaskTitle(String id) {
-        JSONArray arr = readArray("taskList");
-        if (arr == null || id == null) return "Задача";
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject t = arr.optJSONObject(i);
-            if (t != null && id.equals(t.optString("id", ""))) return t.optString("title", "Задача");
+        JSONObject task = findCurrentTask(id);
+        return task == null ? "Задача" : task.optString("title", "Задача");
+    }
+
+    private boolean isTaskActionAvailable(String id) {
+        return findCurrentTask(id) != null && !hasPendingTerminalTaskEvent(id);
+    }
+
+    private boolean hasPendingTerminalTaskEvent(String id) {
+        if (id == null || id.isEmpty()) return false;
+        JSONObject task = findCurrentTask(id);
+        boolean recurring = isCalendarTask(task);
+        String done = "task_done:" + id;
+        String skip = "task_skip:" + id;
+        try {
+            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject row = events.optJSONObject(i);
+                String event = row == null ? "" : row.optString("event", "");
+                if (done.equals(event) || skip.equals(event)) {
+                    if (!recurring || (row != null && sameLocalDate(System.currentTimeMillis(), row.optLong("createdAt", 0L))))
+                        return true;
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private JSONArray projectPendingTaskEvents(JSONArray source) {
+        if (source == null || source.length() == 0) return source;
+        Map<String, JSONObject> tasks = new HashMap<>();
+        Map<String, Long> deltas = new HashMap<>();
+        Set<String> completedOrSkipped = new HashSet<>();
+        for (int i = 0; i < source.length(); i++) {
+            JSONObject task = source.optJSONObject(i);
+            if (task != null) tasks.put(task.optString("id", ""), task);
         }
-        return "Задача";
+        try {
+            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject row = events.optJSONObject(i);
+                if (row == null) continue;
+                String event = row.optString("event", "");
+                String id;
+                if (event.startsWith("task_done:")) {
+                    id = event.substring("task_done:".length());
+                    JSONObject task = tasks.get(id);
+                    if (!isCalendarTask(task) || sameLocalDate(System.currentTimeMillis(), row.optLong("createdAt", 0L)))
+                        completedOrSkipped.add(id);
+                } else if (event.startsWith("task_skip:")) {
+                    id = event.substring("task_skip:".length());
+                    JSONObject task = tasks.get(id);
+                    if (!isCalendarTask(task) || sameLocalDate(System.currentTimeMillis(), row.optLong("createdAt", 0L)))
+                        completedOrSkipped.add(id);
+                } else if (event.startsWith("task_inc:") || event.startsWith("task_dec:")) {
+                    if (!sameLocalDate(System.currentTimeMillis(), row.optLong("createdAt", 0L))) continue;
+                    boolean increment = event.startsWith("task_inc:");
+                    id = event.substring(increment ? "task_inc:".length() : "task_dec:".length());
+                    JSONObject task = tasks.get(id);
+                    if (task == null || !isCounterTask(task) || completedOrSkipped.contains(id)) continue;
+                    long step = Math.max(1, task.optInt("counterStep", 1));
+                    long prior = deltas.containsKey(id) ? deltas.get(id) : 0L;
+                    long delta = increment ? step : -step;
+                    long next = prior + delta;
+                    deltas.put(id, Math.max(-Integer.MAX_VALUE, Math.min(Integer.MAX_VALUE, next)));
+                }
+            }
+        } catch (Exception ignored) {}
+
+        JSONArray projected = new JSONArray();
+        for (int i = 0; i < source.length(); i++) {
+            JSONObject task = source.optJSONObject(i);
+            if (task == null) continue;
+            String id = task.optString("id", "");
+            if (completedOrSkipped.contains(id) || !taskOccursToday(task)) continue;
+            Long delta = deltas.get(id);
+            if (isCounterTask(task)) {
+                int current = Math.max(0, task.optInt("counter", 0));
+                String counterDay = task.optString("counterDay", "");
+                if (isCalendarTask(task) && !counterDay.isEmpty() && counterDay.compareTo(todayStr()) < 0) current = 0;
+                if (delta != null) {
+                long projectedValue = Math.max(0L, Math.min(Integer.MAX_VALUE, (long) current + delta));
+                try { task.put("counter", (int) projectedValue); } catch (Exception ignored) {}
+                } else if (current != task.optInt("counter", 0)) {
+                    try { task.put("counter", current); } catch (Exception ignored) {}
+                }
+            }
+            projected.put(task);
+        }
+        return projected;
+    }
+
+    private boolean hasPendingTaskCommandsForRows(JSONArray rows) {
+        if (rows == null || rows.length() == 0) return false;
+        Set<String> current = new HashSet<>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject task = rows.optJSONObject(i);
+            if (task != null) current.add(task.optString("id", ""));
+        }
+        try {
+            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject row = events.optJSONObject(i);
+                if (row == null) continue;
+                String event = row.optString("event", "");
+                int colon = event.indexOf(':');
+                if (colon <= 0) continue;
+                String kind = event.substring(0, colon);
+                String id = event.substring(colon + 1);
+                if (id.endsWith("_pre")) id = id.substring(0, id.length() - 4);
+                if (current.contains(id) && ("task_inc".equals(kind) || "task_dec".equals(kind)
+                        || "task_done".equals(kind) || "task_skip".equals(kind))) return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private int pendingDoneCount(JSONArray rows) {
+        if (rows == null || rows.length() == 0) return 0;
+        Set<String> current = new HashSet<>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject task = rows.optJSONObject(i);
+            if (task != null) current.add(task.optString("id", ""));
+        }
+        Set<String> doneIds = new HashSet<>();
+        try {
+            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject row = events.optJSONObject(i);
+                if (row == null) continue;
+                String event = row.optString("event", "");
+                if (!event.startsWith("task_done:")) continue;
+                String id = event.substring("task_done:".length());
+                if (!current.contains(id)) continue;
+                JSONObject task = null;
+                for (int j = 0; j < rows.length(); j++) {
+                    JSONObject candidate = rows.optJSONObject(j);
+                    if (candidate != null && id.equals(candidate.optString("id", ""))) { task = candidate; break; }
+                }
+                if (!isCalendarTask(task) || sameLocalDate(System.currentTimeMillis(), row.optLong("createdAt", 0L))) doneIds.add(id);
+            }
+        } catch (Exception ignored) {}
+        return doneIds.size();
+    }
+
+    private String applyPendingTaskBrief(String zoneTasks, JSONArray source, JSONArray projected) {
+        if (source == null || projected == null || zoneTasks == null || zoneTasks.isEmpty()) return zoneTasks;
+        Map<String, JSONObject> byId = new HashMap<>();
+        for (int i = 0; i < projected.length(); i++) {
+            JSONObject task = projected.optJSONObject(i);
+            if (task != null) byId.put(task.optString("id", ""), task);
+        }
+        Set<String> usedSourceIds = new HashSet<>();
+        StringBuilder result = new StringBuilder();
+        for (String title : zoneTasks.split("\\|")) {
+            JSONObject sourceMatch = null;
+            for (int i = 0; i < source.length(); i++) {
+                JSONObject task = source.optJSONObject(i);
+                if (task == null || usedSourceIds.contains(task.optString("id", ""))) continue;
+                if (title.equals(task.optString("title", ""))) { sourceMatch = task; break; }
+            }
+            String shown = title;
+            if (sourceMatch != null) {
+                String id = sourceMatch.optString("id", "");
+                usedSourceIds.add(id);
+                JSONObject task = byId.get(id);
+                if (task == null) continue;
+                shown = task.optString("title", title);
+                if (isCounterTask(task)) {
+                    shown += " · " + Math.max(0, task.optInt("counter", 0)) + " "
+                            + counterUnitLabel(task.optString("counterUnit", "count"));
+                }
+            }
+            if (result.length() > 0) result.append('|');
+            result.append(shown);
+        }
+        return result.toString();
+    }
+
+    private String applyPendingDoneToBody(String body, int count) {
+        if (body == null || count <= 0) return body;
+        java.util.regex.Matcher match = java.util.regex.Pattern
+                .compile("^(.*?)(\\d+) активних · (\\d+) виконано$").matcher(body);
+        if (!match.matches()) return body;
+        int active = Integer.parseInt(match.group(2));
+        int done = Integer.parseInt(match.group(3));
+        return match.group(1) + Math.max(0, active - count) + " активних · " + (done + count) + " виконано";
+    }
+
+    private boolean sameLocalDate(long first, long second) {
+        if (second <= 0L) return false;
+        java.util.Calendar a = java.util.Calendar.getInstance();
+        java.util.Calendar b = java.util.Calendar.getInstance();
+        a.setTimeInMillis(first);
+        b.setTimeInMillis(second);
+        return a.get(java.util.Calendar.YEAR) == b.get(java.util.Calendar.YEAR)
+                && a.get(java.util.Calendar.DAY_OF_YEAR) == b.get(java.util.Calendar.DAY_OF_YEAR);
+    }
+
+    private boolean isCalendarTask(JSONObject task) {
+        if (task == null) return false;
+        String repeat = task.optString("repeat", "none");
+        return "daily".equals(repeat) || "weekly".equals(repeat) || "weekdays".equals(repeat)
+                || "weekend".equals(repeat) || "custom".equals(repeat);
+    }
+
+    private boolean taskOccursToday(JSONObject task) {
+        if (!isCalendarTask(task)) return true;
+        String today = todayStr();
+        String anchor = task.optString("anchorDate", "");
+        if (!anchor.isEmpty() && today.compareTo(anchor) < 0) return false;
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        int day = (now.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7; // Monday=0 .. Sunday=6
+        switch (task.optString("repeat", "")) {
+            case "daily": return true;
+            case "weekly":
+                if (anchor.isEmpty()) return true;
+                try {
+                    java.util.Calendar first = java.util.Calendar.getInstance();
+                    first.clear();
+                    String[] date = anchor.split("-");
+                    first.set(Integer.parseInt(date[0]), Integer.parseInt(date[1]) - 1, Integer.parseInt(date[2]));
+                    return first.get(java.util.Calendar.DAY_OF_WEEK) == now.get(java.util.Calendar.DAY_OF_WEEK);
+                } catch (Exception ignored) { return false; }
+            case "weekdays": return day < 5;
+            case "weekend": return day >= 5;
+            case "custom":
+                JSONArray days = task.optJSONArray("repeatDays");
+                return days != null && day < days.length() && days.optBoolean(day, false);
+            default: return true;
+        }
+    }
+
+    private JSONObject findCurrentTask(String id) {
+        if (id == null || id.isEmpty()) return null;
+        JSONArray arr = readArray("taskList");
+        if (arr == null) return null;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject task = arr.optJSONObject(i);
+            if (task != null && id.equals(task.optString("id", ""))) return task;
+        }
+        return null;
+    }
+
+    private boolean isCounterTask(JSONObject task) {
+        return task != null && ("counter".equals(task.optString("type", ""))
+                || task.optBoolean("counterEnabled", false));
+    }
+
+    private String counterUnitLabel(String unit) {
+        if ("ml".equals(unit)) return "мл";
+        if ("min".equals(unit)) return "хв";
+        return "раз";
     }
 
     private JSONArray readArray(String key) {
@@ -527,15 +829,26 @@ public class FlowNotifService extends Service {
     }
 
     private void scheduleTempCancel(final int notifId) {
-        handler.postDelayed(new Runnable() {
-            @Override public void run() { cancelNotif(notifId); }
-        }, TEMP_MS);
+        Runnable previous = tempCancelCallbacks.remove(notifId);
+        if (previous != null && handler != null) handler.removeCallbacks(previous);
+        Runnable callback = () -> {
+            tempCancelCallbacks.remove(notifId);
+            cancelNotif(notifId);
+        };
+        tempCancelCallbacks.put(notifId, callback);
+        handler.postDelayed(callback, TEMP_MS);
     }
 
     private void cancelNotif(int notifId) {
         if (notifId < 0) return;
+        Runnable callback = tempCancelCallbacks.remove(notifId);
+        if (callback != null && handler != null) handler.removeCallbacks(callback);
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) nm.cancel(notifId);
+    }
+
+    private void pruneNotificationRange(int base, int count) {
+        for (int i = 0; i < count; i++) cancelNotif(base + i);
     }
 
     /**

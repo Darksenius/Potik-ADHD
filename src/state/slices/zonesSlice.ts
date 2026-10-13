@@ -55,7 +55,9 @@ export interface ZonesSlice {
    */
   recalculateZoneUsage: () => void;
   /** getZones(hm) — рядки 1310–1333. Список активних зон зараз, найпріоритетніша перша. */
-  getActiveZones: (hm: { h: number; m: number }) => ActiveZone[];
+  getActiveZones: (hm: { h: number; m: number }, date?: Date) => ActiveZone[];
+  /** Stable identity of the active slot, also valid after restarting the app. */
+  getZoneOccurrenceKey: (zoneId: number, date: Date) => string | undefined;
   /** toggleZoneOff(id) — рядки 1407–1417, без прямих DOM-викликів (render — робота компонента) */
   toggleZoneOff: (id: number) => void;
   /** zoneSortKey(z) — рядки 1400–1405 */
@@ -158,9 +160,9 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
     set({ zoneUsage, zoneUsageDay: today, zones });
   },
 
-  getActiveZones: (hm) => {
+  getActiveZones: (hm, date = new Date()) => {
     const cur = hm.h * 60 + hm.m;
-    const todayStr = fmtDate(new Date());
+    const todayStr = fmtDate(date);
     const { zones, planDayOff } = get();
     const dayOff = planDayOff[todayStr] || [];
     let found: ActiveZone[] = [];
@@ -194,6 +196,29 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
 
     found.sort((a, b) => b.prio - a.prio);
     return found.length ? found : [FREE_TIME_ZONE];
+  },
+
+  getZoneOccurrenceKey: (zoneId, date) => {
+    const hm = { h: date.getHours(), m: date.getMinutes() };
+    const active = get().getActiveZones(hm, date).find(zone => zone.id === zoneId);
+    if (!active) return undefined;
+    const day = fmtDate(date);
+    const minute = hm.h * 60 + hm.m;
+    const slots = active.planDay
+      ? get().dayBlocks(day).filter(block => block.zoneId === zoneId)
+      : active.slots;
+    const ranges: { start: number; end: number; label: string }[] = [];
+    slots.slice().sort((a, b) => toMinutes(a.s) - toMinutes(b.s)).forEach(slot => {
+      const start = toMinutes(slot.s);
+      const end = toMinutes(slot.e) || 1440;
+      const previous = ranges[ranges.length - 1];
+      // An overlap/adjacent slot does not leave the assigned zone and must
+      // not create an extra occurrence when the earlier slot ends.
+      if (previous && start <= previous.end) previous.end = Math.max(previous.end, end);
+      else ranges.push({ start, end, label: slot.s });
+    });
+    const range = ranges.find(slot => minute >= slot.start && minute < slot.end);
+    return range ? day + ':' + zoneId + ':' + range.label : undefined;
   },
 
   toggleZoneOff: (id) => {

@@ -4,6 +4,7 @@ import { TASK_TYPE_LABELS } from '../../constants';
 import TaskBody from './TaskBody';
 import { taskPlanDate } from '../../utils/taskSchedule';
 import { fmtDate } from '../../utils/date';
+import { COUNTER_UNITS, hasTaskCounter, taskCounterTarget } from '../../utils/taskCounter';
 
 const TXP: Record<string, number> = {
   simple: 10, check: 10, counter: 2, note: 5, alarm: 10, sched: 10,
@@ -13,7 +14,7 @@ const TXP: Record<string, number> = {
 function repeatLabel(t: Task): string {
   if (!t.repeat || t.repeat === 'none') return '';
   if (t.repeat === 'interval') {
-    const suffix = t.repeatUnit === 'hour' ? 'год' : t.repeatUnit === 'day' ? 'дн' : t.repeatUnit === 'week' ? 'тиж' : t.repeatUnit === 'month' ? 'міс' : 'хв';
+    const suffix = t.repeatUnit === 'sec' ? 'с' : t.repeatUnit === 'hour' ? 'год' : t.repeatUnit === 'day' ? 'дн' : t.repeatUnit === 'week' ? 'тиж' : t.repeatUnit === 'month' ? 'міс' : 'хв';
     return '↺ ' + (t.repeatInterval || 30) + suffix;
   }
   return '↺';
@@ -29,7 +30,7 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
   const folders = useStore((s) => s.folders);
 
   const isNeg = t.type === 'negative';
-  const hasBody = t.type !== 'simple' || !!t.note || !!t.expanded;
+  const hasBody = t.type !== 'simple' || hasTaskCounter(t) || !!t.note || !!t.expanded;
   const folder = t.folderId ? folders.find((f) => f.id === t.folderId) : null;
   const rep = repeatLabel(t);
   const date = taskPlanDate(t);
@@ -65,6 +66,7 @@ export default function TaskItem({ t, isPriority, visibleIds, allowMove = true }
         )}
       </div>
       <div className="tc-meta">
+        {hasTaskCounter(t) && <span className="badge">{t.counter || 0}{taskCounterTarget(t) > 0 ? '/' + taskCounterTarget(t) : ''} {COUNTER_UNITS[t.counterUnit || 'count']}</span>}
         {t.zoneName && <span className="badge zbadge" style={{ borderLeftColor: t.zoneColor || undefined }}>{t.zoneName}</span>}
         {t.type === 'zonelinked' && !t.zoneId && (
           <span className="badge" style={{ background: 'rgba(226,75,74,.12)', color: 'var(--neg)', border: '1px solid rgba(226,75,74,.25)' }} title="Не вказано зону">! зона</span>

@@ -2,11 +2,33 @@ import { test, expect } from '@playwright/test';
 import { useStore } from '../src/state/store';
 import { nextTaskReminderAt, isTaskAvailable } from '../src/utils/taskSchedule';
 import type { Task } from '../src/types';
+import { handleNativeEvent } from '../src/bridge/nativeBridge';
 
 const task = (type: Task['type']): Task => ({ id: 41, title: 'Перенести', type, done: false, someday: false, repeat: 'none', repeatDays: [], tags: [], created: '2026-10-08T09:00:00.000Z', planDate: '2026-10-08', schedDate: '2026-10-08', schedTime: '23:50', alarmTime: '23:50' });
 const originalNow = Date.now;
 test.beforeEach(() => useStore.setState(useStore.getInitialState(), true));
 test.afterEach(() => { Date.now = originalNow; });
+
+test('a newly created task cannot inherit an older queued command with a reused id', () => {
+  const fresh = task('simple');
+  fresh.created = new Date().toISOString();
+  fresh.counterEnabled = true; fresh.counter = 0;
+  useStore.setState({ tasks: [fresh] });
+  const earlier = new Date(fresh.created).getTime() - 1000;
+  for (const event of ['task_done:41', 'task_skip:41', 'task_inc:41']) expect(handleNativeEvent(event, earlier)).toBe(false);
+  expect(useStore.getState().tasks[0]).toMatchObject({ done: false, counter: 0 });
+  expect(useStore.getState().tasks[0].snoozeUntil).toBeUndefined();
+});
+
+test('a queued notification snooze is measured from the tap, not a delayed reopening', () => {
+  const now = originalNow();
+  const tap = now - 30 * 60000;
+  useStore.setState({ tasks: [task('sched')] });
+  expect(handleNativeEvent('task_skip:41', tap)).toBe(true);
+  const snoozed = useStore.getState().tasks[0];
+  expect(snoozed.snoozeUntil).toBe(Math.ceil((tap + 15 * 60000) / 60000) * 60000);
+  expect(snoozed.snoozeUntil).toBeLessThan(now);
+});
 
 test('numeric snooze across midnight preserves an eligible reminder with seconds in the clock', () => {
   const start = new Date('2026-10-08T23:50:30.500').getTime();

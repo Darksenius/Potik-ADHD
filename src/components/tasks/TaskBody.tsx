@@ -2,11 +2,14 @@ import { useStore } from '../../state/store';
 import type { Task } from '../../types';
 import { WD } from '../../utils/date';
 import { REPEAT_LABELS, CONTEXT_TAGS } from '../../constants';
+import { COUNTER_UNITS, hasTaskCounter, taskCounterStep, taskCounterTarget } from '../../utils/taskCounter';
 
 
 export default function TaskBody({ t }: { t: Task }) {
   const toggleChecklistItem = useStore((s) => s.toggleChecklistItem);
   const addChecklistItem = useStore((s) => s.addChecklistItem);
+  const editChecklistItem = useStore((s) => s.editChecklistItem);
+  const deleteChecklistItem = useStore((s) => s.deleteChecklistItem);
   const changeCounter = useStore((s) => s.changeCounter);
   const updateCounterTarget = useStore((s) => s.updateCounterTarget);
   const updateNote = useStore((s) => s.updateNote);
@@ -23,32 +26,36 @@ export default function TaskBody({ t }: { t: Task }) {
           <div className="bl">Пункти</div>
           {(t.items || []).map((it, i) => (
             <div className={'ci' + (it.done ? ' cid' : '')} key={i}>
-              <input type="checkbox" checked={it.done} onChange={() => toggleChecklistItem(t.id, i)} />
-              <span>{it.text}</span>
+              <input type="checkbox" aria-label={it.text} checked={it.done} disabled={t.done} onChange={() => toggleChecklistItem(t.id, i)} />
+              <input key={it.text} className="ei" aria-label={'Текст пункту ' + (i + 1)} defaultValue={it.text} onBlur={e => { editChecklistItem(t.id, i, e.target.value); e.target.value = e.target.value.trim() || it.text; }} />
+              <button className="ab" aria-label={'Видалити пункт: ' + it.text} onClick={() => deleteChecklistItem(t.id, i)}>✕</button>
             </div>
           ))}
-          <ChecklistAdd taskId={t.id} onAdd={addChecklistItem} />
+          <ChecklistAdd taskId={t.id} onAdd={addChecklistItem} autoFocus={!t.items?.length && Date.now() - new Date(t.created).getTime() < 5000} />
+          <p className="editor-hint">Галочки позначають пункти. Заверши всю задачу кнопкою «Виконати».</p>
         </>
       )}
 
-      {t.type === 'counter' && (
+      {hasTaskCounter(t) && (
         <>
           <div className="bl">Лічильник</div>
           <div className="cw">
-            <button className="cbtn" onClick={() => changeCounter(t.id, -1)}>−</button>
-            <span className="cvv">{t.counter}</span>
-            <button className="cbtn" onClick={() => changeCounter(t.id, 1)}>+</button>
+            <button className="cbtn" disabled={t.done || !t.counter} aria-label={'Зменшити: ' + t.title} onClick={() => changeCounter(t.id, -taskCounterStep(t))}>−{taskCounterStep(t)}</button>
+            <span className="cvv">{t.counter || 0} {COUNTER_UNITS[t.counterUnit || 'count']}</span>
+            <button className="cbtn" disabled={t.done} aria-label={'Збільшити: ' + t.title} onClick={() => changeCounter(t.id, taskCounterStep(t))}>+{taskCounterStep(t)}</button>
             <span style={{ fontSize: 11, color: 'var(--t3)' }}>
               /{' '}
               <input
                 className="ct-inp"
                 type="number"
-                defaultValue={t.counterTarget || 10}
-                min={1}
-                onBlur={(e) => updateCounterTarget(t.id, parseInt(e.target.value) || 10)}
+                aria-label={'Ціль: ' + t.title}
+                defaultValue={taskCounterTarget(t)}
+                min={0}
+                onBlur={(e) => updateCounterTarget(t.id, Number(e.target.value))}
               />
             </span>
           </div>
+          <p className="editor-hint">{taskCounterTarget(t) === 0 ? 'Без цілі. ' : t.cntHit ? 'Цілі досягнуто. ' : ''}0 у полі цілі — без цілі. Завершення задачі — окрема кнопка «Виконати».</p>
         </>
       )}
 
@@ -71,7 +78,7 @@ export default function TaskBody({ t }: { t: Task }) {
 
       {t.type === 'ctx' && (
         <>
-          <div className="bl">Контексти</div>
+          <div className="bl">Контексти (ручні мітки)</div>
           <div className="ctx-tags">
             {CONTEXT_TAGS.map((tg) => (
               <div className={'ctx-tag' + ((t.ctxTags || []).includes(tg) ? ' sel' : '')} key={tg} onClick={() => toggleCtxTag(t.id, tg)}>
@@ -131,11 +138,13 @@ export default function TaskBody({ t }: { t: Task }) {
   );
 }
 
-function ChecklistAdd({ taskId, onAdd }: { taskId: number; onAdd: (id: number, text: string) => void }) {
+function ChecklistAdd({ taskId, onAdd, autoFocus }: { taskId: number; onAdd: (id: number, text: string) => void; autoFocus?: boolean }) {
   return (
     <div className="ci-add">
       <input
         type="text"
+        autoFocus={autoFocus}
+        aria-label="Новий пункт чекліста"
         placeholder="Новий пункт..."
         onKeyDown={(e) => {
           if (e.key === 'Enter') {

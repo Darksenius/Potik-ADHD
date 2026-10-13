@@ -172,7 +172,7 @@ test('midnight resets daily tasks and routine while preserving one-off completio
     saveDate: 'Wed Sep 16 2026', tasks: [
       task(401, 'Щодня', { done: true, doneDate: '2026-09-16', repeat: 'daily' }),
       task(402, 'Разова', { done: true, doneDate: '2026-09-16' }),
-      task(403, 'Часове вікно', { type: 'timewin', done: true, completedToday: true, completionCredited: true, completionCreditDate: '2026-09-16', doneDate: '2026-09-16', doneAt: '10:00', nextRepeatAt: 1, windowStart: '00:00', windowEnd: '23:59' }),
+      task(403, 'Часове вікно', { type: 'timewin', repeat: 'daily', done: true, completedToday: true, completionCredited: true, completionCreditDate: '2026-09-16', doneDate: '2026-09-16', doneAt: '10:00', nextRepeatAt: 1, windowStart: '00:00', windowEnd: '23:59' }),
     ],
     recur: [{ id: 'water', nm: 'Вода', val: 4, done: true, unit: 'count', step: 1, color: '#fff' }],
   });
@@ -226,9 +226,9 @@ test('checklist and counter actions award experience and persist', async ({ page
     task(401, 'Чекліст', { type: 'check', expanded: true, items: [{ text: 'Пункт', done: false }] }),
     task(402, 'Лічильник', { type: 'counter', expanded: true, counter: 0, counterTarget: 2 }),
   ] });
-  await page.locator('.ci input').check();
-  await page.locator('.cw').getByRole('button', { name: '+', exact: true }).click();
-  await page.locator('.cw').getByRole('button', { name: '+', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Пункт', exact: true }).check();
+  await page.getByRole('button', { name: 'Збільшити: Лічильник', exact: true }).click();
+  await page.getByRole('button', { name: 'Збільшити: Лічильник', exact: true }).click();
   await page.clock.runFor(3000);
   const data = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(data.tasks[0].items[0].done).toBe(true);

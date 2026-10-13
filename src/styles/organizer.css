@@ -69,3 +69,7 @@ button{cursor:pointer}
 .week-dates{text-align:center;color:var(--t2);font-size:12px;margin:0 0 10px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 html[data-reduce-motion="true"] *,html[data-reduce-motion="true"] *::before,html[data-reduce-motion="true"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+.ci .ei { flex: 1; min-width: 0; width: auto; }
+.ci.cid .ei { text-decoration: line-through; color: var(--t3); }
+.cw { flex-wrap: wrap; }
+.cbtn { width: auto; min-width: 44px; height: 44px; padding: 0 8px; }
