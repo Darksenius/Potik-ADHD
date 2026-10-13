@@ -401,6 +401,8 @@ export interface Preferences {
   themeMode?: 'system' | 'light' | 'dark';
   reduceMotion?: boolean;
   showGamification?: boolean;
+  /** One-time migration guard for retiring the former default water task. */
+  waterSeedRetired?: boolean;
 }
 
 export interface AppState extends PlannerState {

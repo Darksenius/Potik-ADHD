@@ -18,31 +18,34 @@ function reloadStore() {
   expect(applyState(saved, true)).toBe(true);
 }
 
-test('water is seeded only on first use; a simple 100 ml counter can be created, counted and reopened', async ({ page }, info) => {
+test('water seed is retired once; a user-created counter can be created, counted and reopened', async ({ page }, info) => {
   await page.clock.install({ time: new Date('2026-10-13T12:00:00+03:00') });
   await page.goto('/');
   await page.clock.runFor(1600);
   const fresh = await savedState(page);
-  expect(fresh.tasks.filter((t: any) => t.title === 'Вода')).toHaveLength(1);
-  expect(fresh.tasks.find((t: any) => t.title === 'Вода')).toMatchObject({
-    type: 'simple', repeat: 'daily', counterEnabled: true, counter: 0,
-    counterStep: 100, counterUnit: 'ml', counterTarget: 0,
-  });
-  expect(fresh.recur.some((r: any) => r.id === 'r1' && r.nm === 'Вода')).toBe(false);
+  expect(fresh.tasks.filter((t: any) => !t.trashed && t.title === 'Вода')).toHaveLength(0);
+  expect(fresh.preferences.waterSeedRetired).toBe(true);
 
-  // A returning user who removed water must not receive a replacement on boot.
+  // Retire the existing default entry into recoverable trash and remove its legacy routine.
   await page.addInitScript(() => {
-    if (sessionStorage.getItem('existing-user-without-water')) return;
-    // Seed before bootstrap: the previous page deliberately flushes on pagehide.
+    if (sessionStorage.getItem('legacy-water-retired')) return;
     localStorage.setItem('flow_v2', JSON.stringify({
-      saveDate: new Date().toDateString(), weekTplSeeded: true, tasks: [], recur: [],
+      saveDate: new Date().toDateString(), weekTplSeeded: true,
+      tasks: [{ id: 301, title: 'Вода', type: 'simple', done: false, someday: false,
+        created: new Date().toISOString(), repeat: 'daily', repeatDays: [], tags: [],
+        counterEnabled: true, counterStep: 100, counterUnit: 'ml', counterTarget: 0, counter: 200 }],
+      recur: [{ id: 'r1', nm: 'Вода', unit: 'ml', val: 200, step: 100 }],
     }));
-    sessionStorage.setItem('existing-user-without-water', 'seeded');
+    sessionStorage.setItem('legacy-water-retired', 'seeded');
   });
   await page.reload();
   await page.clock.runFor(1600);
-  expect((await savedState(page)).tasks).toEqual([]);
-  expect((await savedState(page)).recur).toEqual([]);
+  const retired = await savedState(page);
+  expect(retired.tasks).toHaveLength(1);
+  expect(retired.tasks[0]).toMatchObject({ id: 301, title: 'Вода', trashed: true, counter: 200 });
+  expect(retired.tasks[0].trashedAt).toEqual(expect.any(Number));
+  expect(retired.recur).toEqual([]);
+  expect(retired.preferences.waterSeedRetired).toBe(true);
 
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?', { exact: true }).fill('Вода');
@@ -63,7 +66,8 @@ test('water is seeded only on first use; a simple 100 ml counter can be created,
   await expect(page.getByRole('button', { name: 'Виконати: Вода', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await page.clock.runFor(700);
   const counted = await savedState(page);
-  expect(counted.tasks).toHaveLength(1);
+  expect(counted.tasks.filter((t: any) => !t.trashed)).toHaveLength(1);
+  expect(counted.tasks.find((t: any) => t.id === 301)).toMatchObject({ trashed: true, title: 'Вода' });
   expect(counted.tasks[0]).toMatchObject({
     title: 'Вода', type: 'simple', counterEnabled: true, counterStep: 100,
     counterUnit: 'ml', counterTarget: 0, counter: 100, counterCreditedProgress: 200,
@@ -71,6 +75,10 @@ test('water is seeded only on first use; a simple 100 ml counter can be created,
   });
   expect(counted.xpTotal).toBe(4);
   await page.reload();
+  const reopened = await savedState(page);
+  expect(reopened.preferences.waterSeedRetired).toBe(true);
+  expect(reopened.tasks.filter((t: any) => !t.trashed && t.title === 'Вода')).toHaveLength(1);
+  expect(reopened.tasks.find((t: any) => t.id === 301)?.trashed).toBe(true);
   await expect(page.locator('#tasks-list .cvv')).toHaveText('100 мл');
   await page.setViewportSize({ width: 320, height: 800 });
   await expect(page.getByRole('button', { name: 'Зменшити: Вода', exact: true })).toBeVisible();

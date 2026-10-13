@@ -155,7 +155,7 @@ export default function TaskEditor() {
           <div className="editor-row"><label className="el" htmlFor="task-counter-step">Крок + / −<input id="task-counter-step" type="number" className="ei" min="1" value={counterStep} onChange={e => setCounterStep(Number(e.target.value))} /></label>
             <label className="el" htmlFor="task-counter-unit">Одиниця<select id="task-counter-unit" className="ei" value={counterUnit} onChange={e => setCounterUnit(e.target.value as Task['counterUnit'])}><option value="count">раз</option><option value="ml">мл</option><option value="min">хв</option></select></label></div>
           <label className="el" htmlFor="task-counter-target">Ціль лічильника (0 — без цілі)<input id="task-counter-target" type="number" className="ei" min="0" value={cntTgt} onChange={e => setCntTgt(Number(e.target.value))} /></label>
-          <p className="editor-hint">Наприклад, «Вода»: крок 100 мл, повторення щодня. Ціль обираєш сам; досягнення цілі не завершує задачу автоматично.</p>
+          <p className="editor-hint">Наприклад, «Розтяжка»: крок 5 хв. Ціль обираєш сам; досягнення цілі не завершує задачу автоматично.</p>
         </>}
         {type === 'negative' && <label className="el">Штраф досвіду<input type="number" className="ei" min="1" value={negXp} onChange={e => setNegXp(Math.max(1, Number(e.target.value)))} /></label>}
         <div className="ef"><label className="el" htmlFor="task-zone">Зона</label><select id="task-zone" className="ei" value={zoneId} onChange={e => setZoneId(e.target.value)}><option value="">Без зони</option>{zones.map(z => <option value={z.id} key={z.id}>{z.nm}</option>)}</select></div>

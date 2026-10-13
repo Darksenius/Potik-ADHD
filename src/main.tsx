@@ -13,7 +13,7 @@ import { checkNotificationPermissionOnBoot, refreshWebNotificationIfGranted } fr
 import { fmtDate } from './utils/date';
 import { startAutosave } from './services/autosave';
 import { checkReminders } from './services/reminders';
-import { initializeWaterTask } from './services/waterTask';
+import { retireWaterSeed } from './services/waterTask';
 
 /**
  * Bootstrap — відповідник "хвоста" www/index.html, рядки 2867–3062, 4434–4462.
@@ -28,7 +28,7 @@ function bootstrap() {
   if (loadedSaveDate !== null) {
     useStore.getState().dailyResetIfNeeded(loadedSaveDate);
   }
-  initializeWaterTask(loadedSaveDate === null);
+  retireWaterSeed();
 
   useStore.getState().resetRepeatingTasksFor(new Date());
   useStore.getState().recalculateZoneUsage();
