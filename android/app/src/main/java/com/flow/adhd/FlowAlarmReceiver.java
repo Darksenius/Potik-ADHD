@@ -480,14 +480,14 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         }
     }
 
-    private static long deferredReminderAt(QuestPolicy.Task task, List<QuestPolicy.Segment> timeline) {
+    static long deferredReminderAt(QuestPolicy.Task task, List<QuestPolicy.Segment> timeline) {
         QuestPolicy.Deferral deferral = task.deferral;
         if (deferral == null) return -1L;
         if (QuestPolicy.DEFERRAL_NEXT_ZONE.equals(deferral.kind) || !task.hasZone) return deferral.startAt;
         long first = Long.MAX_VALUE;
         for (QuestPolicy.Segment segment : timeline) {
-            if (segment.zoneId == deferral.targetZoneId && segment.startAt >= deferral.startAt)
-                first = Math.min(first, segment.startAt);
+            if (segment.zoneId == deferral.targetZoneId && segment.endAt > deferral.startAt)
+                first = Math.min(first, Math.max(segment.startAt, deferral.startAt));
         }
         return first == Long.MAX_VALUE ? -1L : first;
     }

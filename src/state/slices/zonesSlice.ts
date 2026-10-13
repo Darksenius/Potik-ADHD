@@ -188,7 +188,7 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
       if (e === 0) e = 1440;
       if (cur >= s && cur < e) {
         const z = zones.find((zz) => zz.id === b.zoneId);
-        if (z) {
+        if (z && !z.off) {
           found = found.filter((f) => f.id !== z.id);
           found.push({ id: z.id, nm: z.nm, color: z.color, desc: (z.desc || '') + ' · план дня', prio: (z.prio || 1) + 10, slots: z.slots, planDay: true });
         }
@@ -263,7 +263,29 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
   },
 
   addZone: (name) => {
-    const id = get().zones.reduce((m, z) => Math.max(m, z.id || 0), 0) + 1;
+    const state = get();
+    const retainedIds = new Set<number>();
+    const retainId = (value: unknown) => {
+      if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) retainedIds.add(value);
+    };
+    state.zones.forEach(zone => retainId(zone.id));
+    state.tasks.forEach(task => {
+      retainId(task.zoneId);
+      retainId(task.questDeferral?.sourceZoneId);
+      retainId(task.questDeferral?.targetZoneId);
+      retainId(task.completionDeferral?.sourceZoneId);
+      retainId(task.completionDeferral?.targetZoneId);
+    });
+    Object.values(state.planDayZones || {}).forEach(blocks => {
+      if (Array.isArray(blocks)) blocks.forEach(block => retainId(block?.zoneId));
+    });
+    state.dayTemplates.forEach(template => {
+      (template.blocks || []).forEach(block => retainId(block?.zoneId));
+    });
+    retainId(state.lastZoneId);
+
+    let id = 1;
+    while (retainedIds.has(id)) id++;
     const zone: Zone = { id, nm: name, color: ZONE_PALETTE[id % ZONE_PALETTE.length], slots: [], desc: '', prio: 1, active: true };
     set((s) => ({ zones: [...s.zones, zone] }));
     return id;

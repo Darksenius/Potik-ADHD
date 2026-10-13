@@ -7,8 +7,46 @@ export function taskPlanDate(task: Task): string | undefined {
   return isDateKey(task.planDate) ? task.planDate : undefined;
 }
 
-export function taskOccursOn(task: Task, day: string): boolean {
+export interface TaskProjectionContext {
+  now: Date;
+  timeline: readonly QuestTimelineSegment[];
+}
+
+/** The pending occurrence can move while its permanent recurrence stays intact. */
+export function taskDeferredOccurrenceAt(task: Task, context?: TaskProjectionContext): number | undefined {
+  const d = task.questDeferral;
+  if (!d || task.done || task.trashed || task.someday) return undefined;
+  const now = context?.now.getTime() ?? Date.now();
+  if (d.kind === 'next-zone') {
+    if (d.endAt === undefined || now < d.endAt) return Math.max(d.startAt, Math.min(now, d.endAt ?? d.startAt));
+    const source = context?.timeline.find(s => s.zoneId === d.sourceZoneId && s.startAt >= d.endAt! && s.endAt > now);
+    return source ? Math.max(source.startAt, now) : undefined;
+  }
+  if (task.zoneId == null) return d.startAt;
+  const target = context?.timeline.find(s => s.zoneId === d.targetZoneId && s.endAt > Math.max(now, d.startAt));
+  return target ? Math.max(target.startAt, d.startAt) : context ? undefined : d.startAt;
+}
+
+export function taskDisplayPlanDate(task: Task, context?: TaskProjectionContext): string | undefined {
+  if (task.questDeferral && !task.done) {
+    const at = taskDeferredOccurrenceAt(task, context);
+    return fmtDate(new Date(at ?? task.questDeferral.startAt));
+  }
+  return taskPlanDate(task);
+}
+
+export function isDeferredOccurrenceOn(task: Task, day: string, context?: TaskProjectionContext): boolean {
+  return !!task.questDeferral && !task.done && taskDisplayPlanDate(task, context) === day;
+}
+
+export function taskOccursOn(task: Task, day: string, context?: TaskProjectionContext): boolean {
   if (task.trashed || task.someday || !isDateKey(day)) return false;
+  if (task.questDeferral && !task.done) {
+    const movedDay = taskDisplayPlanDate(task, context)!;
+    if (movedDay === day) return true;
+    // Moving one unfinished occurrence does not delete future schedule previews.
+    if (day < movedDay || !isCalendarRepeat(task)) return false;
+  }
   if (isCalendarRepeat(task)) {
     const anchor = taskPlanDate(task) || fmtDate(new Date(task.created));
     return day >= anchor && repeatDueOn(task, new Date(day + 'T12:00:00'));
@@ -23,7 +61,15 @@ export function isCalendarRepeat(task: Task): boolean {
 
 /** Projection in the planner does not mark future occurrences as completed. */
 export function taskDoneOn(task: Task, day: string): boolean {
+  if (task.repeat === 'interval' && task.nextRepeatAt && fmtDate(new Date(task.nextRepeatAt)) === day) return false;
   return task.done && (!isCalendarRepeat(task) || task.doneDate === day);
+}
+
+/** A future repeating row is a preview, not the stored completed occurrence. */
+export function canTogglePlannedTask(task: Task, day: string, now = new Date()): boolean {
+  if (isCalendarRepeat(task) && day !== fmtDate(now)) return false;
+  if (task.repeat === 'interval') return day === fmtDate(now) && !(task.nextRepeatAt && task.nextRepeatAt > now.getTime());
+  return true;
 }
 
 /** Capturing a thought does not put it on today's plan. Explicit recurring,
@@ -95,7 +141,8 @@ export function questDeferralReminderAt(task: Task, timeline?: readonly QuestTim
   if (deferral.kind === 'next-zone' || task.zoneId == null) return deferral.startAt;
   // Eligibility begins tomorrow at local midnight, but a zone-bound alarm
   // should ring only when that primary zone actually begins its next interval.
-  return timeline?.find(segment => segment.startAt >= deferral.startAt && segment.zoneId === deferral.targetZoneId)?.startAt;
+  const segment = timeline?.find(segment => segment.endAt > deferral.startAt && segment.zoneId === deferral.targetZoneId);
+  return segment ? Math.max(segment.startAt, deferral.startAt) : undefined;
 }
 
 export function nextTaskReminderAt(task: Task, now = new Date(), timeline?: readonly QuestTimelineSegment[]): number | undefined {

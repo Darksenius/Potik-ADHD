@@ -78,6 +78,28 @@ public class QuestPolicyTest {
         assertTrue(result.tasks.isEmpty());
     }
 
+    @Test public void repeatingSchedUsesTodaysClockButKeepsItsOriginalAnchorDate() {
+        long midnight = QuestPolicy.nextLocalMidnight(NOW, UTC);
+        long tomorrow = midnight + DAY;
+        List<QuestPolicy.Segment> timeline = Collections.singletonList(
+                new QuestPolicy.Segment(0, midnight, tomorrow));
+        QuestPolicy.Task daily = QuestPolicy.Task.builder("daily-sched")
+                .sched("2026-10-14", "09:00").repeat("daily").build();
+        QuestPolicy.Task futureAnchor = QuestPolicy.Task.builder("future-anchor")
+                .sched("2026-10-16", "09:00").repeat("daily").build();
+
+        QuestPolicy.Selection beforeTodayTime = QuestPolicy.select(Collections.singletonList(daily), timeline,
+                tomorrow, midnight + 5 * 60_000L, UTC, 5);
+        QuestPolicy.Selection afterTodayTime = QuestPolicy.select(Collections.singletonList(daily), timeline,
+                tomorrow, midnight + 9 * 60 * 60_000L + 5 * 60_000L, UTC, 5);
+        QuestPolicy.Selection beforeOriginalAnchor = QuestPolicy.select(Collections.singletonList(futureAnchor), timeline,
+                tomorrow, midnight + 9 * 60 * 60_000L + 5 * 60_000L, UTC, 5);
+
+        assertTrue(beforeTodayTime.tasks.isEmpty());
+        assertEquals(Collections.singletonList("daily-sched"), ids(afterTodayTime.tasks));
+        assertTrue(beforeOriginalAnchor.tasks.isEmpty());
+    }
+
     @Test public void expiredTimelineHorizonDoesNotGuessAZoneOrReturnTasks() {
         QuestPolicy.Selection result = QuestPolicy.select(
                 Collections.singletonList(QuestPolicy.Task.builder("free").build()),
@@ -164,9 +186,38 @@ public class QuestPolicyTest {
                 NOW + DAY, NOW + 210 * 60_000L, UTC, 5);
 
         assertTrue(tooEarly.tasks.isEmpty());
-        assertTrue(sameSegmentStartedBeforeDeferral.tasks.isEmpty());
+        assertEquals(Collections.singletonList("bound"), ids(sameSegmentStartedBeforeDeferral.tasks));
         assertEquals(Collections.singletonList("bound"), ids(firstOccurrence.tasks));
         assertEquals(Collections.singletonList("bound"), ids(laterOccurrence.tasks));
+    }
+
+    @Test public void boundNotTodayAllowsAndRemindsAtMidnightInsideMergedZoneSegment() {
+        long midnight = QuestPolicy.nextLocalMidnight(NOW, UTC);
+        long end = NOW + 3 * DAY;
+        List<QuestPolicy.Segment> mergedTimeline = Collections.singletonList(
+                new QuestPolicy.Segment(1, NOW - DAY, end));
+        QuestPolicy.Task alarm = QuestPolicy.Task.builder("bound-alarm").type("alarm").zone(1)
+                .deferral(new QuestPolicy.Deferral(QuestPolicy.DEFERRAL_NOT_TODAY,
+                        NOW, 1, 1, midnight, null)).build();
+
+        QuestPolicy.Selection afterMidnight = QuestPolicy.select(Collections.singletonList(alarm), mergedTimeline,
+                end, midnight + 5 * 60_000L, UTC, 5);
+
+        assertEquals(Collections.singletonList("bound-alarm"), ids(afterMidnight.tasks));
+        assertEquals(midnight, FlowAlarmReceiver.deferredReminderAt(alarm, mergedTimeline));
+    }
+
+    @Test public void boundNotTodayReminderWaitsForTheFirstMatchingSegmentAfterItsStart() {
+        long midnight = QuestPolicy.nextLocalMidnight(NOW, UTC);
+        long segmentStart = midnight + 30 * 60_000L;
+        long end = segmentStart + 60 * 60_000L;
+        QuestPolicy.Task alarm = QuestPolicy.Task.builder("later-bound-alarm").type("alarm").zone(1)
+                .deferral(new QuestPolicy.Deferral(QuestPolicy.DEFERRAL_NOT_TODAY,
+                        NOW, 1, 1, midnight, null)).build();
+        List<QuestPolicy.Segment> timeline = Collections.singletonList(
+                new QuestPolicy.Segment(1, segmentStart, end));
+
+        assertEquals(segmentStart, FlowAlarmReceiver.deferredReminderAt(alarm, timeline));
     }
 
     @Test public void pendingDoneCounterAndDeferralEventsProjectOntoCopies() {

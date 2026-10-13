@@ -20,7 +20,7 @@ export interface TasksSlice {
 
   createTask: (title: string, type: TaskType, zoneId?: number | null, alarmTime?: string) => Task;
   toggleTask: (id: number) => void;
-  setTaskDone: (id: number, done: boolean) => void;
+  setTaskDone: (id: number, done: boolean, completedAt?: number) => void;
   skipTask: (id: number) => void;
   toSomeday: (id: number) => void;
   fromSomeday: (id: number) => void;
@@ -114,11 +114,11 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     get().setTaskDone(id, !t.done);
   },
 
-  setTaskDone: (id, done) => {
+  setTaskDone: (id, done, completedAt) => {
     const t = get().tasks.find((x) => x.id === id);
     if (!t || t.trashed || t.type === 'negative' || t.done === done) return;
     const shouldCredit = done && !t.completionCredited;
-    const now = new Date();
+    const now = new Date(Number.isFinite(completedAt) ? completedAt! : Date.now());
     const completionCredited = done ? true : (t.completionCredited ?? t.done);
     const completionCreditDate = done
       ? (shouldCredit ? fmtDate(now) : t.completionCreditDate)
@@ -133,11 +133,14 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           updated.doneDate = fmtDate(now);
           updated.doneAt = now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' });
           updated.snoozeUntil = 0;
+          updated.completionDeferral = x.questDeferral;
           updated.questDeferral = undefined;
-          updated.nextRepeatAt = x.repeat === 'interval' && x.repeatMs ? Date.now() + x.repeatMs : 0;
+          updated.nextRepeatAt = x.repeat === 'interval' && x.repeatMs ? now.getTime() + x.repeatMs : 0;
         } else {
           updated.doneDate = undefined;
           updated.doneAt = undefined;
+          updated.questDeferral = x.completionDeferral;
+          updated.completionDeferral = undefined;
           updated.nextRepeatAt = 0;
         }
         return updated;
@@ -147,6 +150,10 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     }));
 
     if (shouldCredit) {
+      const day = fmtDate(now);
+      if (day < fmtDate(new Date())) set(s => ({ planDayLog: { ...s.planDayLog,
+        [day]: { ...(s.planDayLog[day] || { focus: [], energy: 0, routineDone: {}, priorities: [], tasksDone: 0 }),
+          tasksDone: (s.planDayLog[day]?.tasksDone || 0) + 1 } } }));
       get().incrementDoneCount();
       get().award(TASK_XP[t.type] ?? 10);
     }
@@ -168,6 +175,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       tasks: s.tasks.map((x) => (x.id === id ? {
         ...x, someday: true, done: false,
         questDeferral: undefined,
+        completionDeferral: undefined,
         completionCredited: x.completionCredited ?? x.done,
         completionCreditDate: (x.completionCredited ?? x.done) ? (x.completionCreditDate || x.doneDate || fmtDate(new Date())) : x.completionCreditDate,
         doneDate: undefined, doneAt: undefined, nextRepeatAt: 0,
@@ -264,7 +272,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const copy: Task = {
       ...JSON.parse(JSON.stringify(t)), id: nid, done: false, completionCredited: false,
       completionCreditDate: undefined, doneDate: undefined, doneAt: undefined, nextRepeatAt: 0, snoozeUntil: 0,
-      questDeferral: undefined,
+      questDeferral: undefined, completionDeferral: undefined,
       completedToday: t.type === 'timewin' ? false : t.completedToday,
       zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
       expanded: false, title: t.title + ' (копія)',
@@ -447,9 +455,12 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
         if (next.type !== t.type || next.zoneId !== t.zoneId || next.planDate !== t.planDate
           || next.repeat !== t.repeat || JSON.stringify(next.repeatDays) !== JSON.stringify(t.repeatDays)
+          || (next.repeat === 'interval' && t.repeat === 'interval'
+            && (next.repeatMs !== t.repeatMs || next.repeatInterval !== t.repeatInterval || next.repeatUnit !== t.repeatUnit))
           || next.schedDate !== t.schedDate || next.schedTime !== t.schedTime
           || next.alarmTime !== t.alarmTime || next.windowStart !== t.windowStart || next.windowEnd !== t.windowEnd) {
           next.questDeferral = undefined;
+          next.completionDeferral = undefined;
         }
 
         return next;
@@ -478,6 +489,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           completedToday: t.type === 'timewin' ? false : t.completedToday,
           zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
           firedSched: false, firedPre: false, alarmFired: false,
+          questDeferral: undefined, completionDeferral: undefined,
         };
         if (t.type === 'sched') { patch.schedDate = day; patch.schedTime = time || t.schedTime; }
         if (t.type === 'alarm' && time) patch.alarmTime = time;
@@ -507,7 +519,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     }
     set(state => ({
       tasks: state.tasks.map(candidate => candidate.id === id
-        ? { ...candidate, questDeferral: deferral, snoozeUntil: 0, firedSched: false, firedPre: false, alarmFired: false }
+        ? { ...candidate, questDeferral: deferral, completionDeferral: undefined, snoozeUntil: 0, firedSched: false, firedPre: false, alarmFired: false }
         : candidate),
       alarmTaskIds: state.alarmTaskIds.filter(taskId => taskId !== id),
       xpPopup: { text: deferral.kind === 'next-zone' ? '⏳ До наступної зони' : '⏳ Не сьогодні', tone: 'muted' },
@@ -521,7 +533,12 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   updateAlarm: (id, time) => {
     const normalized = normalizeTime(time);
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id && !t.trashed && t.type === 'alarm' ? { ...t, alarmTime: normalized || '', alarmFired: false, snoozeUntil: 0 } : t)) }));
+    const alarmTime = normalized || '';
+    set((s) => ({ tasks: s.tasks.map((t) => {
+      if (t.id !== id || t.trashed || t.type !== 'alarm') return t;
+      if ((normalizeTime(t.alarmTime) || '') === alarmTime) return t;
+      return { ...t, alarmTime, alarmFired: false, snoozeUntil: 0, questDeferral: undefined, completionDeferral: undefined };
+    }) }));
   },
 
   removeTag: (id, index) => {

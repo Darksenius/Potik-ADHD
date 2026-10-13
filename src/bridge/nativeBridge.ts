@@ -4,7 +4,7 @@ import { buildForegroundNotifPayload } from './notifPayload';
 import { saveState, saveIsBlocked } from '../services/persistence';
 import { fmtDate } from '../utils/date';
 import { nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
-import { buildQuestTimeline } from '../utils/questPolicy';
+import { buildQuestTimeline, isValidQuestDeferral } from '../utils/questPolicy';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -28,6 +28,7 @@ export interface FlowBridgeNative {
   saveNotif(notifJson: string): void;
   load(): string;
   getEvents(): string;
+  getEventEnvelopes?(): string;
   clearEvents(): void;
   appVersion(): string;
   writeBackup(json: string): void;
@@ -87,6 +88,38 @@ function flowNotif(): FlowNotifPlugin | undefined {
   return typeof window !== 'undefined' ? window.Capacitor?.Plugins.FlowNotif : undefined;
 }
 
+function parseDeferredCommand(event: string, createdAt?: number) {
+  const match = /^task_defer:(\d+):(.*)$/.exec(event);
+  if (!match) return undefined;
+  try {
+    const deferral: unknown = JSON.parse(match[2]);
+    if (!isValidQuestDeferral(deferral) || deferral.startAt < deferral.requestedAt
+      || (Number.isFinite(createdAt) && Math.abs(deferral.requestedAt - createdAt!) > 60000)) return undefined;
+    return { id: match[1], deferral };
+  } catch { return undefined; }
+}
+
+/** Protect unfinished progress before bootstrap's day reset. Commands remain unacknowledged. */
+export function preparePendingNativeDeferrals(): void {
+  const fb = flowBridge();
+  if (!fb?.getEventEnvelopes || saveIsBlocked()) return;
+  try {
+    const events = JSON.parse(fb.getEventEnvelopes());
+    if (!Array.isArray(events)) return;
+    const pending = new Map<string, import('../types').QuestDeferral>();
+    for (const e of events) {
+      if (!e || typeof e.event !== 'string' || !Number.isFinite(e.createdAt)) continue;
+      const command = parseDeferredCommand(e.event, e.createdAt);
+      const task = command && useStore.getState().tasks.find(t => String(t.id) === command.id);
+      if (task && !task.done && !task.trashed && !task.someday
+        && new Date(task.created).getTime() <= e.createdAt) pending.set(command!.id, command!.deferral);
+    }
+    if (pending.size) useStore.setState(s => ({ tasks: s.tasks.map(t => pending.has(String(t.id))
+      ? { ...t, questDeferral: pending.get(String(t.id)), snoozeUntil: 0,
+        firedSched: false, firedPre: false, alarmFired: false } : t) }));
+  } catch { /* The ordinary durable drain retains unreadable commands for retry. */ }
+}
+
 /**
  * Applies native notification commands through the current store actions.
  * The notification capture commands carry an explicit task or note kind.
@@ -107,7 +140,7 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
     const tid = event.slice(10);
     const pt = store.tasks.find((t) => String(t.id) === tid);
     if (pt && belongsToTask(pt) && !pt.done && !pt.trashed && pt.type !== 'negative') {
-      store.setTaskDone(pt.id, true);
+      store.setTaskDone(pt.id, true, createdAt);
       changed = true;
     }
   } else if (event.indexOf('task_skip:') === 0) {
@@ -118,19 +151,11 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
       changed = true;
     }
   } else if (event.indexOf('task_defer:') === 0) {
-    const match = /^task_defer:(\d+):(.*)$/.exec(event);
-    if (!match) return false;
-    const task = store.tasks.find(t => String(t.id) === match[1] && !t.trashed && !t.done);
+    const command = parseDeferredCommand(event, createdAt);
+    if (!command) return false;
+    const task = store.tasks.find(t => String(t.id) === command.id && !t.trashed && !t.done);
     if (!task || !belongsToTask(task)) return false;
-    let deferral: import('../types').QuestDeferral;
-    try { deferral = JSON.parse(match[2]); } catch { return false; }
-    if (!deferral || !['next-zone', 'not-today'].includes(deferral.kind)
-      || !Number.isFinite(deferral.requestedAt) || !Number.isFinite(deferral.startAt)
-      || !Number.isSafeInteger(deferral.sourceZoneId) || deferral.sourceZoneId < 0
-      || !Number.isSafeInteger(deferral.targetZoneId) || deferral.targetZoneId < 0
-      || deferral.startAt < deferral.requestedAt
-      || (Number.isFinite(createdAt) && Math.abs(deferral.requestedAt - createdAt!) > 60000)
-      || (deferral.kind === 'next-zone' && (!Number.isFinite(deferral.endAt) || deferral.endAt! <= deferral.startAt))) return false;
+    const deferral = command.deferral;
     store.deferTask(task.id, deferral.kind, deferral.requestedAt, deferral);
     changed = true;
   } else if (event.indexOf('open_task:') === 0) {
@@ -238,17 +263,20 @@ export function drainNativeEvents(onChanged: () => void): void {
     fp.readEvents().then(res => {
       const events: { id: number; event: string; createdAt: number }[] = JSON.parse(res.events);
       if (!Array.isArray(events) || !events.length || events.some(e => !e || !Number.isSafeInteger(e.id) || e.id <= 0 || typeof e.event !== 'string' || !Number.isFinite(e.createdAt))) return;
+      preparePendingNativeDeferrals();
       const before = useStore.getState();
       try {
         for (const e of events) {
           const task = useStore.getState().tasks.find(t => String(t.id) === e.event.split(':')[1]);
           const staleDay = fmtDate(new Date(e.createdAt)) !== fmtDate(new Date());
           const resetsByDay = !task || !!task.repeat && !['none', 'interval'].includes(task.repeat) || task.type === 'timewin';
-          if (staleDay && (/^rc_/.test(e.event) || resetsByDay && /^(task_done:|task_inc:|task_dec:)/.test(e.event))) {
+          const carriedOccurrence = task?.questDeferral && e.createdAt >= task.questDeferral.requestedAt;
+          if (staleDay && (/^rc_/.test(e.event) || resetsByDay && !carriedOccurrence && /^(task_done:|task_inc:|task_dec:)/.test(e.event))) {
             // A stale toggle must never silently change today's reset routine.
             useStore.getState().addQuickNote('Дія зі сповіщення ' + new Date(e.createdAt).toLocaleString('uk') + ': ' + e.event + (task ? ' · ' + task.title : '') + '. Перевір і застосуй вручну: день уже змінився.', 'impulse');
           } else handleNativeEvent(e.event, e.createdAt);
         }
+        useStore.getState().resetRepeatingTasksFor(new Date());
         if (!saveState(events.map(e => e.id))) {
           useStore.setState(before);
           useStore.getState().showToast('Дію зі сповіщення ще не збережено. Вона лишилася в черзі для повторної спроби.');

@@ -8,7 +8,7 @@ import './styles/organizer.css';
 
 import { useStore } from './state/store';
 import { loadState, saveState, queueSave, checkBackupRecovery, continueWithCurrentState } from './services/persistence';
-import { setupNativeBridge, updateForegroundService } from './bridge/nativeBridge';
+import { preparePendingNativeDeferrals, setupNativeBridge, updateForegroundService } from './bridge/nativeBridge';
 import { checkNotificationPermissionOnBoot, refreshWebNotificationIfGranted } from './services/webNotifications';
 import { fmtDate } from './utils/date';
 import { startAutosave } from './services/autosave';
@@ -25,6 +25,7 @@ function bootstrap() {
   // loadState() тепер повертає saveDate завантажених даних (або null, якщо
   // даних не було) — точний відповідник _loadedSaveDate з оригіналу.
   const loadedSaveDate = loadState();
+  preparePendingNativeDeferrals();
   if (loadedSaveDate !== null) {
     useStore.getState().dailyResetIfNeeded(loadedSaveDate);
   }

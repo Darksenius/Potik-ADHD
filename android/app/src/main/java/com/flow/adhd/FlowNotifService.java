@@ -1041,8 +1041,12 @@ public class FlowNotifService extends Service {
         openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         openIntent.putExtra("nav", "tasks");
         openIntent.putExtra("openTaskId", taskId);
-        int requestCode = (0x6f170000 ^ (taskId == null ? 0 : taskId.hashCode())) & 0x7fffffff;
-        return PendingIntent.getActivity(context, requestCode, openIntent,
+        // Extras do not participate in PendingIntent identity. Include the
+        // full task ID in data so distinct task cards (including colliding
+        // String.hashCode() IDs) keep separate open intents on Android 9+.
+        openIntent.setData(android.net.Uri.parse("flow://task/open/"
+                + android.net.Uri.encode(taskId == null ? "" : taskId)));
+        return PendingIntent.getActivity(context, 0, openIntent,
                 (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0) | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 

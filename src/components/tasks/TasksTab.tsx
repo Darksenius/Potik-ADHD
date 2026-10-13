@@ -3,6 +3,7 @@ import { useStore } from '../../state/store';
 import { useClock } from '../../hooks/useClock';
 import { fmtDate } from '../../utils/date';
 import { getQuestTaskAvailability, buildQuestTimeline, selectQuestTasks } from '../../utils/questPolicy';
+import { taskDisplayPlanDate } from '../../utils/taskSchedule';
 import TaskItem from './TaskItem';
 import TrashSection from './TrashSection';
 
@@ -38,9 +39,15 @@ export default function TasksTab({ all = false }: { all?: boolean }) {
 
   const questCandidates = tasks.filter(t => !t.trashed);
   let filtered = questCandidates;
-  if (all && scope === 'future') filtered = filtered.filter(t => (t.schedDate || t.planDate || '') > today && !t.done);
-  if (all && scope === 'undated') filtered = filtered.filter(t => !t.schedDate && !t.planDate && !t.done && !t.someday);
-  if (all && scope === 'overdue') filtered = filtered.filter(t => !!(t.schedDate || t.planDate) && (t.schedDate || t.planDate)! < today && !t.done && !t.someday);
+  if (all && scope === 'future') filtered = filtered.filter(t => {
+    const displayDate = taskDisplayPlanDate(t, questContext);
+    return !!displayDate && displayDate > today && !t.done;
+  });
+  if (all && scope === 'undated') filtered = filtered.filter(t => !taskDisplayPlanDate(t, questContext) && !t.done && !t.someday);
+  if (all && scope === 'overdue') filtered = filtered.filter(t => {
+    const displayDate = taskDisplayPlanDate(t, questContext);
+    return !!displayDate && displayDate < today && !t.done && !t.someday;
+  });
   if (all && scope === 'someday') filtered = filtered.filter(t => t.someday);
   if (all && scope === 'done') filtered = filtered.filter(t => t.done);
   if (all && taskFilter === 'neg') filtered = filtered.filter(t => t.type === 'negative');

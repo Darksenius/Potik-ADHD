@@ -5,7 +5,9 @@ import type { DateKey } from '../../types';
 import { DayAnalysis, DayJournal } from './DayJournal';
 import DayZones from './DayZones';
 import DayTemplates from './DayTemplates';
-import { isCalendarRepeat, taskDoneOn, taskOccursOn } from '../../utils/taskSchedule';
+import { canTogglePlannedTask, isCalendarRepeat, isDeferredOccurrenceOn, taskDeferredOccurrenceAt, taskDoneOn, taskOccursOn } from '../../utils/taskSchedule';
+import { useTaskProjection } from '../../hooks/useTaskProjection';
+import { questDeferralLabel } from '../../utils/questPolicy';
 import Icon from '../common/Icon';
 
 export default function DayDetail({ ds }: { ds: DateKey }) {
@@ -27,6 +29,8 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
   const openKbdOverlay = useStore((s) => s.openKbdOverlay);
 
   const noteText = planDayLog[ds]?.note || '';
+  const projection = useTaskProjection();
+  const zones = useStore(s => s.zones);
 
   const today = new Date();
   const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -35,7 +39,12 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
   const isRest = dayIsRest(ds);
   const sched = planSchedules[ds] || '';
   const items = planItems[ds] || [];
-  const dayTasks = tasks.filter(t => taskOccursOn(t, ds)).sort((a, b) => (a.schedTime || '').localeCompare(b.schedTime || ''));
+  const displayTime = (t: typeof tasks[number]) => {
+    const at = isDeferredOccurrenceOn(t, ds, projection) ? taskDeferredOccurrenceAt(t, projection) : undefined;
+    return at === undefined ? t.schedTime || t.alarmTime || ''
+      : new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  };
+  const dayTasks = tasks.filter(t => taskOccursOn(t, ds, projection)).sort((a, b) => displayTime(a).localeCompare(displayTime(b)));
 
   return (
     <div className="plan-detail open">
@@ -67,9 +76,11 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
 
       {dayTasks.map((t) => (
         <div className="plan-task-row" key={t.id}>
-          <button disabled={isCalendarRepeat(t) && ds !== todayStr} title={isCalendarRepeat(t) && ds !== todayStr ? 'Виконання повтору позначається в його день' : undefined} aria-label={(t.type === 'negative' ? 'Зафіксувати: ' : taskDoneOn(t, ds) ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (taskDoneOn(t, ds) ? ' on' : '')} onClick={() => toggleTask(t.id)}>{taskDoneOn(t, ds) ? '✓' : ''}</button>
+          <button disabled={!canTogglePlannedTask(t, ds, projection.now)} title={!canTogglePlannedTask(t, ds, projection.now) ? 'Це майбутнє виконання повтору' : undefined} aria-label={(t.type === 'negative' ? 'Зафіксувати: ' : taskDoneOn(t, ds) ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (taskDoneOn(t, ds) ? ' on' : '')} onClick={() => { useStore.getState().resetRepeatingTasksFor(new Date()); toggleTask(t.id); }}>{taskDoneOn(t, ds) ? '✓' : ''}</button>
           <button onClick={() => editTask(t.id)} className="plan-task-nm" style={taskDoneOn(t, ds) ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}{isCalendarRepeat(t) ? ' ↺' : ''}</button>
-          {t.type === 'sched' && t.schedTime && <span style={{ fontSize: 10, color: 'var(--z)', fontFamily: 'monospace' }}>{t.schedTime}</span>}
+          {isDeferredOccurrenceOn(t, ds, projection)
+            ? <span className="plan-task-deferral" title={questDeferralLabel(t, zones)}>Перенесено</span>
+            : t.type === 'sched' && t.schedTime && <span style={{ fontSize: 10, color: 'var(--z)', fontFamily: 'monospace' }}>{t.schedTime}</span>}
           <button aria-label={'У кошик: ' + t.title} className="plan-rm" onClick={() => deleteTask(t.id)}>✕</button>
         </div>
       ))}

@@ -72,7 +72,7 @@ export default function TaskItem({
         <div style={{ flex: 1, minWidth: 0 }}>
           <button className="tt task-title-button" onClick={() => requestEditTask(t.id)}>{t.title}</button>
           <div className="task-schedule-label">
-            {t.someday ? 'Колись' : date ? `${date < fmtDate(new Date()) && !t.done ? 'Прострочено · ' : ''}${new Date(date + 'T12:00:00').toLocaleDateString('uk', { day: 'numeric', month: 'short' })}${t.type === 'sched' && t.schedTime ? ' · ' + t.schedTime : ''}` : 'Без дати'}
+            {t.someday ? 'Колись' : t.questDeferral && !t.done ? deferralStatus : date ? `${date < fmtDate(new Date()) && !t.done ? 'Прострочено · ' : ''}${new Date(date + 'T12:00:00').toLocaleDateString('uk', { day: 'numeric', month: 'short' })}${t.type === 'sched' && t.schedTime ? ' · ' + t.schedTime : ''}` : 'Без дати'}
             {t.snoozeUntil && t.snoozeUntil > Date.now() ? ' · відкладено до ' + new Date(t.snoozeUntil).toLocaleString('uk', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
             {t.type === 'timewin' ? ` · ${t.windowStart}–${t.windowEnd}` : ''}
           </div>
@@ -96,7 +96,6 @@ export default function TaskItem({
         <span className="badge" style={{ background: 'var(--s2)' }}>{TASK_TYPE_LABELS[t.type] || t.type}</span>
         {!!(t.tags || []).length && <span className="badge" style={{ color: 'var(--z)' }}>#{t.tags[0]}</span>}
         {folder && <span className="badge" style={{ background: 'var(--s2)' }} title={folder.nm}>{folder.ico || <Icon name="folder" />}</span>}
-        {allView && deferralStatus && <span className="badge quest-deferral-status" title={deferralStatus}>{deferralStatus}</span>}
         {isNeg && <span className="badge" style={{ background: 'rgba(226,75,74,.12)', color: 'var(--neg)' }}>−{t.negXp || 5} досвіду</span>}
         {showXp && (isNeg ? (
           <span style={{ fontSize: 10, color: 'var(--neg)', fontFamily: "'Space Mono',monospace", flexShrink: 0 }}>−{t.negXp || 5}</span>

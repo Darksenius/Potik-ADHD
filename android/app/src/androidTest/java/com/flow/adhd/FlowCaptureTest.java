@@ -32,6 +32,27 @@ import org.junit.runner.RunWith;
 public class FlowCaptureTest {
     private static final long TIMEOUT_MS = 30000;
 
+    @Test public void collidingTaskIdHashesKeepCardAndActionPendingIntentsDistinct() {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String firstId = "84300921";
+        String secondId = "1348346374";
+        PendingIntent firstOpen = FlowNotifService.openTaskPendingIntent(context, firstId);
+        PendingIntent secondOpen = FlowNotifService.openTaskPendingIntent(context, secondId);
+        PendingIntent firstDone = FlowNotifService.taskAction(context, android.R.drawable.checkbox_on_background,
+                "Виконано", FlowNotifService.ACTION_TASK_DONE, firstId, null, FlowNotifService.NOTIF_TASK_BASE).actionIntent;
+        PendingIntent secondDone = FlowNotifService.taskAction(context, android.R.drawable.checkbox_on_background,
+                "Виконано", FlowNotifService.ACTION_TASK_DONE, secondId, null, FlowNotifService.NOTIF_TASK_BASE).actionIntent;
+        try {
+            assertNotEquals("Different task cards must not share an open token", firstOpen, secondOpen);
+            assertNotEquals("Different task actions must not share a service token", firstDone, secondDone);
+        } finally {
+            firstOpen.cancel();
+            secondOpen.cancel();
+            firstDone.cancel();
+            secondDone.cancel();
+        }
+    }
+
     @Test public void questActionsUseCurrentPayloadAndPruneRemovedTasks() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         FlowBridge bridge = new FlowBridge(context);
@@ -88,15 +109,29 @@ public class FlowCaptureTest {
             JSONObject deferralRow = awaitTaskEventPrefix(bridge, "task_defer:" + removedId + ":");
             String deferralEvent = deferralRow.getString("event");
             JSONObject deferral = new JSONObject(deferralEvent.substring(("task_defer:" + removedId + ":").length()));
-            assertEquals("next-zone", deferral.getString("kind"));
-            assertEquals(1, deferral.getInt("sourceZoneId"));
-            assertEquals(2, deferral.getInt("targetZoneId"));
-            assertTimestampNear("Next-zone request time should match its durable event", deferralRow.getLong("createdAt"),
-                    deferral.getLong("requestedAt"));
-            assertEquals("Next-zone availability starts at the resolved target segment", now + 60 * 60_000L,
-                    deferral.getLong("startAt"));
-            assertEquals("Next-zone availability ends with the resolved target segment", now + 2 * 60 * 60_000L,
-                    deferral.getLong("endAt"));
+            long nextRequestedAt = deferral.getLong("requestedAt");
+            long targetStart = now + 60 * 60_000L;
+            long targetEnd = now + 2 * 60 * 60_000L;
+            assertTimestampNear("Deferral request time should match its durable event", deferralRow.getLong("createdAt"),
+                    nextRequestedAt);
+            SimpleDateFormat localDay = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+            boolean targetIsSameLocalDay = localDay.format(new java.util.Date(nextRequestedAt))
+                    .equals(localDay.format(new java.util.Date(targetStart)));
+            if (targetIsSameLocalDay) {
+                assertEquals("A same-day target segment uses next-zone", "next-zone", deferral.getString("kind"));
+                assertEquals(1, deferral.getInt("sourceZoneId"));
+                assertEquals(2, deferral.getInt("targetZoneId"));
+                assertEquals("Next-zone availability starts at the resolved target segment", targetStart,
+                        deferral.getLong("startAt"));
+                assertEquals("Next-zone availability ends with the resolved target segment", targetEnd,
+                        deferral.getLong("endAt"));
+            } else {
+                assertEquals("A next-day target falls back to not-today", "not-today", deferral.getString("kind"));
+                assertEquals(0, deferral.getInt("targetZoneId"));
+                assertEquals("Unbound fallback begins 23 hours after the actual tap", 23L * 60 * 60_000L,
+                        deferral.getLong("startAt") - nextRequestedAt);
+                assertFalse("Unbound fallback has no end time", deferral.has("endAt"));
+            }
 
             Notification.Action ordinaryNotToday = findServiceAction(ordinary, FlowNotifService.ACTION_TASK_NOT_TODAY);
             ordinaryNotToday.actionIntent.send(context, 0, null);

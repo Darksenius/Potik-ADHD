@@ -316,7 +316,10 @@ final class QuestPolicy {
         }
         if(DEFERRAL_NOT_TODAY.equals(d.kind)) {
             if(d.targetZoneId==0)return 1;
-            return current.zoneId==d.targetZoneId&&current.startAt>=d.startAt?1:-1;
+            // A merged primary-zone segment can begin before local midnight
+            // and continue across the deferral boundary. Once the segment
+            // overlaps startAt, the task is available in its assigned zone.
+            return current.zoneId==d.targetZoneId&&current.endAt>d.startAt?1:-1;
         }
         return 0;
     }
@@ -333,7 +336,16 @@ final class QuestPolicy {
     }
     private static boolean timeGateAllows(Task t,String today,long now,TimeZone zone) {
         if("timewin".equals(t.type)&&!inTimeWindow(t.windowStart,t.windowEnd,now,zone))return false;
-        if("sched".equals(t.type)&&localDateTime(taskPlanDate(t),t.schedTime,zone)>now)return false;
+        if("sched".equals(t.type)) {
+            // A repeating scheduled task keeps its original date as the
+            // recurrence anchor, but its clock gate belongs to today's
+            // occurrence. The anchor's minimum date was already enforced
+            // before repeatDue(), so using it here would make yesterday's
+            // clock time appear due just after midnight while the WebView is
+            // closed.
+            String occurrenceDate=calendarRepeat(t.repeat)?today:taskPlanDate(t);
+            if(localDateTime(occurrenceDate,t.schedTime,zone)>now)return false;
+        }
         if("alarm".equals(t.type)&&localDateTime(today,t.alarmTime,zone)>now)return false;
         return true;
     }

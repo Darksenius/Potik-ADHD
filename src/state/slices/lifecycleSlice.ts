@@ -22,6 +22,8 @@ function resetOccurrence(task: Task, day: string): Task {
     firedSched: false,
     firedPre: false,
     nextRepeatAt: 0,
+    questDeferral: undefined,
+    completionDeferral: undefined,
     counterDay: day,
     ...(task.type === 'timewin' ? { completedToday: false } : {}),
     ...(task.type === 'zonelinked' ? { zoneDoneToday: false } : {}),

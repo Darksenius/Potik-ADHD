@@ -3,8 +3,10 @@ import { getWeekStart } from '../../state/slices/plannerSlice';
 import { fmtDate, WD } from '../../utils/date';
 import { taskOccursOn } from '../../utils/taskSchedule';
 import Icon from '../common/Icon';
+import { useTaskProjection } from '../../hooks/useTaskProjection';
 
 export default function WeekGrid() {
+  const projection = useTaskProjection();
   const weekOffset = useStore((s) => s.planWeekOffset);
   const selectedDay = useStore((s) => s.planSelectedDay);
   const switchDay = useStore((s) => s.setPlanSelectedDay);
@@ -38,7 +40,7 @@ export default function WeekGrid() {
         const isRest = dayIsRest(ds);
         const items = planItems[ds] || [];
         const hasEvents = items.some((it) => it.isEvent);
-        const hasTasks = items.some((it) => !it.isEvent) || tasks.some(t => taskOccursOn(t, ds));
+        const hasTasks = items.some((it) => !it.isEvent) || tasks.some(t => taskOccursOn(t, ds, projection));
         const sched = planSchedules[ds] || '';
         const zc: string[] = [];
         dayBlocks(ds).forEach((b) => {

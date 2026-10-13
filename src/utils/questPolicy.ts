@@ -1,6 +1,6 @@
 import type { PlanDayZoneOverride, QuestDeferral, QuestDeferralKind, QuestTimelineSegment, Task, Zone } from '../types';
 import { addDaysDs, fmtDate, localDateTimeMs, normalizeTime, toMinutes } from './date';
-import { isTaskInInbox, isTaskInTimeWindow, repeatDueOn, taskPlanDate } from './taskSchedule';
+import { isCalendarRepeat, isTaskInInbox, isTaskInTimeWindow, repeatDueOn, taskPlanDate } from './taskSchedule';
 
 export type { QuestDeferral, QuestDeferralKind, QuestTimelineSegment } from '../types';
 
@@ -85,7 +85,7 @@ function dayRanges(input: QuestTimelineInput, day: string): ZoneRange[] {
   });
   input.dayBlocks(day).forEach(block => {
     const zone = input.zones.find(candidate => candidate.id === block.zoneId);
-    if (!zone) return;
+    if (!zone || zone.off) return;
     const range = timeRange(block.s, block.e);
     if (range) ranges.push({ zoneId: zone.id, ...range, priority: (zone.prio || 1) + 10, order: order++ });
   });
@@ -182,11 +182,12 @@ function deferralAllowsTask(task: Task, context: QuestContext, current?: QuestTi
   // An unbound task becomes universal after 23 hours. A linked task remains
   // deferred until its own zone next becomes primary, including later returns.
   if (task.zoneId == null) return { eligible: true, currentZoneId };
-  if (currentZoneId === deferral.targetZoneId && !!current && current.startAt >= deferral.startAt) {
+  if (currentZoneId === deferral.targetZoneId && !!current) {
     return { eligible: true, currentZoneId };
   }
-  const targetSegment = context.timeline.find(segment => segment.startAt >= Math.max(nowMs, deferral.startAt) && segment.zoneId === deferral.targetZoneId);
-  return { eligible: false, reason: 'wrong-zone', currentZoneId, availableAt: targetSegment?.startAt };
+  const targetSegment = context.timeline.find(segment => segment.endAt > Math.max(nowMs, deferral.startAt) && segment.zoneId === deferral.targetZoneId);
+  return { eligible: false, reason: 'wrong-zone', currentZoneId,
+    availableAt: targetSegment ? Math.max(targetSegment.startAt, deferral.startAt) : undefined };
 }
 
 function isDoneForCurrentOccurrence(task: Task, now: Date): boolean {
@@ -219,7 +220,7 @@ function baseAvailability(task: Task, context: QuestContext, currentZoneId: numb
   }
 
   if (task.type === 'sched' && task.schedTime) {
-    const due = localDateTimeMs(taskPlanDate(task), normalizeTime(task.schedTime));
+    const due = localDateTimeMs(isCalendarRepeat(task) ? today : taskPlanDate(task), normalizeTime(task.schedTime));
     if (due !== undefined && due > nowMs) return { eligible: false, reason: 'not-due', currentZoneId, availableAt: due };
   }
   if (task.type === 'alarm' && task.alarmTime) {

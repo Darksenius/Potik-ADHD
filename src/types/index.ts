@@ -123,6 +123,8 @@ export interface Task {
   negXp?: number;         // тільки 'negative' — скільки XP віднімається за клік
   /** Temporary quest-panel deferral; never rewrites planDate or recurrence. */
   questDeferral?: QuestDeferral;
+  /** Deferral archived while done so undo can restore the same pending occurrence. */
+  completionDeferral?: QuestDeferral;
 
   // Optional details shared by all task types
   note?: string;
