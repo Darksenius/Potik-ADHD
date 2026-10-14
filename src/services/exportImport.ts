@@ -13,11 +13,10 @@ export function exportBackupFile(): void {
   const fb = flowBridge();
   if (fb) {
     try {
-      fb.exportTxt(fname, json);
-      return;
-    } catch {
-      /* fallback нижче */
-    }
+      if (fb.exportTxt(fname, json) !== false) return;
+    } catch { /* Report a native failure; WebView downloads are not supported. */ }
+    useStore.getState().showToast('Android не зміг зберегти файл експорту. Спробуй ще раз.');
+    return;
   }
   downloadBlob(json, fname, 'application/json;charset=utf-8');
 }
@@ -160,11 +159,10 @@ export function exportReadableFile(): void {
   const fb = flowBridge();
   if (fb) {
     try {
-      fb.exportTxt(fname, md);
-      return;
-    } catch {
-      /* fallback нижче */
-    }
+      if (fb.exportTxt(fname, md) !== false) return;
+    } catch { /* Report a native failure; WebView downloads are not supported. */ }
+    useStore.getState().showToast('Android не зміг зберегти файл експорту. Спробуй ще раз.');
+    return;
   }
   downloadBlob(md, fname, 'text/markdown;charset=utf-8');
 }
@@ -200,6 +198,39 @@ export function mergeState(raw: unknown): number {
   const zoneMap: Record<number, number> = {};
   const taskMap: Record<number, number> = {};
   const tplMap: Record<string, string> = {};
+  const retainedZoneIds = new Set<number>();
+  const retainZoneId = (value: unknown) => {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) retainedZoneIds.add(value);
+  };
+  s.zones.forEach(zone => retainZoneId(zone.id));
+  s.tasks.forEach(task => {
+    retainZoneId(task.zoneId);
+    retainZoneId(task.questDeferral?.sourceZoneId);
+    retainZoneId(task.questDeferral?.targetZoneId);
+    retainZoneId(task.completionDeferral?.sourceZoneId);
+    retainZoneId(task.completionDeferral?.targetZoneId);
+  });
+  Object.values(s.planDayZones || {}).forEach(blocks => blocks.forEach(block => retainZoneId(block.zoneId)));
+  Object.values(s.planDayOff || {}).forEach(ids => ids.forEach(retainZoneId));
+  s.dayTemplates.forEach(template => template.blocks.forEach(block => retainZoneId(block.zoneId)));
+  retainZoneId(s.lastZoneId);
+  d.zones?.forEach(zone => retainZoneId(zone.id));
+  d.tasks?.forEach(task => {
+    retainZoneId(task.zoneId);
+    retainZoneId(task.questDeferral?.sourceZoneId);
+    retainZoneId(task.questDeferral?.targetZoneId);
+    retainZoneId(task.completionDeferral?.sourceZoneId);
+    retainZoneId(task.completionDeferral?.targetZoneId);
+  });
+  Object.values(d.planDayZones || {}).forEach(blocks => blocks.forEach(block => retainZoneId(block.zoneId)));
+  Object.values(d.planDayOff || {}).forEach(ids => ids.forEach(retainZoneId));
+  d.dayTemplates?.forEach(template => template.blocks.forEach(block => retainZoneId(block.zoneId)));
+  const allocateZoneId = () => {
+    let id = 1;
+    while (retainedZoneIds.has(id)) id++;
+    retainedZoneIds.add(id);
+    return id;
+  };
 
   const zones: Zone[] = s.zones.slice();
   if (Array.isArray(d.zones)) {
@@ -211,13 +242,24 @@ export function mergeState(raw: unknown): number {
         return;
       }
       const nz: Zone = JSON.parse(JSON.stringify(z));
-      nz.id = zones.reduce((m, x) => Math.max(m, x.id || 0), 0) + 1;
+      nz.id = allocateZoneId();
       zoneMap[z.id] = nz.id;
       zones.push(nz);
       added++;
     });
   }
   const zid = (old: number | null | undefined): number | null | undefined => (old != null && zoneMap[old] !== undefined ? zoneMap[old] : old);
+  const remapDeferral = (value: Task['questDeferral']) => value ? {
+    ...value,
+    sourceZoneId: zid(value.sourceZoneId) ?? value.sourceZoneId,
+    targetZoneId: zid(value.targetZoneId) ?? value.targetZoneId,
+  } : undefined;
+  const remapTaskZones = (task: Task): Task => ({
+    ...task,
+    zoneId: task.zoneId == null ? task.zoneId : (zid(task.zoneId) ?? task.zoneId),
+    questDeferral: remapDeferral(task.questDeferral),
+    completionDeferral: remapDeferral(task.completionDeferral),
+  });
 
   const folders: Folder[] = s.folders.slice();
   if (Array.isArray(d.folders)) {
@@ -234,16 +276,16 @@ export function mergeState(raw: unknown): number {
   if (Array.isArray(d.tasks)) {
     d.tasks.forEach((t) => {
       if (!t || !t.title) return;
-      const ex = tasks.find(x => { const { id: _oldId, ...a } = x; const { id: _newId, ...b } = t; return sameBackupValue(a, { ...b, zoneId: zid(t.zoneId) ?? t.zoneId }); });
+      const remapped = remapTaskZones(t);
+      const ex = tasks.find(x => { const { id: _oldId, ...a } = x; const { id: _newId, ...b } = remapped; return sameBackupValue(a, b); });
       if (ex) {
         if (t.id !== undefined) taskMap[t.id] = ex.id;
         return;
       }
-      const nt: Task = JSON.parse(JSON.stringify(t));
+      const nt: Task = JSON.parse(JSON.stringify(remapped));
       if (t.id !== undefined) taskMap[t.id] = nid;
       nt.id = nid++;
       // Preserve trash and completion status from the validated file.
-      if (nt.zoneId) nt.zoneId = zid(nt.zoneId) ?? null;
       tasks.push(nt);
       added++;
     });

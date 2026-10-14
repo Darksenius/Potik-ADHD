@@ -33,6 +33,14 @@ export function normalizeTime(value: string | null | undefined): string | undefi
   return match[1].padStart(2, '0') + ':' + match[2];
 }
 
+/** Zones are half-open ranges within one day; midnight is the end of that day. */
+export function normalizeDayRange(start: string, end: string): { s: string; e: string } | undefined {
+  const s = normalizeTime(start);
+  const e = end === '24:00' || end === '00:00' ? '24:00' : normalizeTime(end);
+  if (!s || !e || toMinutes(s) >= toMinutes(e)) return undefined;
+  return { s, e };
+}
+
 export function isDateKey(value: string | null | undefined): value is string {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(value + 'T12:00:00');

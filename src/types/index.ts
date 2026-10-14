@@ -367,6 +367,11 @@ export type NotifQuestTask = Task & { priorityIndex: number };
 
 export type NotifQuestTimelineItem = QuestTimelineSegment;
 
+export interface NotifQuestWallDay {
+  date: DateKey;
+  segments: { zoneId: number; startMinute: number; endMinute: number }[];
+}
+
 export interface NotifRoutineListItem {
   id: string;
   nm: string;
@@ -415,6 +420,7 @@ export interface ForegroundNotifPayload {
   taskList: NotifTaskListItem[];
   questTasks: NotifQuestTask[];
   questTimeline: NotifQuestTimelineItem[];
+  questWallDays: NotifQuestWallDay[];
   questTimelineUntil: number;
   questZones: { id: number; nm: string; desc: string; color: string }[];
   routine: string;

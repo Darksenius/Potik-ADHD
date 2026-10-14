@@ -17,6 +17,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
 
 /** Shared native projection and eligibility rules for the foreground quest cards. */
 final class QuestPolicy {
@@ -24,6 +26,7 @@ final class QuestPolicy {
     static final String DEFERRAL_NEXT_ZONE = "next-zone";
     static final String DEFERRAL_NOT_TODAY = "not-today";
     private static final long MINUTE_MS = 60_000L;
+    private static volatile WallTimelineCache cachedWallTimeline;
 
     private QuestPolicy() {}
 
@@ -82,7 +85,9 @@ final class QuestPolicy {
         int counterTarget;
         int counterStep = 1;
         long nextRepeatAt;
+        long repeatMs;
         long snoozeUntil;
+        int remindBeforeMinutes;
         boolean hasZone;
         boolean done;
         boolean trashed;
@@ -92,6 +97,7 @@ final class QuestPolicy {
         boolean counterEnabled;
         boolean reminderEnabled = true;
         boolean firedSched;
+        boolean firedPre;
         boolean alarmFired;
         boolean[] repeatDays = new boolean[7];
         Deferral deferral;
@@ -104,10 +110,11 @@ final class QuestPolicy {
             c.planDate=planDate; c.schedDate=schedDate; c.schedTime=schedTime; c.alarmTime=alarmTime;
             c.windowStart=windowStart; c.windowEnd=windowEnd; c.zoneOccurrenceKey=zoneOccurrenceKey;
             c.counterUnit=counterUnit; c.counterDay=counterDay; c.zoneId=zoneId; c.priorityIndex=priorityIndex; c.counter=counter;
-            c.counterTarget=counterTarget; c.counterStep=counterStep; c.nextRepeatAt=nextRepeatAt;
+            c.counterTarget=counterTarget; c.counterStep=counterStep; c.repeatMs=repeatMs; c.nextRepeatAt=nextRepeatAt;
             c.snoozeUntil=snoozeUntil; c.hasZone=hasZone; c.done=done; c.trashed=trashed; c.someday=someday;
             c.completedToday=completedToday; c.zoneDoneToday=zoneDoneToday; c.counterEnabled=counterEnabled;
             c.reminderEnabled=reminderEnabled; c.firedSched=firedSched; c.alarmFired=alarmFired;
+            c.remindBeforeMinutes=remindBeforeMinutes; c.firedPre=firedPre;
             c.repeatDays=repeatDays.clone(); c.deferral=deferral;
             return c;
         }
@@ -125,13 +132,16 @@ final class QuestPolicy {
             t.counterUnit=row.optString("counterUnit", "count"); t.counterDay=row.optString("counterDay", ""); t.zoneId=row.optInt("zoneId", 0);
             t.hasZone=!row.isNull("zoneId") && t.zoneId>0; t.priorityIndex=row.optInt("priorityIndex", -1);
             t.counter=Math.max(0, row.optInt("counter", 0)); t.counterTarget=Math.max(0, row.optInt("counterTarget", 0));
-            t.counterStep=Math.max(1, row.optInt("counterStep", 1)); t.nextRepeatAt=row.optLong("nextRepeatAt", 0L);
+            t.counterStep=Math.max(1, row.optInt("counterStep", 1)); t.repeatMs=Math.max(0L, row.optLong("repeatMs", 0L));
+            t.nextRepeatAt=row.optLong("nextRepeatAt", 0L);
             t.snoozeUntil=row.optLong("snoozeUntil", 0L); t.done=row.optBoolean("done", false);
             t.trashed=row.optBoolean("trashed", false); t.someday=row.optBoolean("someday", false);
             t.completedToday=row.optBoolean("completedToday", false); t.zoneDoneToday=row.optBoolean("zoneDoneToday", false);
             t.counterEnabled="counter".equals(t.type) || row.optBoolean("counterEnabled", false);
             t.reminderEnabled=!row.has("reminderEnabled")||row.optBoolean("reminderEnabled", true);
             t.firedSched=row.optBoolean("firedSched", false); t.alarmFired=row.optBoolean("alarmFired", false);
+            t.firedPre=row.optBoolean("firedPre", false);
+            t.remindBeforeMinutes=Math.max(0,row.optInt("remindBeforeMinutes", 0));
             JSONArray days=row.optJSONArray("repeatDays");
             if(days!=null) for(int i=0;i<Math.min(7,days.length());i++) t.repeatDays[i]=days.optBoolean(i,false);
             JSONObject d=row.optJSONObject("questDeferral"); if(d!=null) t.deferral=deferralFromJson(d);
@@ -153,6 +163,7 @@ final class QuestPolicy {
         Builder repeat(String v) { task.repeat=v; return this; }
         Builder repeatDays(boolean... v) { task.repeatDays=new boolean[7]; System.arraycopy(v,0,task.repeatDays,0,Math.min(v.length,7)); return this; }
         Builder nextRepeatAt(long v) { task.nextRepeatAt=v; return this; }
+        Builder repeatMs(long v) { task.repeatMs=v; return this; }
         Builder created(String v) { task.created=v; return this; }
         Builder counter(int v,int target) { task.type="counter"; task.counterEnabled=true; task.counter=v; task.counterTarget=target; return this; }
         Builder deferral(Deferral v) { task.deferral=v; return this; }
@@ -198,6 +209,183 @@ final class QuestPolicy {
         List<Segment> result=new ArrayList<>(); if(rows==null)return result;
         for(int i=0;i<rows.length();i++){ JSONObject r=rows.optJSONObject(i); if(r==null)continue; long a=r.optLong("startAt",0L),b=r.optLong("endAt",0L); if(a>0&&b>a)result.add(new Segment(r.optInt("zoneId",0),a,b)); }
         Collections.sort(result,Comparator.comparingLong(s->s.startAt)); return result;
+    }
+
+    /** Rebuild absolute segments from resolved local wall-clock profiles. */
+    static List<Segment> timelineFromWallDays(JSONArray rows, TimeZone zone) {
+        if (rows == null || zone == null) return Collections.emptyList();
+        String source = rows.toString();
+        long now = System.currentTimeMillis();
+        long horizonStart = now - 2L * 24L * 60L * MINUTE_MS;
+        long horizonEnd = now + 36L * 24L * 60L * MINUTE_MS;
+        String zoneKey = zone.getID() + ":" + zone.getOffset(horizonStart) + ":"
+                + zone.getOffset(now) + ":" + zone.getOffset(horizonEnd);
+        WallTimelineCache cached = cachedWallTimeline;
+        if (cached != null && cached.source.equals(source) && cached.zoneKey.equals(zoneKey)) return cached.timeline;
+        synchronized (QuestPolicy.class) {
+            cached = cachedWallTimeline;
+            if (cached != null && cached.source.equals(source) && cached.zoneKey.equals(zoneKey)) return cached.timeline;
+            List<Segment> built = buildTimelineFromWallDays(rows, zone);
+            List<Segment> immutable = Collections.unmodifiableList(built);
+            cachedWallTimeline = new WallTimelineCache(source, zoneKey, immutable);
+            return immutable;
+        }
+    }
+
+    private static List<Segment> buildTimelineFromWallDays(JSONArray rows, TimeZone zone) {
+        List<WallDay> days = new ArrayList<>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject day = rows.optJSONObject(i);
+            if (day == null) continue;
+            String date = day.optString("date", "");
+            if (parseDate(date, zone) == null) continue;
+            JSONArray segments = day.optJSONArray("segments");
+            if (segments == null) continue;
+            List<WallRange> ranges = new ArrayList<>();
+            for (int j = 0; j < segments.length(); j++) {
+                JSONObject segment = segments.optJSONObject(j);
+                if (segment == null) continue;
+                int start = segment.optInt("startMinute", -1);
+                int end = segment.optInt("endMinute", -1);
+                if (start < 0 || start >= 1440 || end <= start || end > 1440) continue;
+                ranges.add(new WallRange(segment.optInt("zoneId", 0), start, end));
+            }
+            days.add(new WallDay(date, ranges));
+        }
+        return buildTimelineFromWallDays(days, zone);
+    }
+
+    /** Pure wall-profile entry point used by JVM tests; ranges are already resolved by JS. */
+    static List<Segment> timelineFromWallProfile(List<WallDay> days, TimeZone zone) {
+        if (days == null || zone == null) return Collections.emptyList();
+        return buildTimelineFromWallDays(days, zone);
+    }
+
+    private static List<Segment> buildTimelineFromWallDays(List<WallDay> days, TimeZone zone) {
+        List<Segment> result = new ArrayList<>();
+        List<WallDay> orderedDays = new ArrayList<>(days);
+        Collections.sort(orderedDays, Comparator.comparing(d -> d.date));
+        for (WallDay day : orderedDays) {
+            Calendar start = parseDate(day.date, zone);
+            if (start == null) continue;
+            Calendar end = (Calendar) start.clone();
+            end.add(Calendar.DAY_OF_YEAR, 1);
+            long cursor = start.getTimeInMillis();
+            long dayEnd = end.getTimeInMillis();
+            List<WallRange> ranges = day.ranges;
+            if (dayEnd - cursor == 24L * 60L * MINUTE_MS) {
+                for (WallRange range : ranges) {
+                    long from = wallMinuteInstant(start, dayEnd, range.start);
+                    long to = range.end == 1440 ? dayEnd : wallMinuteInstant(start, dayEnd, range.end);
+                    appendSegment(result, range.zoneId, from, to);
+                }
+                continue;
+            }
+            while (cursor < dayEnd) {
+                Calendar local = Calendar.getInstance(zone, Locale.US);
+                local.setTimeInMillis(cursor);
+                int minute = local.get(Calendar.HOUR_OF_DAY) * 60 + local.get(Calendar.MINUTE);
+                int zoneId = wallZoneAt(ranges, minute);
+                long next = Math.min(cursor + MINUTE_MS, dayEnd);
+                appendSegment(result, zoneId, cursor, next);
+                cursor = next;
+            }
+        }
+        return result;
+    }
+
+    private static long wallMinuteInstant(Calendar dayStart, long dayEnd, int minute) {
+        if (minute >= 1440) return dayEnd;
+        Calendar value = (Calendar) dayStart.clone();
+        value.set(Calendar.HOUR_OF_DAY, minute / 60);
+        value.set(Calendar.MINUTE, minute % 60);
+        value.set(Calendar.SECOND, 0);
+        value.set(Calendar.MILLISECOND, 0);
+        return value.getTimeInMillis();
+    }
+
+    private static final class WallTimelineCache {
+        final String source, zoneKey;
+        final List<Segment> timeline;
+        WallTimelineCache(String source, String zoneKey, List<Segment> timeline) {
+            this.source=source; this.zoneKey=zoneKey; this.timeline=timeline;
+        }
+    }
+
+    /** Prefer wall-clock profiles when present; old snapshots keep their epoch timeline. */
+    static List<Segment> timelineForSnapshot(JSONObject snapshot, TimeZone zone) {
+        if (snapshot == null) return Collections.emptyList();
+        JSONArray wallDays = snapshot.optJSONArray("questWallDays");
+        return wallDays == null ? timelineFromJson(snapshot.optJSONArray("questTimeline"))
+                : timelineFromWallDays(wallDays, zone);
+    }
+
+    static long timelineUntil(JSONObject snapshot, List<Segment> timeline) {
+        if (snapshot != null && snapshot.optJSONArray("questWallDays") == null)
+            return snapshot.optLong("questTimelineUntil", 0L);
+        return timeline == null || timeline.isEmpty() ? 0L : timeline.get(timeline.size() - 1).endAt;
+    }
+
+    /** Stable identity for a task action in one local day/primary-zone occurrence. */
+    static String actionGeneration(Task task, List<Segment> timeline, long now, TimeZone zone) {
+        if (task == null) return "";
+        Segment current = segmentAt(timeline, now);
+        StringBuilder value = new StringBuilder(256);
+        appendIdentity(value, task.id); appendIdentity(value, task.created); appendIdentity(value, task.type);
+        appendIdentity(value, task.planDate); appendIdentity(value, task.schedDate);
+        appendIdentity(value, task.schedTime); appendIdentity(value, task.alarmTime);
+        appendIdentity(value, task.repeat); appendIdentity(value, task.zoneId + ":" + task.hasZone);
+        appendIdentity(value, task.repeatMs + ":" + task.nextRepeatAt + ":" + task.snoozeUntil);
+        appendIdentity(value, task.reminderEnabled + ":" + task.remindBeforeMinutes);
+        for (boolean day : task.repeatDays) appendIdentity(value, day ? "1" : "0");
+        appendIdentity(value, task.deferral == null ? "" : task.deferral.toJson());
+        appendIdentity(value, localDate(now, zone));
+        appendIdentity(value, current == null ? "no-segment"
+                : current.zoneId + ":" + current.startAt + ":" + current.endAt);
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte b : digest) hex.append(String.format(Locale.US, "%02x", b & 0xff));
+            return hex.toString();
+        } catch (Exception unavailable) {
+            return Integer.toHexString(value.toString().hashCode());
+        }
+    }
+
+    private static void appendIdentity(StringBuilder out, String value) {
+        out.append(value == null ? "" : value).append('\u0000');
+    }
+
+    static final class WallDay {
+        final String date;
+        final List<WallRange> ranges;
+        WallDay(String date, List<WallRange> ranges) {
+            this.date = date;
+            this.ranges = ranges == null ? Collections.<WallRange>emptyList() : new ArrayList<>(ranges);
+        }
+    }
+
+    static final class WallRange {
+        final int zoneId, start, end;
+        WallRange(int zoneId, int start, int end) { this.zoneId=zoneId; this.start=start; this.end=end; }
+    }
+
+    private static int wallZoneAt(List<WallRange> ranges, int minute) {
+        if (ranges != null) for (WallRange range : ranges)
+            if (minute >= range.start && minute < range.end) return range.zoneId;
+        return 0;
+    }
+
+    private static void appendSegment(List<Segment> result, int zoneId, long start, long end) {
+        if (end <= start) return;
+        if (!result.isEmpty()) {
+            Segment previous = result.get(result.size() - 1);
+            if (previous.zoneId == zoneId && previous.endAt == start) {
+                result.set(result.size() - 1, new Segment(zoneId, previous.startAt, end));
+                return;
+            }
+        }
+        result.add(new Segment(zoneId, start, end));
     }
     static List<Event> eventsFromJson(JSONArray rows) {
         List<Event> result=new ArrayList<>(); if(rows==null)return result;
@@ -258,8 +446,16 @@ final class QuestPolicy {
                 case Event.DONE:
                     if(!completionApplies(t,e.createdAt,now,timeline,zone))break;
                     t.done=true;t.doneDate=localDate(e.createdAt,zone);
+                    t.snoozeUntil=0L;t.deferral=null;
                     if("timewin".equals(t.type))t.completedToday=sameLocalDate(e.createdAt,now,zone);
-                    if("zonelinked".equals(t.type))t.zoneDoneToday=sameLocalDate(e.createdAt,now,zone);
+                    if("zonelinked".equals(t.type)){
+                        t.zoneDoneToday=sameLocalDate(e.createdAt,now,zone);
+                        t.zoneOccurrenceKey=occurrenceKey(t.zoneId,segmentAt(timeline,e.createdAt),e.createdAt,zone);
+                    }
+                    if("everyzone".equals(t.repeat))
+                        t.zoneOccurrenceKey=occurrenceKey(t.zoneId,segmentAt(timeline,e.createdAt),e.createdAt,zone);
+                    if("interval".equals(t.repeat)&&t.repeatMs>0L&&e.createdAt<=Long.MAX_VALUE-t.repeatMs)
+                        t.nextRepeatAt=e.createdAt+t.repeatMs;
                     break;
                 // Legacy task_skip entries came from the old 15-minute action.
                 // Interpret them as the current "Не зараз" contract instead.
@@ -368,7 +564,7 @@ final class QuestPolicy {
         }
     }
 
-    private static boolean isCurrentlyDone(Task t,long now,List<Segment> timeline,TimeZone zone) {
+    static boolean isCurrentlyDone(Task t,long now,List<Segment> timeline,TimeZone zone) {
         String today=localDate(now,zone);
         String creditDate=t.doneDate.isEmpty()?t.completionCreditDate:t.doneDate;
         if("timewin".equals(t.type)&&t.completedToday&&(creditDate.isEmpty()||today.equals(creditDate)))return true;
@@ -384,7 +580,8 @@ final class QuestPolicy {
         // everyzone is reset by the app lifecycle when its next occurrence is materialized.
         return true;
     }
-    private static boolean completionApplies(Task t,long eventAt,long now,List<Segment> timeline,TimeZone zone) {
+    static boolean completionApplies(Task t,long eventAt,long now,List<Segment> timeline,TimeZone zone) {
+        if(t.done&&"interval".equals(t.repeat)&&t.nextRepeatAt>0&&eventAt<t.nextRepeatAt)return false;
         if(calendarRepeat(t.repeat))return sameLocalDate(eventAt,now,zone);
         if("everyzone".equals(t.repeat)||"zonelinked".equals(t.type)){
             if(!sameLocalDate(eventAt,now,zone))return false;Segment a=segmentAt(timeline,eventAt),b=segmentAt(timeline,now);
@@ -413,13 +610,13 @@ final class QuestPolicy {
     private static boolean calendarRepeat(String r){return "daily".equals(r)||"weekly".equals(r)||"weekdays".equals(r)||"weekend".equals(r)||"custom".equals(r);}
     private static boolean isCounter(Task t){return t!=null&&!"negative".equals(t.type)&&("counter".equals(t.type)||t.counterEnabled);}
     private static boolean isCalendarCounter(Task t){return isCounter(t)&&calendarRepeat(t.repeat);}
-    private static String taskPlanDate(Task t){if("sched".equals(t.type)&&validDate(t.schedDate))return t.schedDate;return validDate(t.planDate)?t.planDate:null;}
+    static String taskPlanDate(Task t){if("sched".equals(t.type)&&validDate(t.schedDate))return t.schedDate;return validDate(t.planDate)?t.planDate:null;}
     private static boolean validDate(String d){return parseDate(d,TimeZone.getDefault())!=null;}
     private static Calendar parseDate(String d,TimeZone zone){if(d==null||!d.matches("\\d{4}-\\d{2}-\\d{2}"))return null;try{Calendar c=Calendar.getInstance(zone==null?TimeZone.getDefault():zone,Locale.US);c.clear();c.setLenient(false);c.set(Integer.parseInt(d.substring(0,4)),Integer.parseInt(d.substring(5,7))-1,Integer.parseInt(d.substring(8,10)),0,0,0);c.getTimeInMillis();return c;}catch(Exception ignored){return null;}}
-    private static String createdLocalDate(String created,TimeZone zone){Calendar c=parseCreated(created,zone);return c==null?null:String.format(Locale.US,"%04d-%02d-%02d",c.get(Calendar.YEAR),c.get(Calendar.MONTH)+1,c.get(Calendar.DAY_OF_MONTH));}
+    static String createdLocalDate(String created,TimeZone zone){Calendar c=parseCreated(created,zone);return c==null?null:String.format(Locale.US,"%04d-%02d-%02d",c.get(Calendar.YEAR),c.get(Calendar.MONTH)+1,c.get(Calendar.DAY_OF_MONTH));}
     private static Calendar parseCreated(String created,TimeZone zone){long at=parseCreatedAt(created);if(at<=0)return null;Calendar c=Calendar.getInstance(zone==null?TimeZone.getDefault():zone,Locale.US);c.setTimeInMillis(at);return c;}
     private static long parseCreatedAt(String created){if(created==null||created.isEmpty())return 0;String[] patterns={"yyyy-MM-dd'T'HH:mm:ss.SSSX","yyyy-MM-dd'T'HH:mm:ssX"};for(String p:patterns){try{SimpleDateFormat f=new SimpleDateFormat(p,Locale.US);f.setLenient(false);f.setTimeZone(TimeZone.getTimeZone("UTC"));Date d=f.parse(created);if(d!=null)return d.getTime();}catch(ParseException ignored){}}return 0;}
-    private static long localDateTime(String date,String hm,TimeZone zone){Calendar c=parseDate(date,zone);int[] t=parseTime(hm);if(c==null||t==null)return Long.MIN_VALUE;c.set(Calendar.HOUR_OF_DAY,t[0]);c.set(Calendar.MINUTE,t[1]);return c.getTimeInMillis();}
+    static long localDateTime(String date,String hm,TimeZone zone){Calendar c=parseDate(date,zone);int[] t=parseTime(hm);if(c==null||t==null)return Long.MIN_VALUE;c.set(Calendar.HOUR_OF_DAY,t[0]);c.set(Calendar.MINUTE,t[1]);return c.getTimeInMillis();}
     private static int[] parseTime(String text){if(text==null||!text.matches("\\d{2}:\\d{2}"))return null;try{int h=Integer.parseInt(text.substring(0,2)),m=Integer.parseInt(text.substring(3,5));return h<=23&&m<=59?new int[]{h,m}:null;}catch(Exception ignored){return null;}}
     private static boolean inTimeWindow(String start,String end,long now,TimeZone zone){int[] a=parseTime(start),b=parseTime(end);if(a==null||b==null)return true;Calendar c=Calendar.getInstance(zone,Locale.US);c.setTimeInMillis(now);int m=c.get(Calendar.HOUR_OF_DAY)*60+c.get(Calendar.MINUTE),from=a[0]*60+a[1],to=b[0]*60+b[1];return from<=to?m>=from&&m<=to:m>=from||m<=to;}
     private static String occurrenceKey(int zoneId,Segment segment,long now,TimeZone zone){if(segment==null||zoneId<=0||segment.zoneId!=zoneId)return "";Calendar c=Calendar.getInstance(zone,Locale.US);c.setTimeInMillis(segment.startAt);return localDate(now,zone)+":"+zoneId+":"+String.format(Locale.US,"%02d:%02d",c.get(Calendar.HOUR_OF_DAY),c.get(Calendar.MINUTE));}

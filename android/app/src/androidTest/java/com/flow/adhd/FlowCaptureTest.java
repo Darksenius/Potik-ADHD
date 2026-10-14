@@ -42,14 +42,24 @@ public class FlowCaptureTest {
                 "Виконано", FlowNotifService.ACTION_TASK_DONE, firstId, null, FlowNotifService.NOTIF_TASK_BASE).actionIntent;
         PendingIntent secondDone = FlowNotifService.taskAction(context, android.R.drawable.checkbox_on_background,
                 "Виконано", FlowNotifService.ACTION_TASK_DONE, secondId, null, FlowNotifService.NOTIF_TASK_BASE).actionIntent;
+        PendingIntent oldCardDone = FlowNotifService.taskAction(context, android.R.drawable.checkbox_on_background,
+                "Виконано", FlowNotifService.ACTION_TASK_DONE, firstId, null, FlowNotifService.NOTIF_TASK_BASE,
+                "generation-old").actionIntent;
+        PendingIntent refreshedCardDone = FlowNotifService.taskAction(context, android.R.drawable.checkbox_on_background,
+                "Виконано", FlowNotifService.ACTION_TASK_DONE, firstId, null, FlowNotifService.NOTIF_TASK_BASE,
+                "generation-new").actionIntent;
         try {
             assertNotEquals("Different task cards must not share an open token", firstOpen, secondOpen);
             assertNotEquals("Different task actions must not share a service token", firstDone, secondDone);
+            assertNotEquals("Refreshing a card after a zone transition must invalidate its stale action token",
+                    oldCardDone, refreshedCardDone);
         } finally {
             firstOpen.cancel();
             secondOpen.cancel();
             firstDone.cancel();
             secondDone.cancel();
+            oldCardDone.cancel();
+            refreshedCardDone.cancel();
         }
     }
 
@@ -60,8 +70,10 @@ public class FlowCaptureTest {
         String suffix = UUID.randomUUID().toString();
         String counterId = "counter-" + suffix;
         String removedId = "removed-" + suffix;
+        String freshNotTodayId = "not-today-" + suffix;
         String counterTitle = "Counter " + suffix;
         String ordinaryTitle = "Ordinary " + suffix;
+        String freshNotTodayTitle = "Fresh not-today " + suffix;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         String originalState = bridge.load();
         try {
@@ -76,13 +88,16 @@ public class FlowCaptureTest {
             JSONObject ordinaryTask = new JSONObject()
                 .put("id", removedId).put("title", ordinaryTitle).put("type", "simple")
                 .put("counterEnabled", false);
-            JSONArray taskRows = new JSONArray().put(counterTask).put(ordinaryTask);
+            JSONObject freshNotTodayTask = new JSONObject()
+                .put("id", freshNotTodayId).put("title", freshNotTodayTitle).put("type", "simple")
+                .put("counterEnabled", false);
+            JSONArray taskRows = new JSONArray().put(counterTask).put(ordinaryTask).put(freshNotTodayTask);
             JSONArray timeline = new JSONArray()
                 .put(new JSONObject().put("zoneId", 1).put("startAt", now - 60 * 60_000L).put("endAt", now + 60 * 60_000L))
                 .put(new JSONObject().put("zoneId", 2).put("startAt", now + 60 * 60_000L).put("endAt", now + 2 * 60 * 60_000L))
                 .put(new JSONObject().put("zoneId", 1).put("startAt", now + 2 * 60 * 60_000L).put("endAt", now + 24 * 60 * 60_000L));
-            bridge.saveNotif(new JSONObject().put("body", "2 активних · 0 виконано").put("done", 0).put("total", 2)
-                .put("tasks", counterTitle + "|" + ordinaryTitle).put("taskList", new JSONArray(taskRows.toString()))
+            bridge.saveNotif(new JSONObject().put("body", "3 активних · 0 виконано").put("done", 0).put("total", 3)
+                .put("tasks", counterTitle + "|" + ordinaryTitle + "|" + freshNotTodayTitle).put("taskList", new JSONArray(taskRows.toString()))
                 .put("questTasks", taskRows).put("questTimeline", timeline).put("questTimelineUntil", now + 24 * 60 * 60_000L).toString());
             FlowNotifService.start(context);
             showTaskNotifications(context);
@@ -103,6 +118,9 @@ public class FlowCaptureTest {
             assertTrue(hasAction(ordinary, "Виконано", FlowNotifService.ACTION_TASK_DONE));
             assertTrue(hasAction(ordinary, "Не зараз", FlowNotifService.ACTION_TASK_NEXT_ZONE));
             assertTrue(hasAction(ordinary, "Не сьогодні", FlowNotifService.ACTION_TASK_NOT_TODAY));
+            Notification freshNotTodayCard = awaitTaskNotification(manager, FlowNotifService.NOTIF_TASK_BASE + 2);
+            Notification.Action freshNotToday = findServiceAction(freshNotTodayCard,
+                    FlowNotifService.ACTION_TASK_NOT_TODAY);
 
             Notification.Action ordinaryNext = findServiceAction(ordinary, FlowNotifService.ACTION_TASK_NEXT_ZONE);
             ordinaryNext.actionIntent.send(context, 0, null);
@@ -135,9 +153,14 @@ public class FlowCaptureTest {
 
             Notification.Action ordinaryNotToday = findServiceAction(ordinary, FlowNotifService.ACTION_TASK_NOT_TODAY);
             ordinaryNotToday.actionIntent.send(context, 0, null);
-            JSONObject notTodayRow = awaitTaskDeferralEvent(bridge, removedId, "not-today");
+            SystemClock.sleep(500);
+            assertEquals("The old card cannot defer the same task a second time",
+                    1, countEventPrefix(new JSONArray(bridge.getEventEnvelopes()), "task_defer:" + removedId + ":"));
+
+            freshNotToday.actionIntent.send(context, 0, null);
+            JSONObject notTodayRow = awaitTaskDeferralEvent(bridge, freshNotTodayId, "not-today");
             String notTodayEvent = notTodayRow.getString("event");
-            JSONObject notToday = new JSONObject(notTodayEvent.substring(("task_defer:" + removedId + ":").length()));
+            JSONObject notToday = new JSONObject(notTodayEvent.substring(("task_defer:" + freshNotTodayId + ":").length()));
             long requestedAt = notToday.getLong("requestedAt");
             assertTimestampNear("Not-today request time should match its durable event", notTodayRow.getLong("createdAt"), requestedAt);
             assertEquals("An unbound task becomes available 23 hours after the tap", 23L * 60 * 60_000L,
@@ -187,8 +210,10 @@ public class FlowCaptureTest {
                     String event = row.optString("event", "");
                     if (event.equals("task_inc:" + counterId) || event.equals("task_dec:" + counterId)
                             || event.equals("task_done:" + counterId) || event.equals("task_done:" + removedId)
+                            || event.equals("task_done:" + freshNotTodayId)
                             || event.equals("task_skip:" + removedId)
-                            || event.startsWith("task_defer:" + removedId + ":")) {
+                            || event.startsWith("task_defer:" + removedId + ":")
+                            || event.startsWith("task_defer:" + freshNotTodayId + ":")) {
                         ownIds.put(row.getLong("id"));
                     }
                 }
@@ -196,6 +221,91 @@ public class FlowCaptureTest {
                     String state = originalState == null || originalState.isEmpty() ? "{}" : originalState;
                     bridge.saveWithEvents(state, ownIds.toString());
                 }
+            } catch (Exception ignored) {}
+            bridge.save(originalState == null ? "" : originalState);
+            bridge.saveNotif(previousNotif == null || previousNotif.isEmpty() ? "{}" : previousNotif);
+            FlowNotifService.stop(context);
+        }
+    }
+
+    @Test public void completedDailyAndEveryZoneRowsAcceptTheFreshOccurrenceActionOnce() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        FlowBridge bridge = new FlowBridge(context);
+        String previousNotif = bridge.getNotifJson();
+        String originalState = bridge.load();
+        String suffix = UUID.randomUUID().toString();
+        String dailyId = "daily-fresh-" + suffix;
+        String everyZoneId = "zone-fresh-" + suffix;
+        String dailyTitle = "Daily fresh " + suffix;
+        String everyZoneTitle = "Every-zone fresh " + suffix;
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        FlowNotifService.stop(context);
+        for (int i = 0; i < 8; i++) manager.cancel(FlowNotifService.NOTIF_TASK_BASE + i);
+        manager.cancel(FlowNotifService.NOTIF_TASK_BASE + 100);
+        try {
+            long now = System.currentTimeMillis();
+            Calendar yesterdayCalendar = Calendar.getInstance();
+            yesterdayCalendar.setTimeInMillis(now);
+            yesterdayCalendar.add(Calendar.DAY_OF_YEAR, -1);
+            SimpleDateFormat localDay = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+            String yesterday = localDay.format(yesterdayCalendar.getTime());
+            JSONObject daily = new JSONObject().put("id", dailyId).put("title", dailyTitle)
+                    .put("type", "simple").put("repeat", "daily").put("done", true)
+                    .put("planDate", yesterday).put("doneDate", yesterday)
+                    .put("completionCreditDate", yesterday);
+            JSONObject everyZone = new JSONObject().put("id", everyZoneId).put("title", everyZoneTitle)
+                    .put("type", "simple").put("repeat", "everyzone").put("zoneId", 1)
+                    .put("done", true).put("doneDate", yesterday).put("completionCreditDate", yesterday)
+                    .put("zoneOccurrenceKey", yesterday + ":1:00:00");
+            JSONArray tasks = new JSONArray().put(daily).put(everyZone);
+            JSONArray timeline = new JSONArray()
+                    .put(new JSONObject().put("zoneId", 1).put("startAt", now - 60 * 60_000L).put("endAt", now + 60 * 60_000L))
+                    .put(new JSONObject().put("zoneId", 2).put("startAt", now + 60 * 60_000L).put("endAt", now + 2 * 60 * 60_000L))
+                    .put(new JSONObject().put("zoneId", 1).put("startAt", now + 2 * 60 * 60_000L).put("endAt", now + 24 * 60 * 60_000L));
+            bridge.saveNotif(new JSONObject().put("body", "2 активних · 0 виконано").put("done", 0).put("total", 2)
+                    .put("tasks", dailyTitle + "|" + everyZoneTitle).put("taskList", new JSONArray(tasks.toString()))
+                    .put("questTasks", tasks).put("questTimeline", timeline)
+                    .put("questTimelineUntil", now + 24 * 60 * 60_000L).toString());
+            FlowNotifService.start(context);
+            showTaskNotifications(context);
+
+            Notification dailyCard = awaitTaskNotification(manager, FlowNotifService.NOTIF_TASK_BASE);
+            Notification everyZoneCard = awaitTaskNotification(manager, FlowNotifService.NOTIF_TASK_BASE + 1);
+            assertTrue("A daily task completed yesterday is actionable in today's occurrence",
+                    dailyCard.extras.getCharSequence(Notification.EXTRA_TITLE).toString().contains(dailyTitle));
+            assertTrue("An every-zone task completed in an earlier slot is actionable in this slot",
+                    everyZoneCard.extras.getCharSequence(Notification.EXTRA_TITLE).toString().contains(everyZoneTitle));
+
+            Notification.Action dailyDone = findServiceAction(dailyCard, FlowNotifService.ACTION_TASK_DONE);
+            dailyDone.actionIntent.send(context, 0, null);
+            awaitTaskEvent(bridge, "task_done:" + dailyId);
+            dailyDone.actionIntent.send(context, 0, null);
+            SystemClock.sleep(500);
+            assertEquals("A second tap on the previous daily card is rejected", 1,
+                    countEvent(new JSONArray(bridge.getEventEnvelopes()), "task_done:" + dailyId));
+
+            Notification.Action everyZoneDone = findServiceAction(everyZoneCard, FlowNotifService.ACTION_TASK_DONE);
+            everyZoneDone.actionIntent.send(context, 0, null);
+            awaitTaskEvent(bridge, "task_done:" + everyZoneId);
+            everyZoneDone.actionIntent.send(context, 0, null);
+            SystemClock.sleep(500);
+            assertEquals("A second tap on the previous every-zone card is rejected", 1,
+                    countEvent(new JSONArray(bridge.getEventEnvelopes()), "task_done:" + everyZoneId));
+        } finally {
+            if (manager != null) {
+                for (int i = 0; i < 8; i++) manager.cancel(FlowNotifService.NOTIF_TASK_BASE + i);
+                manager.cancel(FlowNotifService.NOTIF_TASK_BASE + 100);
+            }
+            try {
+                JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+                JSONArray ownIds = new JSONArray();
+                for (int i = 0; i < events.length(); i++) {
+                    JSONObject row = events.optJSONObject(i);
+                    String event = row == null ? "" : row.optString("event", "");
+                    if (event.equals("task_done:" + dailyId) || event.equals("task_done:" + everyZoneId))
+                        ownIds.put(row.getLong("id"));
+                }
+                if (ownIds.length() > 0) bridge.saveWithEvents(originalState == null ? "{}" : originalState, ownIds.toString());
             } catch (Exception ignored) {}
             bridge.save(originalState == null ? "" : originalState);
             bridge.saveNotif(previousNotif == null || previousNotif.isEmpty() ? "{}" : previousNotif);

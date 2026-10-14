@@ -248,6 +248,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set((s) => ({
       tasks: s.tasks.map((t) => (t.id === id ? { ...t, trashed: true, trashedAt: Date.now() } : t)),
       priorities: s.priorities.map((pid) => (pid === id ? null : pid)),
+      alarmTaskIds: s.alarmTaskIds.filter((taskId) => taskId !== id),
     }));
   },
 
@@ -256,13 +257,23 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   },
 
   hardDeleteTask: (id) => {
-    set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
+    set((s) => ({
+      tasks: s.tasks.filter((t) => t.id !== id),
+      priorities: s.priorities.map((pid) => (pid === id ? null : pid)),
+      alarmTaskIds: s.alarmTaskIds.filter((taskId) => taskId !== id),
+    }));
   },
 
   purgeOldTrash: () => {
-    set((s) => ({
-      tasks: s.tasks.filter((t) => !t.trashed || Date.now() - (t.trashedAt || 0) < TRASH_RETENTION_MS),
-    }));
+    set((s) => {
+      const tasks = s.tasks.filter((t) => !t.trashed || Date.now() - (t.trashedAt || 0) < TRASH_RETENTION_MS);
+      const retainedIds = new Set(tasks.map((t) => t.id));
+      return {
+        tasks,
+        priorities: s.priorities.map((pid) => pid !== null && !retainedIds.has(pid) ? null : pid),
+        alarmTaskIds: s.alarmTaskIds.filter((taskId) => retainedIds.has(taskId)),
+      };
+    });
   },
 
   duplicateTask: (id) => {

@@ -207,6 +207,143 @@ public class QuestPolicyTest {
         assertEquals(midnight, FlowAlarmReceiver.deferredReminderAt(alarm, mergedTimeline));
     }
 
+    @Test public void wallDayProfilesRebuildForTheCurrentDeviceTimezone() {
+        List<QuestPolicy.WallDay> wallDays = Collections.singletonList(new QuestPolicy.WallDay("2026-10-14", Arrays.asList(
+                new QuestPolicy.WallRange(1, 0, 600),
+                new QuestPolicy.WallRange(2, 600, 1200),
+                new QuestPolicy.WallRange(0, 1200, 1440))));
+        long instant = QuestPolicy.localDateTime("2026-10-14", "09:00", UTC);
+
+        List<QuestPolicy.Segment> utc = QuestPolicy.timelineFromWallProfile(wallDays, UTC);
+        TimeZone twoHoursAhead = TimeZone.getTimeZone("GMT+02:00");
+        List<QuestPolicy.Segment> changedZone = QuestPolicy.timelineFromWallProfile(wallDays, twoHoursAhead);
+
+        assertEquals(1, QuestPolicy.segmentAt(utc, instant).zoneId);
+        assertEquals("same wall-day data must be reinterpreted after timezone change", 2,
+                QuestPolicy.segmentAt(changedZone, instant).zoneId);
+        assertNotEquals(QuestPolicy.segmentAt(utc, instant).startAt,
+                QuestPolicy.segmentAt(changedZone, instant).startAt);
+    }
+
+    @Test public void boundNotTodayStartRemainsTheOriginalElapsedInstantAfterTimezoneRebuild() {
+        long startAt = QuestPolicy.localDateTime("2026-10-15", "00:00", UTC);
+        QuestPolicy.Task bound = QuestPolicy.Task.builder("bound-timezone").zone(1)
+                .deferral(new QuestPolicy.Deferral(QuestPolicy.DEFERRAL_NOT_TODAY,
+                        NOW, 1, 1, startAt, null)).build();
+        List<QuestPolicy.WallDay> wallDays = Arrays.asList(
+                wallDay("2026-10-14", 1), wallDay("2026-10-15", 1));
+        List<QuestPolicy.Segment> changedZone = QuestPolicy.timelineFromWallProfile(wallDays,
+                TimeZone.getTimeZone("GMT+02:00"));
+        long afterStart = startAt + 30 * 60_000L;
+
+        assertEquals("timezone changes reinterpret the wall schedule but do not rebase the saved deferral instant",
+                startAt, bound.deferral.startAt);
+        assertTrue(QuestPolicy.select(Collections.singletonList(bound), changedZone,
+                changedZone.get(changedZone.size() - 1).endAt, afterStart,
+                TimeZone.getTimeZone("GMT+02:00"), 5).tasks.contains(bound));
+    }
+
+    @Test public void wallTimelinePreservesTwentyThreeAndTwentyFiveHourDstDays() {
+        TimeZone kyiv = TimeZone.getTimeZone("Europe/Kyiv");
+        assertDstDayLength(kyiv, "2026-03-29", 23L * 60L * 60L * 1000L);
+        assertDstDayLength(kyiv, "2026-10-25", 25L * 60L * 60L * 1000L);
+    }
+
+    private static void assertDstDayLength(TimeZone zone, String date, long expectedLength) {
+        List<QuestPolicy.Segment> timeline = QuestPolicy.timelineFromWallProfile(
+                Collections.singletonList(wallDay(date, 7)), zone);
+        assertEquals(1, timeline.size());
+        assertEquals(expectedLength, timeline.get(0).endAt - timeline.get(0).startAt);
+    }
+
+    private static QuestPolicy.WallDay wallDay(String date, int zoneId) {
+        return new QuestPolicy.WallDay(date, Collections.singletonList(
+                new QuestPolicy.WallRange(zoneId, 0, 1440)));
+    }
+
+    @Test public void oneOffReminderDueUsesCurrentTimezoneAndKeepsElapsedSnooze() {
+        TimeZone twoHoursAhead = TimeZone.getTimeZone("GMT+02:00");
+        QuestPolicy.Task sched = QuestPolicy.Task.builder("zone-aware-sched")
+                .sched("2026-10-15", "09:00").build();
+        sched.remindBeforeMinutes = 15;
+        long now = QuestPolicy.localDateTime("2026-10-15", "00:00", UTC);
+        long mainDue = QuestPolicy.localDateTime("2026-10-15", "09:00", twoHoursAhead);
+
+        assertEquals(mainDue, FlowAlarmReceiver.oneOffWallDue(sched, false, now, twoHoursAhead));
+        assertEquals(mainDue - 15 * 60_000L,
+                FlowAlarmReceiver.oneOffWallDue(sched, true, now, twoHoursAhead));
+        sched.snoozeUntil = now + 60 * 60_000L;
+        assertEquals(Long.MIN_VALUE, FlowAlarmReceiver.oneOffWallDue(sched, false, now, twoHoursAhead));
+    }
+
+    @Test public void staleActionGenerationChangesWithOccurrenceButIgnoresCounterProgress() {
+        List<QuestPolicy.Segment> timeline = ordinaryTimeline();
+        QuestPolicy.Task task = QuestPolicy.Task.builder("counter-generation").counter(1, 5).build();
+        String initial = QuestPolicy.actionGeneration(task, timeline, NOW, UTC);
+
+        task.counter = 4;
+        assertEquals("counter progress does not invalidate the card's action token", initial,
+                QuestPolicy.actionGeneration(task, timeline, NOW, UTC));
+        task.deferral = new QuestPolicy.Deferral(QuestPolicy.DEFERRAL_NEXT_ZONE, NOW, 1, 2,
+                NOW + 30 * 60_000L, NOW + 90 * 60_000L);
+        assertNotEquals("a fresh deferred occurrence receives a new action token", initial,
+                QuestPolicy.actionGeneration(task, timeline, NOW + 45 * 60_000L, UTC));
+    }
+
+    @Test public void completedCalendarAndEveryZoneTasksAreOpenForTheNextOccurrence() {
+        String yesterday = QuestPolicy.localDate(NOW - DAY, UTC);
+        QuestPolicy.Task daily = QuestPolicy.Task.builder("daily-complete").repeat("daily").done(true).build();
+        daily.doneDate = yesterday;
+        daily.completionCreditDate = yesterday;
+        QuestPolicy.Task everyZone = QuestPolicy.Task.builder("zone-complete").repeat("everyzone")
+                .zone(1).done(true).build();
+        everyZone.doneDate = yesterday;
+        everyZone.zoneOccurrenceKey = yesterday + ":1:10:00";
+
+        assertFalse(QuestPolicy.isCurrentlyDone(daily, NOW, ordinaryTimeline(), UTC));
+        assertFalse(QuestPolicy.isCurrentlyDone(everyZone, NOW, ordinaryTimeline(), UTC));
+
+        List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(Arrays.asList(daily, everyZone), Arrays.asList(
+                QuestPolicy.Event.done("daily-complete", NOW),
+                QuestPolicy.Event.done("zone-complete", NOW)), NOW, ordinaryTimeline(), UTC);
+        assertEquals(QuestPolicy.localDate(NOW, UTC), projected.get(0).doneDate);
+        assertTrue(QuestPolicy.isCurrentlyDone(projected.get(0), NOW, ordinaryTimeline(), UTC));
+        assertEquals(QuestPolicy.localDate(NOW, UTC) + ":1:16:46", projected.get(1).zoneOccurrenceKey);
+        assertTrue(QuestPolicy.isCurrentlyDone(projected.get(1), NOW, ordinaryTimeline(), UTC));
+    }
+
+    @Test public void intervalDoneProjectsItsDeadlineAndReopensAfterItWhileOldCommandRemainsPending() {
+        long repeatMs = 60L * 60_000L;
+        QuestPolicy.Task interval = QuestPolicy.Task.builder("interval-pending").repeat("interval")
+                .repeatMs(repeatMs)
+                .deferral(new QuestPolicy.Deferral(QuestPolicy.DEFERRAL_NOT_TODAY, NOW,
+                        1, 0, NOW, null)).build();
+        QuestPolicy.Event oldDone = QuestPolicy.Event.done(interval.id, NOW);
+        List<QuestPolicy.Task> source = Collections.singletonList(interval);
+        List<QuestPolicy.Event> duplicateOldCommands = Arrays.asList(oldDone, QuestPolicy.Event.done(interval.id, NOW + 30_000L));
+
+        List<QuestPolicy.Task> beforeDeadline = QuestPolicy.projectPendingEvents(source,
+                duplicateOldCommands, NOW + 30 * 60_000L, ordinaryTimeline(), UTC);
+        assertEquals(NOW + repeatMs, beforeDeadline.get(0).nextRepeatAt);
+        assertNull("Done clears the old occurrence's deferral", beforeDeadline.get(0).deferral);
+        assertTrue(QuestPolicy.isCurrentlyDone(beforeDeadline.get(0), NOW + 30 * 60_000L,
+                ordinaryTimeline(), UTC));
+
+        List<QuestPolicy.Task> afterDeadline = QuestPolicy.projectPendingEvents(source,
+                duplicateOldCommands, NOW + repeatMs, ordinaryTimeline(), UTC);
+        assertEquals(NOW + repeatMs, afterDeadline.get(0).nextRepeatAt);
+        assertFalse("An unacknowledged old Done does not hide the next interval occurrence",
+                QuestPolicy.isCurrentlyDone(afterDeadline.get(0), NOW + repeatMs, ordinaryTimeline(), UTC));
+
+        List<QuestPolicy.Task> completedNextOccurrence = QuestPolicy.projectPendingEvents(source,
+                Arrays.asList(oldDone, oldDone, QuestPolicy.Event.done(interval.id, NOW + repeatMs)),
+                NOW + repeatMs, ordinaryTimeline(), UTC);
+        assertEquals(NOW + 2L * repeatMs, completedNextOccurrence.get(0).nextRepeatAt);
+        assertTrue("A fresh Done command advances the interval while the old durable commands remain",
+                QuestPolicy.isCurrentlyDone(completedNextOccurrence.get(0), NOW + repeatMs,
+                        ordinaryTimeline(), UTC));
+    }
+
     @Test public void boundNotTodayReminderWaitsForTheFirstMatchingSegmentAfterItsStart() {
         long midnight = QuestPolicy.nextLocalMidnight(NOW, UTC);
         long segmentStart = midnight + 30 * 60_000L;

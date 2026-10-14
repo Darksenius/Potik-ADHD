@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../state/store';
 import { ruleFor } from '../../state/slices/plannerSlice';
 import type { DateKey } from '../../types';
-import { normalizeTime } from '../../utils/date';
+import { normalizeDayRange } from '../../utils/date';
 import Icon from '../common/Icon';
 
 export default function DayZones({ ds }: { ds: DateKey }) {
@@ -105,7 +105,7 @@ export default function DayZones({ ds }: { ds: DateKey }) {
 
       {editing !== null && <form className="editor-section" onSubmit={e => {
         e.preventDefault();
-        if (!normalizeTime(editStart) || (!normalizeTime(editEnd) && editEnd !== '24:00')) { setError('Вкажи час у форматі 09:00. Кінець дня — 24:00.'); return; }
+        if (!normalizeDayRange(editStart, editEnd)) { setError('Кінець має бути після початку. Для переходу через опівніч додай два проміжки; кінець дня — 24:00.'); return; }
         if (dailyZoneId !== null) editDailyZoneForDay(ds, dailyZoneId);
         useStore.getState().updateDayZone(ds, editing, editStart, editEnd); setEditing(null); setDailyZoneId(null);
       }}><h3>Час лише цього дня</h3><div className="editor-row"><label className="el">Початок зони<input className="ei" type="time" value={editStart} onChange={e => setEditStart(e.target.value)} /></label><label className="el">Кінець зони<input className="ei" inputMode="numeric" value={editEnd} onChange={e => setEditEnd(e.target.value)} placeholder="18:00 або 24:00" /></label></div>{error && <p role="alert">{error}</p>}<div className="editor-actions"><button type="submit">Зберегти час</button><button type="button" onClick={() => setEditing(null)}>Скасувати</button></div></form>}
@@ -123,7 +123,11 @@ export default function DayZones({ ds }: { ds: DateKey }) {
         </select>
         <input type="time" value={addStart} onChange={(e) => setAddStart(e.target.value)} style={{ background: 'var(--s3)', border: '1px solid var(--b2)', borderRadius: 6, color: 'var(--t1)', fontSize: 11, padding: '3px 5px' }} />
         <input type="time" value={addEnd} onChange={(e) => setAddEnd(e.target.value)} style={{ background: 'var(--s3)', border: '1px solid var(--b2)', borderRadius: 6, color: 'var(--t1)', fontSize: 11, padding: '3px 5px' }} />
-        <button className="pdd-add" onClick={() => addZoneId && addDayZone(ds, Number(addZoneId), addStart, addEnd)}>+ Зона</button>
+        <button className="pdd-add" onClick={() => {
+          if (!addZoneId) { setError('Вибери зону.'); return; }
+          if (!normalizeDayRange(addStart, addEnd)) { setError('Кінець має бути після початку. Для переходу через опівніч додай два проміжки.'); return; }
+          addDayZone(ds, Number(addZoneId), addStart, addEnd); setError('');
+        }}>+ Зона</button>
         <button
           className="pdd-add"
           style={{ background: 'var(--s3)', color: 'var(--t2)', border: '1px solid var(--b2)' }}
@@ -135,6 +139,7 @@ export default function DayZones({ ds }: { ds: DateKey }) {
           ＋ Нова зона
         </button>
       </div>
+      {editing === null && error && <p role="alert">{error}</p>}
     </div>
   );
 }

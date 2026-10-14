@@ -99,6 +99,11 @@ function parseDeferredCommand(event: string, createdAt?: number) {
   } catch { return undefined; }
 }
 
+function zoneOccurrenceOrder(key?: string): string | undefined {
+  const match = /^(\d{4}-\d{2}-\d{2}):\d+:(\d{2}):(\d{2})$/.exec(key || '');
+  return match ? match[1] + 'T' + match[2] + ':' + match[3] : undefined;
+}
+
 /** Protect unfinished progress before bootstrap's day reset. Commands remain unacknowledged. */
 export function preparePendingNativeDeferrals(): void {
   const fb = flowBridge();
@@ -107,12 +112,23 @@ export function preparePendingNativeDeferrals(): void {
     const events = JSON.parse(fb.getEventEnvelopes());
     if (!Array.isArray(events)) return;
     const pending = new Map<string, import('../types').QuestDeferral>();
+    const completedBeforeDeferral = new Set<string>();
     for (const e of events) {
       if (!e || typeof e.event !== 'string' || !Number.isFinite(e.createdAt)) continue;
+      const completed = /^task_done:(\d+)$/.exec(e.event);
+      if (completed) {
+        // Do not prime a later occurrence's deferral into an earlier
+        // completion. setTaskDone snapshots the active deferral for Undo.
+        const task = useStore.getState().tasks.find(t => String(t.id) === completed[1]);
+        if (task && new Date(task.created).getTime() <= e.createdAt) completedBeforeDeferral.add(completed[1]);
+        continue;
+      }
       const command = parseDeferredCommand(e.event, e.createdAt);
       const task = command && useStore.getState().tasks.find(t => String(t.id) === command.id);
       if (task && !task.done && !task.trashed && !task.someday
-        && new Date(task.created).getTime() <= e.createdAt) pending.set(command!.id, command!.deferral);
+        && new Date(task.created).getTime() <= e.createdAt && !completedBeforeDeferral.has(command!.id)) {
+        pending.set(command!.id, command!.deferral);
+      }
     }
     if (pending.size) useStore.setState(s => ({ tasks: s.tasks.map(t => pending.has(String(t.id))
       ? { ...t, questDeferral: pending.get(String(t.id)), snoozeUntil: 0,
@@ -126,8 +142,40 @@ export function preparePendingNativeDeferrals(): void {
  */
 export function handleNativeEvent(event: string | null | undefined, createdAt?: number): boolean {
   if (!event) return false;
+  const taskCommand = /^(?:task_(?:done|skip|inc|dec):|task_defer:)(\d+)(?::|$)/.exec(event);
+  const taskCommandId = taskCommand ? Number(taskCommand[1]) : undefined;
+  const eventDate = new Date(Number.isFinite(createdAt) ? createdAt! : Date.now());
+  const beforeResetTask = taskCommandId === undefined
+    ? undefined
+    : useStore.getState().tasks.find(task => task.id === taskCommandId);
+  if (beforeResetTask && Number.isFinite(createdAt) && beforeResetTask.repeat === 'everyzone' && beforeResetTask.zoneId != null) {
+    const taskCreatedAt = new Date(beforeResetTask.created).getTime();
+    const tapIsForTask = !Number.isFinite(taskCreatedAt) || taskCreatedAt <= createdAt!;
+    const savedOrder = zoneOccurrenceOrder(beforeResetTask.zoneOccurrenceKey);
+    const tappedOrder = tapIsForTask
+      ? zoneOccurrenceOrder(useStore.getState().getZoneOccurrenceKey(beforeResetTask.zoneId, eventDate))
+      : undefined;
+    // A delayed button from an already materialized older zone occurrence must
+    // never roll the task back and apply its action to an old checklist/counter.
+    if (savedOrder && tappedOrder && tappedOrder < savedOrder) return false;
+  }
+  const intervalDone = /^task_done:(\d+)$/.exec(event);
+  if (intervalDone && Number.isFinite(createdAt)) {
+    const pendingTask = useStore.getState().tasks.find(task => String(task.id) === intervalDone[1]);
+    // A duplicate Done tap from the current interval occurrence can arrive
+    // after that occurrence's timer elapsed. Validate its tap time before the
+    // live reset below, or it could complete the next occurrence retroactively.
+    if (pendingTask?.done && pendingTask.repeat === 'interval' && pendingTask.nextRepeatAt
+      && createdAt! < pendingTask.nextRepeatAt) return false;
+  }
   useStore.getState().checkDailyReset();
   useStore.getState().resetRepeatingTasksFor(new Date());
+  if (taskCommandId !== undefined) {
+    const queuedTask = useStore.getState().tasks.find(task => task.id === taskCommandId);
+    const taskCreatedAt = queuedTask ? new Date(queuedTask.created).getTime() : NaN;
+    const belongsToTask = !Number.isFinite(createdAt) || !Number.isFinite(taskCreatedAt) || taskCreatedAt <= createdAt!;
+    if (queuedTask && belongsToTask) useStore.getState().checkZoneRepeats(eventDate, taskCommandId);
+  }
   const store = useStore.getState();
   let changed = false;
   // A fresh task must never inherit an old queued action merely by reusing an id.
@@ -277,6 +325,7 @@ export function drainNativeEvents(onChanged: () => void): void {
           } else handleNativeEvent(e.event, e.createdAt);
         }
         useStore.getState().resetRepeatingTasksFor(new Date());
+        useStore.getState().checkZoneRepeats(new Date());
         if (!saveState(events.map(e => e.id))) {
           useStore.setState(before);
           useStore.getState().showToast('Дію зі сповіщення ще не збережено. Вона лишилася в черзі для повторної спроби.');
@@ -305,7 +354,10 @@ export function drainNativeEvents(onChanged: () => void): void {
       events.forEach((e) => {
         if (handleNativeEvent(e)) anyChanged = true;
       });
-      if (anyChanged) onChanged();
+      if (anyChanged) {
+        useStore.getState().checkZoneRepeats(new Date());
+        onChanged();
+      }
     })
     .catch(() => {
       /* тихо ігноруємо, як в оригіналі */

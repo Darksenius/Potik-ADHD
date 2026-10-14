@@ -1,4 +1,4 @@
-import { normalizeTime } from '../../utils/date';
+import { normalizeTime, normalizeDayRange } from '../../utils/date';
 import type { AppSlice } from '../store';
 import type {
   DateKey,
@@ -146,16 +146,16 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
   },
 
   addDayZone: (ds, zoneId, s, e) => {
-    if (!zoneId || !s || !e) return;
-    const blocks = get().materializeDay(ds).concat([{ zoneId, s, e }]);
+    const range = normalizeDayRange(s, e);
+    if (!range || !get().zones.some(zone => zone.id === zoneId)) return;
+    const blocks = get().materializeDay(ds).concat([{ zoneId, ...range }]);
     set((st) => ({ planDayZones: { ...st.planDayZones, [ds]: blocks } }));
     get().recalculateZoneUsage();
   },
   updateDayZone: (ds, index, start, end) => {
-    const from = normalizeTime(start);
-    const to = end === '24:00' ? end : normalizeTime(end);
-    if (!from || !to) return;
-    const blocks = get().materializeDay(ds).map((b, i) => i === index ? { ...b, s: from, e: to, ov: true } : b);
+    const range = normalizeDayRange(start, end);
+    if (!range) return;
+    const blocks = get().materializeDay(ds).map((b, i) => i === index ? { ...b, ...range, ov: true } : b);
     set(st => ({ planDayZones: { ...st.planDayZones, [ds]: blocks } }));
     get().recalculateZoneUsage();
   },

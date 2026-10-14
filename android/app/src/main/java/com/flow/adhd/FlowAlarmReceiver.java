@@ -334,6 +334,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         String taskId = id != null && id.endsWith("_pre") ? id.substring(0, id.length() - 4) : id;
         String tag = FlowNotifService.TASK_REMINDER_TAG + id;
         PendingIntent pi = FlowNotifService.openTaskPendingIntent(context, taskId);
+        String generation = FlowNotifService.actionGeneration(context, taskId, System.currentTimeMillis());
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_REMIND)
                 .setSmallIcon(R.drawable.ic_notification)
@@ -346,11 +347,11 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                 .setContentIntent(pi);
 
         b.addAction(FlowNotifService.taskAction(context, android.R.drawable.checkbox_on_background,
-                        "Виконано", FlowNotifService.ACTION_TASK_DONE, taskId, tag, REMIND_BASE))
+                        "Виконано", FlowNotifService.ACTION_TASK_DONE, taskId, tag, REMIND_BASE, generation))
                 .addAction(FlowNotifService.taskAction(context, android.R.drawable.ic_media_next,
-                        "Не зараз", FlowNotifService.ACTION_TASK_NEXT_ZONE, taskId, tag, REMIND_BASE))
+                        "Не зараз", FlowNotifService.ACTION_TASK_NEXT_ZONE, taskId, tag, REMIND_BASE, generation))
                 .addAction(FlowNotifService.taskAction(context, android.R.drawable.ic_menu_close_clear_cancel,
-                        "Не сьогодні", FlowNotifService.ACTION_TASK_NOT_TODAY, taskId, tag, REMIND_BASE));
+                        "Не сьогодні", FlowNotifService.ACTION_TASK_NOT_TODAY, taskId, tag, REMIND_BASE, generation));
 
         try { nm.notify(tag, REMIND_BASE, b.build()); return true; }
         catch (SecurityException denied) { return false; }
@@ -438,7 +439,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         try {
             JSONArray original = snapshot.optJSONArray("schedList");
             JSONArray output = new JSONArray();
-            List<QuestPolicy.Segment> timeline = QuestPolicy.timelineFromJson(snapshot.optJSONArray("questTimeline"));
+            List<QuestPolicy.Segment> timeline = QuestPolicy.timelineForSnapshot(snapshot, zone);
             List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(snapshot.optJSONArray("questTasks"));
             JSONArray rawEvents;
             try { rawEvents = new JSONArray(bridge.getEventEnvelopes()); }
@@ -457,6 +458,27 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                 QuestPolicy.Task task = byId.get(taskId);
                 if (task != null && (task.deferral != null || task.done || task.trashed || task.someday
                         || "negative".equals(task.type))) continue;
+                if (task != null && !isCalendarRepeat(row)) {
+                    if (task.snoozeUntil > now) {
+                        output.put(row); // snoozeUntil is an absolute elapsed deadline.
+                        continue;
+                    }
+                    if (("sched".equals(task.type) || "alarm".equals(task.type))
+                            && (task.repeat == null || task.repeat.isEmpty() || "none".equals(task.repeat))) {
+                        boolean pre = id.endsWith("_pre");
+                        if (!task.reminderEnabled || (pre ? task.firedPre : "sched".equals(task.type)
+                                ? task.firedSched : task.alarmFired)) continue;
+                        long wallDue = oneOffWallDue(task, pre, now, zone);
+                        if (wallDue != Long.MIN_VALUE) {
+                            if (wallDue <= 0) continue;
+                            row.put("dueMs", wallDue);
+                        }
+                    }
+                } else if (task != null && isCalendarRepeat(row) && task.snoozeUntil <= now) {
+                    String anchor = QuestPolicy.taskPlanDate(task);
+                    if (anchor == null) anchor = QuestPolicy.createdLocalDate(task.created, zone);
+                    if (anchor != null) row.put("anchorDate", anchor);
+                }
                 output.put(row);
             }
             for (QuestPolicy.Task task : projected) {
@@ -478,6 +500,46 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         } catch (Exception ignored) {
             return snapshot == null ? null : snapshot.optJSONArray("schedList");
         }
+    }
+
+    /** A missing/invalid wall time keeps the snapshot's old due instead of deleting repairable data. */
+    static long oneOffWallDue(QuestPolicy.Task task, boolean pre, long now, TimeZone zone) {
+        if (task == null || task.deferral != null || task.snoozeUntil > now
+                || !(task.repeat == null || task.repeat.isEmpty() || "none".equals(task.repeat))) return Long.MIN_VALUE;
+        if ("sched".equals(task.type)) {
+            String date = QuestPolicy.taskPlanDate(task);
+            long mainDue = QuestPolicy.localDateTime(date, task.schedTime, zone);
+            if (mainDue == Long.MIN_VALUE) return Long.MIN_VALUE;
+            if (pre) {
+                if (task.firedPre || task.remindBeforeMinutes <= 0 || mainDue <= now) return -1L;
+                return mainDue - task.remindBeforeMinutes * 60_000L;
+            }
+            return mainDue;
+        }
+        if ("alarm".equals(task.type)) {
+            if (pre) return -1L;
+            if (task.alarmFired) return -1L;
+            return nextUnrepeatedAlarmDue(task, now, zone);
+        }
+        return Long.MIN_VALUE;
+    }
+
+    private static long nextUnrepeatedAlarmDue(QuestPolicy.Task task, long now, TimeZone zone) {
+        String date = QuestPolicy.taskPlanDate(task);
+        long minDue = Math.max(now - 59_999L, task.snoozeUntil);
+        Calendar cursor = Calendar.getInstance(zone, Locale.US);
+        cursor.setTimeInMillis(now);
+        cursor.set(Calendar.HOUR_OF_DAY, 0); cursor.set(Calendar.MINUTE, 0);
+        cursor.set(Calendar.SECOND, 0); cursor.set(Calendar.MILLISECOND, 0);
+        for (int offset = 0; offset < 370; offset++) {
+            String candidateDate = QuestPolicy.localDate(cursor.getTimeInMillis(), zone);
+            if (date == null || candidateDate.compareTo(date) >= 0) {
+                long due = QuestPolicy.localDateTime(candidateDate, task.alarmTime, zone);
+                if (due != Long.MIN_VALUE && due >= minDue) return due;
+            }
+            cursor.add(Calendar.DAY_OF_YEAR, 1);
+        }
+        return -1L;
     }
 
     static long deferredReminderAt(QuestPolicy.Task task, List<QuestPolicy.Segment> timeline) {

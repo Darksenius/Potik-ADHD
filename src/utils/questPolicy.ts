@@ -55,16 +55,17 @@ function timeRange(start: string, end: string): { start: number; end: number } |
   return { start: from, end: to };
 }
 
-interface ZoneRange {
+export interface QuestZoneRange {
   zoneId: number;
   start: number;
   end: number;
   priority: number;
   order: number;
+  planned?: boolean;
 }
 
-function primaryZoneAt(ranges: readonly ZoneRange[], minute: number): number {
-  let best: ZoneRange | undefined;
+function primaryZoneAt(ranges: readonly QuestZoneRange[], minute: number): number {
+  let best: QuestZoneRange | undefined;
   for (const range of ranges) {
     if (minute < range.start || minute >= range.end) continue;
     if (!best || range.priority > best.priority || (range.priority === best.priority && range.order < best.order)) best = range;
@@ -72,12 +73,12 @@ function primaryZoneAt(ranges: readonly ZoneRange[], minute: number): number {
   return best?.zoneId ?? 0;
 }
 
-function dayRanges(input: QuestTimelineInput, day: string): ZoneRange[] {
+export function getQuestDayRanges(input: QuestTimelineInput, day: string): QuestZoneRange[] {
   const off = input.planDayOff?.[day] || [];
-  const ranges: ZoneRange[] = [];
+  const ranges: QuestZoneRange[] = [];
   let order = 0;
   input.zones.forEach(zone => {
-    if (zone.active === false || (zone.bound && !zone.actPin) || off.includes(zone.id)) return;
+    if (zone.off || zone.active === false || (zone.bound && !zone.actPin) || off.includes(zone.id)) return;
     (zone.slots || []).forEach(slot => {
       const range = timeRange(slot.s, slot.e);
       if (range) ranges.push({ zoneId: zone.id, ...range, priority: zone.prio || 1, order: order++ });
@@ -87,9 +88,29 @@ function dayRanges(input: QuestTimelineInput, day: string): ZoneRange[] {
     const zone = input.zones.find(candidate => candidate.id === block.zoneId);
     if (!zone || zone.off) return;
     const range = timeRange(block.s, block.e);
-    if (range) ranges.push({ zoneId: zone.id, ...range, priority: (zone.prio || 1) + 10, order: order++ });
+    if (range) ranges.push({ zoneId: zone.id, ...range, priority: (zone.prio || 1) + 10, order: order++, planned: true });
   });
   return ranges;
+}
+
+/** Persist wall-clock intent so Android can reconstruct dates after a timezone change. */
+export function buildQuestWallDays(input: QuestTimelineInput): import('../types').NotifQuestWallDay[] {
+  const firstDay = fmtDate(input.now || new Date());
+  return Array.from({ length: input.days || 35 }, (_, offset) => {
+    const date = addDaysDs(firstDay, offset);
+    const ranges = getQuestDayRanges(input, date);
+    const minutes = new Set([0, 1440]);
+    ranges.forEach(range => { minutes.add(range.start); minutes.add(range.end); });
+    const boundaries = [...minutes].sort((a, b) => a - b);
+    const segments: import('../types').NotifQuestWallDay['segments'] = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const zoneId = primaryZoneAt(ranges, boundaries[i]);
+      const previous = segments[segments.length - 1];
+      if (previous?.zoneId === zoneId) previous.endMinute = boundaries[i + 1];
+      else segments.push({ zoneId, startMinute: boundaries[i], endMinute: boundaries[i + 1] });
+    }
+    return { date, segments };
+  });
 }
 
 /**
@@ -120,7 +141,7 @@ export function buildQuestTimeline(input: QuestTimelineInput): QuestTimelineSegm
     const day = fmtDate(dayStart);
     const nextDay = localMidnight(addDaysDs(day, 1));
     const dayEnd = Math.min(nextDay.getTime(), endAt);
-    const ranges = dayRanges(input, day);
+    const ranges = getQuestDayRanges(input, day);
 
     // Most days need only the authored slot boundaries. A real-time minute
     // scan is reserved for DST transition days where local wall-clock minutes

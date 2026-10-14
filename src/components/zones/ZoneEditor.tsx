@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Zone } from '../../types';
 import { useStore } from '../../state/store';
 import Modal from '../common/Modal';
+import { normalizeDayRange } from '../../utils/date';
 
 export default function ZoneEditor({ zone, onClose }: { zone: Zone; onClose: () => void }) {
   const [name, setName] = useState(zone.nm);
@@ -9,10 +10,15 @@ export default function ZoneEditor({ zone, onClose }: { zone: Zone; onClose: () 
   const [description, setDescription] = useState(zone.desc || '');
   const [priority, setPriority] = useState(zone.prio || 1);
   const [slots, setSlots] = useState(zone.slots.map(s => ({ ...s })));
+  const [error, setError] = useState('');
   return <Modal title="Редагування зони" onClose={onClose}>
     <form onSubmit={e => {
       e.preventDefault();
       if (!name.trim()) return;
+      if (slots.some(slot => !normalizeDayRange(slot.s, slot.e))) {
+        setError('Кінець має бути після початку. Для переходу через опівніч додай два проміжки: до 00:00 та від 00:00.');
+        return;
+      }
       useStore.getState().updateZone(zone.id, { nm: name.trim(), color, desc: description.trim(), prio: priority, slots });
       onClose();
     }}>
@@ -29,6 +35,7 @@ export default function ZoneEditor({ zone, onClose }: { zone: Zone; onClose: () 
         <button type="button" aria-label={'Видалити проміжок ' + (i + 1)} onClick={() => setSlots(ss => ss.filter((_, j) => j !== i))}>✕</button>
       </div>)}
       <button type="button" className="ab" onClick={() => setSlots(ss => [...ss, { s: '09:00', e: '10:00' }])}>+ Часовий проміжок</button>
+      {error && <p role="alert">{error}</p>}
       <button className="ab" type="submit">Зберегти зону</button>
     </form>
   </Modal>;

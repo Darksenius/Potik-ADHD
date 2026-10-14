@@ -1,6 +1,7 @@
 import type { AppSlice } from '../store';
 import type { Zone } from '../../types';
-import { fmtDate, toMinutes } from '../../utils/date';
+import { fmtDate, toMinutes, normalizeDayRange } from '../../utils/date';
+import { getQuestDayRanges, type QuestZoneRange } from '../../utils/questPolicy';
 import { ruleIdx, addDaysDs } from './plannerHelpers';
 
 /** Перенесено 1:1 з www/index.html, рядки 1185–1191 (сідові дані). */
@@ -164,38 +165,20 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
   getActiveZones: (hm, date = new Date()) => {
     const cur = hm.h * 60 + hm.m;
     const todayStr = fmtDate(date);
-    const { zones, planDayOff } = get();
-    const dayOff = planDayOff[todayStr] || [];
-    let found: ActiveZone[] = [];
-
-    zones.forEach((z) => {
-      if (z.active === false) return;
-      if (z.bound && !z.actPin) return;
-      if (dayOff.indexOf(z.id) >= 0) return;
-      (z.slots || []).forEach((sl) => {
-        const s = toMinutes(sl.s);
-        let e = toMinutes(sl.e);
-        if (e === 0) e = 1440;
-        if (cur >= s && cur < e && !found.find((f) => f.id === z.id)) {
-          found.push({ id: z.id, nm: z.nm, color: z.color, desc: z.desc || '', prio: z.prio || 1, slots: z.slots });
-        }
+    const { zones, planDayOff, dayBlocks } = get();
+    const winners = new Map<number, QuestZoneRange>();
+    getQuestDayRanges({ zones, planDayOff, dayBlocks }, todayStr).forEach(range => {
+      if (cur < range.start || cur >= range.end) return;
+      const previous = winners.get(range.zoneId);
+      if (!previous || range.priority > previous.priority) winners.set(range.zoneId, range);
+    });
+    const found: ActiveZone[] = [...winners.values()]
+      .sort((a, b) => b.priority - a.priority || a.order - b.order)
+      .map(range => {
+        const z = zones.find(zone => zone.id === range.zoneId)!;
+        return { id: z.id, nm: z.nm, color: z.color, desc: (z.desc || '') + (range.planned ? ' · план дня' : ''),
+          prio: range.priority, slots: z.slots, ...(range.planned ? { planDay: true } : {}) };
       });
-    });
-
-    get().dayBlocks(todayStr).forEach((b) => {
-      const s = toMinutes(b.s);
-      let e = toMinutes(b.e);
-      if (e === 0) e = 1440;
-      if (cur >= s && cur < e) {
-        const z = zones.find((zz) => zz.id === b.zoneId);
-        if (z && !z.off) {
-          found = found.filter((f) => f.id !== z.id);
-          found.push({ id: z.id, nm: z.nm, color: z.color, desc: (z.desc || '') + ' · план дня', prio: (z.prio || 1) + 10, slots: z.slots, planDay: true });
-        }
-      }
-    });
-
-    found.sort((a, b) => b.prio - a.prio);
     return found.length ? found : [FREE_TIME_ZONE];
   },
 
@@ -279,6 +262,7 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
     Object.values(state.planDayZones || {}).forEach(blocks => {
       if (Array.isArray(blocks)) blocks.forEach(block => retainId(block?.zoneId));
     });
+    Object.values(state.planDayOff || {}).forEach(ids => ids.forEach(retainId));
     state.dayTemplates.forEach(template => {
       (template.blocks || []).forEach(block => retainId(block?.zoneId));
     });
@@ -292,8 +276,10 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
   },
 
   updateZone: (id, patch) => {
+    const slots = patch.slots.map(slot => normalizeDayRange(slot.s, slot.e));
+    if (slots.some(slot => !slot)) return;
     set(s => ({
-      zones: s.zones.map(z => z.id === id ? { ...z, ...patch } : z),
+      zones: s.zones.map(z => z.id === id ? { ...z, ...patch, slots: slots as Zone['slots'] } : z),
       tasks: s.tasks.map(t => t.zoneId === id ? { ...t, zoneName: patch.nm, zoneColor: patch.color } : t),
     }));
     get().recalculateZoneUsage();

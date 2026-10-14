@@ -42,7 +42,7 @@ function progressDay(task: Task): string {
 
 export interface LifecycleSlice {
   resetRepeatingTasksFor: (date: Date) => void;
-  checkZoneRepeats: (date: Date) => void;
+  checkZoneRepeats: (date: Date, taskId?: number) => void;
   dailyResetIfNeeded: (savedDate: string | null) => boolean;
   checkDailyReset: () => void;
 }
@@ -71,11 +71,12 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
     });
   },
 
-  checkZoneRepeats: (date) => {
+  checkZoneRepeats: (date, taskId) => {
     const day = fmtDate(date);
     set((state) => {
       let changed = false;
       const tasks = state.tasks.map((task) => {
+        if (taskId !== undefined && task.id !== taskId) return task;
         if (task.trashed || task.someday || (task.questDeferral && !task.done) || task.repeat !== 'everyzone' || !task.zoneId) return task;
         const anchor = taskPlanDate(task);
         if ((anchor && anchor > day) || (task.snoozeUntil && task.snoozeUntil > date.getTime())) return task;

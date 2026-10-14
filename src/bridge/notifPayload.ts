@@ -1,9 +1,9 @@
 import { isCalendarRepeat, isTaskAvailable, nextTaskReminderAt, questDeferralReminderAt, repeatDueOn, taskPlanDate, taskPreReminderAt } from '../utils/taskSchedule';
 import { useStore } from '../state/store';
 import { hasTaskCounter, taskCounterStep, taskCounterTarget } from '../utils/taskCounter';
-import { nowHM, fmtDate, hmToString, localDateTimeMs, normalizeTime } from '../utils/date';
+import { nowHM, fmtDate, hmToString, localDateTimeMs, normalizeTime, addDaysDs } from '../utils/date';
 import type { ForegroundNotifPayload, NotifSchedListItem, NotifZoneTimelineItem, Task } from '../types';
-import { buildQuestTimeline, getCurrentQuestSegment, selectQuestTasks } from '../utils/questPolicy';
+import { buildQuestTimeline, buildQuestWallDays, getCurrentQuestSegment, selectQuestTasks } from '../utils/questPolicy';
 
 /** Native alarms retain their calendar rules when the WebView is absent. */
 export function recurringReminderRows(task: Task, now = new Date(), timeline?: readonly import('../types').QuestTimelineSegment[]): NotifSchedListItem[] {
@@ -141,6 +141,8 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
     taskList,
     questTasks,
     questTimeline,
+    questWallDays: buildQuestWallDays({ zones: s.zones, planDayOff: s.planDayOff,
+      dayBlocks: day => s.dayBlocks(day), now: new Date(addDaysDs(todayStr, -2) + 'T12:00:00'), days: 39 }),
     questTimelineUntil: questTimeline[questTimeline.length - 1]?.endAt || now.getTime(),
     questZones: s.zones.map(z => ({ id: z.id, nm: z.nm, desc: z.desc || '', color: z.color || '#4f8ef7' })),
     routine,
