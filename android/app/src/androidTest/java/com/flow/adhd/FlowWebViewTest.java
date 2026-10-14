@@ -27,6 +27,31 @@ import org.junit.runner.RunWith;
 public class FlowWebViewTest {
     private static final long UI_TIMEOUT_MS = 45000;
 
+    @Test public void personalReleaseNotesOpenReturnAndSurviveActivityRecreation() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitReady(scenario);
+            click(scenario, "#nav button:last-child");
+            await(scenario, "document.querySelector('.settings-whats-new') !== null", "What's New is reachable in Settings");
+            click(scenario, ".settings-whats-new");
+            await(scenario, "document.querySelector('#whats-new-page') !== null", "Personal release page opens");
+            assertEquals("1.7.6.r9", value(scenario, "return document.querySelector('.release-note').getAttribute('data-version');").getString("value"));
+            assertTrue(value(scenario, "return document.querySelector('.release-note').open;").getBoolean("value"));
+            assertEquals(3, value(scenario, "return document.querySelector('.release-note').querySelectorAll('.release-check').length;").getInt("value"));
+            assertTrue(value(scenario, "return document.querySelector('.release-personal').textContent.indexOf('Пишу це для тебе') >= 0;").getBoolean("value"));
+            click(scenario, ".release-note:nth-of-type(2) > summary");
+            assertTrue(value(scenario, "return document.querySelectorAll('.release-note')[1].open;").getBoolean("value"));
+            click(scenario, ".whats-new-header button");
+            await(scenario, "document.querySelector('#settings-page') !== null", "Return goes to Settings");
+            scenario.recreate();
+            awaitReady(scenario);
+            click(scenario, "#nav button:last-child");
+            await(scenario, "document.querySelector('.settings-whats-new') !== null", "Settings after recreation");
+            click(scenario, ".settings-whats-new");
+            await(scenario, "document.querySelector('#whats-new-page') !== null", "Packaged release text remains available");
+            assertEquals("1.7.6.r9", value(scenario, "return document.querySelector('.release-note').getAttribute('data-version');").getString("value"));
+        }
+    }
+
     @Test public void undatedInboxCaptureAppearsInNowAndRemainsInInboxUntilPlanned() throws Exception {
         String title = "Android r2 Inbox " + UUID.randomUUID();
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {

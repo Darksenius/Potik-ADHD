@@ -13,7 +13,7 @@ import { fmtDate } from '../../utils/date';
  *   - firedA                     — Set дедуплікації спрацьованих будильників
  *                                  (рядок 1212), теж імперативна бухгалтерія
  */
-export type PageId = 'main' | 'readme' | 'settings';
+export type PageId = 'main' | 'readme' | 'settings' | 'whatsnew';
 export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state' | 'inbox' | 'more' | 'alltasks';
 
 export interface UiSlice {

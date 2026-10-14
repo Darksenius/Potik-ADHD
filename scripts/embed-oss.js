@@ -44,11 +44,12 @@ const SOURCE_FILES = [
   'package.json',
   'android/app/src/main/AndroidManifest.xml',
   'scripts/embed-oss.js',
+  'scripts/check-release-notes.mjs',
 ];
 
 // Теки, з яких рекурсивно беруться всі файли з указаними розширеннями
 const SOURCE_DIRS = [
-  { dir: 'src', exts: ['.ts', '.tsx', '.css'] },
+  { dir: 'src', exts: ['.ts', '.tsx', '.css', '.json'] },
   { dir: 'android/app/src/main/java', exts: ['.java'] },
 ];
 

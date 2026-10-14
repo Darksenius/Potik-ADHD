@@ -8,6 +8,7 @@ import type { RecoveryArchive } from '../../services/persistence';
 import { exportRecoveryFile } from '../../services/exportImport';
 import { getNativeNotificationPermission, requestNativeNotificationPermission, openNativeNotificationSettings, updateForegroundService } from '../../bridge/nativeBridge';
 import '../../styles/compact-settings.css';
+import '../../styles/whats-new.css';
 
 export default function SettingsPage() {
   const preferences = useStore(s => s.preferences);
@@ -32,6 +33,9 @@ export default function SettingsPage() {
   return <><main id="settings-page" className="page active settings-page">
     <h1>Налаштування</h1>
     <p className="settings-intro">Параметри застосунку, дані та довідка.</p>
+    <button type="button" className="settings-whats-new" aria-label="Що нового" onClick={() => useStore.getState().showPage('whatsnew')}>
+      <strong>Що нового</strong><small>{version} · Для тебе</small>
+    </button>
 
     {saveIsBlocked() && <div className="settings-storage-alert" role="alert">
       <p>Не вдалося автоматично архівувати старі дані. Оригінали збережено; повтори архівацію або експортуй копію.</p>

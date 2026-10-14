@@ -1,6 +1,6 @@
 {
   "name": "flow-app",
-  "version": "1.7.6-r8",
+  "version": "1.7.6-r9",
   "description": "Потік — органайзер для людей з РДУГ (ADHD)",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "test": "playwright test",
     "test:report": "playwright show-report",
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node scripts/check-release-notes.mjs && tsc && vite build",
     "preview": "vite preview",
     "embed-oss": "node scripts/embed-oss.js",
     "embed-oss:clean": "node scripts/embed-oss.js --clean",

@@ -20,6 +20,7 @@ import KbdOverlay from './components/common/KbdOverlay';
 import AlarmBanner from './components/common/AlarmBanner';
 import MoreTab from './components/layout/MoreTab';
 import SettingsPage from './components/layout/SettingsPage';
+import WhatsNewPage from './components/layout/WhatsNewPage';
 import InboxTab from './components/tasks/InboxTab';
 
 /** applyTheme() — рядки 1165–1170: data-theme на <html> тепер ефект, не імперативний виклик. */
@@ -49,6 +50,7 @@ export default function App() {
 
       {currentPage === 'readme' && <ReadmePage />}
       {currentPage === 'settings' && <SettingsPage />}
+      {currentPage === 'whatsnew' && <WhatsNewPage />}
 
       {currentPage === 'main' && (
         <div id="main-page" className="page active">
