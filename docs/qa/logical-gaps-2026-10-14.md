@@ -24,7 +24,23 @@
 
 Нові перевірки збережено у `logical-gaps.spec.ts`, `deferral-edit.spec.ts`, `queued-deferral.spec.ts`, `planner-deferral-ui.spec.ts`, `zone-integrity.spec.ts` та Android QuestPolicy/FlowCapture tests. Вони перевіряють поведінку, сталі ID, JSON-перезапуск і реальну ідентичність PendingIntent.
 
-Повний локальний production-прогін: **133/133**, 65.286 с, без пропусків і flaky; HTML/JSON/trace збережено. Нативні правила QuestPolicy: **16/16** unit tests. Остаточний прогін Android 9, CI та підписаного APK фіксується нижче після завершення. Публікація r7 ще не підтверджена.
+| Перевірка | Підтверджений результат |
+|---|---|
+| Локальний production Playwright | **133/133**, 65.286 с, без пропусків і flaky; HTML/JSON/trace збережено |
+| [GitHub CI](https://github.com/Darksenius/Potik-ADHD/actions/runs/38482205366) | **133/133**, 78.211 с, без пропусків і flaky; artifact `migration-validation-report` завантажено й перевірено |
+| Native QuestPolicy | **16/16** unit tests |
+| Android 9 / WebView 66 | **17/17** instrumentation, 22.237 с; 16 предметних та один шаблонний тест. Колізії PendingIntent перевірено реальними токенами Android |
+| [Підписана збірка](https://github.com/Darksenius/Potik-ADHD/actions/runs/38482209439) | Успішно; версія `1.7.6.r7`, code `1070607`, min SDK 24, той самий сертифікат, що у r6 |
+| Перші дії у підписаному APK | Чисте встановлення, задача з нотаткою через системну клавіатуру, force-stop та повторний запуск зі збереженням запису. Цей сценарій виконано дотиками ADB, без JS-ін'єкцій |
+| [Публічний реліз](https://github.com/Darksenius/Potik-ADHD/releases/tag/v1.7.6.r7) | Latest, не draft/prerelease. APK завантажено без авторизації; його хеш збігається з перевіреним підписаним пакетом |
+
+Вихідний код APK та CI: `e9967348d42a9be6018d214beab2422b750aeda4`, тег `v1.7.6.r7`.
+
+APK SHA-256: `5f28c93ad967ed7988ad582a9d43098a1c0f762d490c8a2f7de4b1e2a0ebfaad`.
+
+SHA-256 сертифіката: `d95dc170ae4c88d62c3ff8e06c41b910cb3d2242285bc7c544dcfd790d351040`.
+
+Локальні докази лежать у `E:\projects\codex-files\Potik\audit-2026-10-07\checks\logical-gaps-r7`: початкові падіння, повний HTML/JSON/trace після виправлень, CI artifact, Android-логи та перевірений APK. Сценарій перших дій і його скріншоти — у `checks\first-use-1.7.6.r7`.
 
 ## Архітектурний висновок
 
