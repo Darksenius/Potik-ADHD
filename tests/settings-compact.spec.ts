@@ -20,10 +20,10 @@ test('compact settings, recovery archive export, and help return path', async ({
 
   const groups = page.locator('#settings-page details.settings-group');
   await expect(groups).toHaveCount(4);
-  await expect(groups.locator('summary').nth(0)).toContainText('Вигляд');
-  await expect(groups.locator('summary').nth(1)).toContainText('Сповіщення');
-  await expect(groups.locator('summary').nth(2)).toContainText('Дані та резервні копії');
-  await expect(groups.locator('summary').nth(3)).toContainText('Про застосунок і допомога');
+  await expect(groups.locator(':scope > summary').nth(0)).toContainText('Вигляд');
+  await expect(groups.locator(':scope > summary').nth(1)).toContainText('Сповіщення');
+  await expect(groups.locator(':scope > summary').nth(2)).toContainText('Дані та резервні копії');
+  await expect(groups.locator(':scope > summary').nth(3)).toContainText('Про застосунок і допомога');
   for (let i = 0; i < 4; i++) expect(await groups.nth(i).evaluate(el => el.hasAttribute('open'))).toBe(false);
 
   await groups.nth(2).locator('summary').click();
