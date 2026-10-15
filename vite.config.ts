@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import packageJson from './package.json';
-import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { getSourceRevision } from './scripts/source-revision.mjs';
 
-const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const revision = getSourceRevision(fileURLToPath(new URL('.', import.meta.url)));
 
 // Capacitor WebView (androidScheme: "https", але без реального хоста) вимагає
 // ВІДНОСНИХ шляхів до асетів — тому base:'./', а не '/'.
@@ -17,7 +18,7 @@ export default defineConfig({
     // і не зберігається в git (див. .gitignore).
     outDir: 'www',
     emptyOutDir: true,
-    target: ['chrome69', 'es2018'],
+    target: ['chrome66', 'es2018'],
     // Невеликий застосунок повністю офлайн — код-спліттінг тільки заважає
     // (зайві мережеві запити не потрібні, і так усе локально), тож зібран
     // в один бандл достатньо для старту. За потреби можна повернути chunking пізніше.

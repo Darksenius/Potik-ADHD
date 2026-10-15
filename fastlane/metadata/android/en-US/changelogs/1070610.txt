@@ -1,0 +1,4 @@
+1.7.6.r10
+Shared task type catalog for the app and Android.
+Build version derived from package.json; browser and native validation gate releases from the same commit.
+Exact source revision and complete source ZIP; updated build and contributor instructions.

@@ -8,14 +8,14 @@ Works fully offline. All data stays on your device. No ads, no trackers, no acco
 • <b>Impulse capture</b> — caught a thought? Dump it into the notebook and get back to what you were doing
 
 <b>Features:</b>
-• Many task types: simple, checklists, counters, alarms, scheduled, habits, Pomodoro, kids' tasks
+• Ten task types: simple, checklists, counters, notes, alarms, scheduled, time windows, context, incident logs and zone-linked tasks
 • Week builder — 5/2, 2/2, 3/3 and custom schedules, day templates
 • Persistent notification with the current zone and tasks — with ✓ / snooze / note actions
 • Quick notes with folders, free-form notebook, "someday" ideas
-• Routine, energy and water — gentle tracking without self-criticism
+• Optional task counters with configurable steps and units; progress and task completion are separate actions
 • XP, levels, day streaks, achievements — a short distance between action and reward
 • JSON export/import, automatic on-disk backup, Markdown notes export
 
 The interface is currently in Ukrainian only.
 
-Free software licensed under AGPL-3.0. The full license text and complete source code are embedded right in the app's help section.
+Free software licensed under AGPL-3.0-only. Help contains the license, a text source view and the exact source revision. Complete source archives, including binary resources and build files, accompany releases.

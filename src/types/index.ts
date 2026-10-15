@@ -299,10 +299,7 @@ export interface DayLogEntry {
   note?: string;
 }
 
-/**
- * Блок шаблону дня. Форма виведена з контексту використання (dayBlocks(),
- * КОНСТРУКТОР ТИЖНЯ) — уточнити побітово на Кроці «Планувальник».
- */
+/** Authored wall-clock range in a reusable day template. */
 export interface DayTemplateBlock {
   zoneId: number;
   s: string;
@@ -315,12 +312,7 @@ export interface DayTemplate {
   blocks: DayTemplateBlock[];
 }
 
-/**
- * Шаблон тижня (конструктор 5/2, 2/2, 3/3). Внутрішня форма ще не звірена
- * побітово з оригіналом (рядки 3683–3921) — навмисно `unknown`-толерантна,
- * щоб round-trip JSON.parse/stringify під час Кроку 1 нічого не губив,
- * поки повна структура не перенесена разом із КОНСТРУКТОРОМ ТИЖНЯ.
- */
+/** Cyclic week template, validated together with its referenced day templates. */
 export interface WeekTemplate {
   id: string;
   name: string;

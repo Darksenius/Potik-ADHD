@@ -6,13 +6,12 @@ import { buildForegroundNotifPayload } from '../bridge/notifPayload';
 import { seedKnownCompletions } from '../utils/taskHistory';
 import { normalizePlannerTasks } from './plannerMigration';
 
-/** LS_KEY — рядок 1223. НЕ змінювати: інакше старі бекапи в localStorage «загубляться». */
+/** Stable storage slot. formatVersion distinguishes the persisted domain schema. */
 export const LS_KEY = 'flow_v2';
 
 /**
- * collectState() — рядки 4258–4289, ПОБІТОВО той самий набір ключів.
- * Якщо додаєш нове поле в стор і воно має зберігатись — додай його і сюди,
- * інакше воно мовчки не переживе перезапуск застосунку.
+ * Persist only domain data. Add persisted fields here and to backupValidation;
+ * autosave also uses these keys to distinguish edits from transient UI changes.
  */
 export function collectState(): AppState {
   const s = useStore.getState();
@@ -59,10 +58,8 @@ export function collectState(): AppState {
 }
 
 /**
- * applyState() — рядки 4308–4348. Кожне поле перевіряється за ТИМ САМИМ
- * типом, що й в оригіналі (Array.isArray, а не .length!) — інакше порожній
- * масив після імпорту не збережеться, а «воскресить» старі дані, як і
- * застерігав коментар в оригіналі.
+ * Validate and normalize before one atomic update. Empty arrays intentionally
+ * replace their collections, and replace=true begins from current schema defaults.
  */
 /** Validation completes before a single atomic store update. */
 export function applyState(raw: unknown, replace = false): boolean {

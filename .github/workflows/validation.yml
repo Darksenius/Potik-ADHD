@@ -1,11 +1,14 @@
-name: Migration validation
+name: Project validation
 on:
   pull_request:
   push:
     branches: [main, refactor/vite-react-migration, 'audit/**', 'improve/**', 'fix/**']
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
+env:
+  SOURCE_REVISION: ${{ github.sha }}
 jobs:
   browser:
     runs-on: ubuntu-latest
@@ -26,8 +29,36 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: migration-validation-report
+          name: browser-validation-report
           path: |
             playwright-report/
             test-results/
+          retention-days: 14
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run sync
+      - name: Native unit tests and application/instrumentation compilation
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-validation-report
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
           retention-days: 14
