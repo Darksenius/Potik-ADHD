@@ -258,6 +258,7 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
     while (retainedIds.has(id)) id++;
     const zone: Zone = { id, nm: name, color: ZONE_PALETTE[id % ZONE_PALETTE.length], slots: [], desc: '', prio: 1, active: true };
     set((s) => ({ zones: [...s.zones, zone] }));
+    get().award(5);
     return id;
   },
 

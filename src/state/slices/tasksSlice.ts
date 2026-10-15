@@ -207,9 +207,11 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         } : task),
         nid: Math.max(state.nid, requestedId! + 1),
       }));
+      get().award(10);
       return;
     }
     get().createTask(title, 'simple', null, '');
+    get().award(10);
   },
 
   markScheduledFired: (id) => {

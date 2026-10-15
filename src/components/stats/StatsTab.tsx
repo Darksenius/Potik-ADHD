@@ -1,9 +1,16 @@
 import { useStore } from '../../state/store';
 import { ACHIEVEMENTS } from '../../state/slices/gamificationSlice';
 import Icon from '../common/Icon';
+import '../../styles/notes-focus-parity.css';
 
 export default function StatsTab() {
+  const tasks = useStore((s) => s.tasks);
   const unlocked = useStore((s) => s.unlocked);
+  const streak = useStore((s) => s.streak);
+  const negCount = useStore((s) => s.negCount);
+  const done = useStore((s) => s.done);
+  const level = useStore((s) => s.level);
+  const xpTotal = useStore((s) => s.xpTotal);
   const rareEvents = useStore((s) => s.rareEvents);
   const addRareEvent = useStore((s) => s.addRareEvent);
   const changeRareEvent = useStore((s) => s.changeRareEvent);
@@ -11,6 +18,23 @@ export default function StatsTab() {
 
   return (
     <div id="stats-sec" className="tsec active">
+      <div className="streak-c">
+        <div className="stats-streak-icon" aria-hidden="true"><Icon name="repeat" size={28} /></div>
+        <div>
+          <div className="stats-streak-value">{streak}</div>
+          <div className="stats-streak-label">Серія (збережене значення)</div>
+        </div>
+        <div className="stats-harmful">
+          <div>Шкідливих</div>
+          <strong>{negCount}</strong>
+        </div>
+      </div>
+      <div id="sg">
+        <div className="sc2"><div className="sv">{done}</div><div className="sl">Виконано</div></div>
+        <div className="sc2"><div className="sv">{tasks.filter((t) => !t.trashed && !t.someday).length}</div><div className="sl">Задач</div></div>
+        <div className="sc2"><div className="sv">{level}</div><div className="sl">Рівень</div></div>
+        <div className="sc2"><div className="sv">{xpTotal}</div><div className="sl">Загальний досвід</div></div>
+      </div>
       <div className="bl">Досягнення</div>
       <div id="achs" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         {ACHIEVEMENTS.map((a) => (

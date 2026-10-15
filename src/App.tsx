@@ -22,6 +22,9 @@ import MoreTab from './components/layout/MoreTab';
 import SettingsPage from './components/layout/SettingsPage';
 import WhatsNewPage from './components/layout/WhatsNewPage';
 import InboxTab from './components/tasks/InboxTab';
+import ZoneAccent from './components/layout/ZoneAccent';
+import RewardFeedback from './components/common/RewardFeedback';
+import ImpulseReview from './components/common/ImpulseReview';
 
 /** applyTheme() — рядки 1165–1170: data-theme на <html> тепер ефект, не імперативний виклик. */
 function useThemeEffect() {
@@ -46,6 +49,7 @@ export default function App() {
 
   return (
     <>
+      <ZoneAccent />
       <Nav />
 
       {currentPage === 'readme' && <ReadmePage />}
@@ -76,6 +80,8 @@ export default function App() {
       {editorTaskId !== null && <TaskEditor key={editorTaskId} />}
       <AlarmBanner />
       <Toast />
+      <RewardFeedback />
+      <ImpulseReview />
       <BackupBanner />
       <KbdOverlay />
     </>

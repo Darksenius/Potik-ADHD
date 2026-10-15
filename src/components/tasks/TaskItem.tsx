@@ -39,6 +39,7 @@ export default function TaskItem({
   const moveTask = useStore((s) => s.moveTask);
   const deferTask = useStore((s) => s.deferTask);
   const deleteTask = useStore((s) => s.deleteTask);
+  const duplicateTask = useStore((s) => s.duplicateTask);
   const toSomeday = useStore((s) => s.toSomeday);
   const requestEditTask = useStore((s) => s.requestEditTask);
   const folders = useStore((s) => s.folders);
@@ -110,6 +111,7 @@ export default function TaskItem({
           {!questCard && <>
             {allowMove && <><button className="ab" onClick={() => moveTask(t.id, -1, visibleIds)} title="Вгору" aria-label={'Підняти: ' + t.title}>↑</button><button className="ab" onClick={() => moveTask(t.id, 1, visibleIds)} title="Вниз" aria-label={'Опустити: ' + t.title}>↓</button></>}
             <button className="ab eb" onClick={() => requestEditTask(t.id)} title="Редагувати" aria-label={'Редагувати: ' + t.title}><Icon name="edit" /></button>
+            <button className="ab" onClick={() => duplicateTask(t.id)} title="Дублювати" aria-label={'Дублювати: ' + t.title}>⧉</button>
             <button className="ab" onClick={() => toSomeday(t.id)} title="На колись" aria-label={'На колись: ' + t.title}><Icon name="archive" /></button>
             <button className="ab del" onClick={() => deleteTask(t.id)} title="У кошик" aria-label={'У кошик: ' + t.title}><Icon name="trash" /></button>
           </>}

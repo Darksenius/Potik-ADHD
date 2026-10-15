@@ -61,6 +61,9 @@ export interface UiSlice {
   toastMessage: string | null;
   showToast: (msg: string) => void;
   dismissToast: () => void;
+  noteReviews: { noteId: number; dueAt: number }[];
+  scheduleNoteReview: (noteId: number) => void;
+  dismissNoteReviews: (noteIds: number[]) => void;
   /**
    * showBackupBanner() — рядки 2995-3034. Наповнюється ОДИН РАЗ при старті
    * (checkBackupRecovery() у services/persistence.ts), UI — BackupBanner.tsx.
@@ -101,6 +104,7 @@ export const createUiSlice: AppSlice<UiSlice> = (set) => ({
   editorTaskId: null,
   editorInitialDate: null,
   toastMessage: null,
+  noteReviews: [],
   backupBanner: null,
   kbdOverlay: null,
 
@@ -126,6 +130,9 @@ export const createUiSlice: AppSlice<UiSlice> = (set) => ({
   }),
   showToast: (msg) => set({ toastMessage: msg }),
   dismissToast: () => set({ toastMessage: null }),
+  scheduleNoteReview: (noteId) => set(s => ({ noteReviews: s.noteReviews.some(review => review.noteId === noteId)
+    ? s.noteReviews : [...s.noteReviews, { noteId, dueAt: Date.now() + 5 * 60 * 1000 }] })),
+  dismissNoteReviews: (noteIds) => set(s => ({ noteReviews: s.noteReviews.filter(review => !noteIds.includes(review.noteId)) })),
   setBackupBanner: (v) => set({ backupBanner: v }),
   dismissBackupBanner: () => set({ backupBanner: null }),
   openKbdOverlay: (ctx) => set({ kbdOverlay: ctx }),

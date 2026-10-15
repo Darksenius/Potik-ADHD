@@ -2,7 +2,7 @@ import { useStore } from '../../state/store';
 import Icon from '../common/Icon';
 
 export default function Topbar() {
-  const xp = useStore((s) => s.xp);
+  const xp = useStore((s) => s.xpTotal);
   const level = useStore((s) => s.level);
   const showXp = useStore((s) => s.preferences.showGamification !== false);
 

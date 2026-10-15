@@ -1,0 +1,13 @@
+.reward-feedback{position:fixed;left:50%;bottom:142px;transform:translateX(-50%);z-index:410;max-width:88%;padding:10px 16px;border:1px solid var(--b2);border-radius:12px;background:var(--s2);box-shadow:0 5px 18px rgba(0,0,0,.25);font-size:16px;font-weight:700;text-align:center;pointer-events:none}
+.reward-gain{color:var(--xp)}
+.reward-loss{color:var(--neg)}
+.reward-muted{color:var(--t2)}
+.level-reward{text-align:center;line-height:1.6}
+.level-reward>.potik-icon{width:36px;height:36px;color:var(--xp)}
+.level-reward p{margin:14px 0}
+.level-reward button{min-height:48px;min-width:130px}
+.impulse-review{position:fixed;left:12px;right:12px;bottom:80px;z-index:420;max-width:520px;margin:auto;padding:14px;border:2px solid var(--z);border-radius:12px;background:var(--s2);box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.impulse-review p{margin:0 0 10px;line-height:1.5;overflow-wrap:anywhere}
+.impulse-review p span{display:block;color:var(--t2);font-size:13px}
+.impulse-review>div{display:flex;flex-wrap:wrap;gap:8px}
+.impulse-review button{min-height:44px;padding:8px 12px;color:var(--t1);background:var(--s1);border:1px solid var(--b2);border-radius:8px;font:inherit}

@@ -284,12 +284,16 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
   } else if (event.indexOf('capture_note:') === 0) {
     const txt = event.slice('capture_note:'.length).trim();
     if (!txt) return false;
-    store.addQuickNote(txt, 'impulse');
+    const note = store.addQuickNote(txt, 'impulse');
+    store.award(1);
+    store.scheduleNoteReview(note.id);
     changed = true;
   } else if (event.indexOf('note:') === 0) {
     const txt = event.slice(5).trim();
     if (!txt) return false;
-    store.addQuickNote(txt, 'impulse');
+    const note = store.addQuickNote(txt, 'impulse');
+    store.award(1);
+    store.scheduleNoteReview(note.id);
     changed = true;
   }
 

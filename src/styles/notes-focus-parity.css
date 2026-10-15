@@ -1,0 +1,66 @@
+.np-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+  margin: 4px 0 8px;
+  color: var(--t3);
+  font: 10px 'Space Mono', monospace;
+}
+
+.np-meta [role='status'] {
+  color: var(--z);
+  text-align: right;
+}
+
+.notes-folder-form {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 10px;
+  padding: 9px;
+  border: 1px solid var(--b1);
+  border-radius: 8px;
+  background: var(--s1);
+}
+
+.notes-folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.notes-copy-feedback {
+  align-self: center;
+  color: var(--t3);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.stats-streak-icon {
+  font-size: 28px;
+}
+
+.stats-streak-value {
+  color: var(--xp);
+  font: 700 22px 'Space Mono', monospace;
+}
+
+.stats-streak-label {
+  color: var(--t3);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.stats-harmful {
+  margin-left: auto;
+  color: var(--t3);
+  font-size: 10px;
+  text-align: right;
+}
+
+.stats-harmful strong {
+  color: var(--neg);
+  font: 700 18px 'Space Mono', monospace;
+}
