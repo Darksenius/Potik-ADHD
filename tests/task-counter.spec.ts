@@ -18,7 +18,7 @@ function reloadStore() {
   expect(applyState(saved, true)).toBe(true);
 }
 
-test('water seed is retired once; a user-created counter can be created, counted and reopened', async ({ page }, info) => {
+test('retiring the old water routine preserves ordinary counters; user-created progress survives reopening', async ({ page }, info) => {
   await page.clock.install({ time: new Date('2026-10-13T12:00:00+03:00') });
   await page.goto('/');
   await page.clock.runFor(1600);
@@ -26,7 +26,7 @@ test('water seed is retired once; a user-created counter can be created, counted
   expect(fresh.tasks.filter((t: any) => !t.trashed && t.title === 'Вода')).toHaveLength(0);
   expect(fresh.preferences.waterSeedRetired).toBe(true);
 
-  // Retire the existing default entry into recoverable trash and remove its legacy routine.
+  // A legacy routine can be identified by ID; an ordinary water task must survive.
   await page.addInitScript(() => {
     if (sessionStorage.getItem('legacy-water-retired')) return;
     localStorage.setItem('flow_v2', JSON.stringify({
@@ -42,10 +42,16 @@ test('water seed is retired once; a user-created counter can be created, counted
   await page.clock.runFor(1600);
   const retired = await savedState(page);
   expect(retired.tasks).toHaveLength(1);
-  expect(retired.tasks[0]).toMatchObject({ id: 301, title: 'Вода', trashed: true, counter: 200 });
-  expect(retired.tasks[0].trashedAt).toEqual(expect.any(Number));
+  expect(retired.tasks[0]).toMatchObject({ id: 301, title: 'Вода', counter: 200 });
+  expect(retired.tasks[0].trashed).not.toBe(true);
+  expect(retired.tasks[0].trashedAt).toBeUndefined();
   expect(retired.recur).toEqual([]);
   expect(retired.preferences.waterSeedRetired).toBe(true);
+
+  // Only an explicit user action puts this ordinary task in the trash.
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await page.getByRole('button', { name: 'У кошик: Вода', exact: true }).click();
+  await page.getByRole('button', { name: 'Зараз', exact: true }).click();
 
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?', { exact: true }).fill('Вода');
