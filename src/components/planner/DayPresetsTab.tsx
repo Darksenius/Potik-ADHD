@@ -3,6 +3,7 @@ import { useStore } from '../../state/store';
 import type { DateKey, DayTemplate, DayTemplateBlock, DayTemplateTask, TaskType } from '../../types';
 import { fmtDate, fmtHuman, isDateKey, normalizeDayRange, normalizeTime } from '../../utils/date';
 import { captureDayPresetTask } from '../../utils/dayPresetTasks';
+import { isCalendarRepeat, taskOccursOn } from '../../utils/taskSchedule';
 import taskTypeCatalog from '../../content/task-types.json' with { type: 'json' };
 import Icon from '../common/Icon';
 import WeekConstructor from './WeekConstructor';
@@ -82,8 +83,8 @@ export default function DayPresetsTab() {
     const zoneIds = new Set(blocks.map((block) => block.zoneId));
     const sourceTasks = state.tasks
       .filter((task) => !task.trashed && !task.someday && (
-        task.planDate === sourceDate || task.schedDate === sourceDate
-        || (!task.planDate && !task.schedDate && task.zoneId != null && zoneIds.has(task.zoneId))
+        taskOccursOn(task, sourceDate)
+        || (!task.planDate && !task.schedDate && !isCalendarRepeat(task) && task.zoneId != null && zoneIds.has(task.zoneId))
       ))
       .map((task) => captureDayPresetTask(task, `source-${task.id}`));
     setDraft({ id: undefined, name: '', blocks, tasks: sourceTasks });

@@ -133,13 +133,18 @@ test('everyzone merges continuous slots and uses the actual planned override sta
 
 test('negative daily counts reset yesterday but preserve a click already recorded today', () => {
   const today = fmtDate(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = fmtDate(yesterdayDate);
   useStore.setState({ tasks: [
-    task(1, { type: 'negative', counter: 4, counterDay: '2026-09-30' }),
+    task(1, { type: 'negative', counter: 4, counterDay: yesterday }),
     task(2, { type: 'negative', counter: 1, counterDay: today }),
+    task(3, { type: 'negative', counter: 3, counterDay: yesterday, planDate: yesterday, dayPresetKey: 'tpl:entry:date' }),
   ] });
-  useStore.getState().dailyResetIfNeeded('Wed Sep 30 2026');
+  useStore.getState().dailyResetIfNeeded(yesterdayDate.toDateString());
   expect(useStore.getState().tasks[0]).toMatchObject({ counter: 0, counterDay: today });
   expect(useStore.getState().tasks[1].counter).toBe(1);
+  expect(useStore.getState().tasks[2]).toMatchObject({ counter: 3, counterDay: yesterday, planDate: yesterday });
   useStore.getState().checkDailyReset();
   expect(useStore.getState().tasks[1].counter).toBe(1);
 });

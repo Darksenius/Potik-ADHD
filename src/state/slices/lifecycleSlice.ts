@@ -104,6 +104,10 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
       recur: state.recur.map((routine) => ({ ...routine, val: 0, done: false })),
       tasks: state.tasks.map((task) => {
         if (task.trashed) return task;
+        // Preset negative tasks are independent date-scoped journals; midnight
+        // must not erase the progress stored on an earlier planned date.
+        if (task.type === 'negative' && task.dayPresetKey && task.repeat === 'none'
+          && task.planDate && task.planDate < day) return task;
         // A negative task is a daily journal, not a completable occurrence.
         // A click already recorded today must survive a delayed reset.
         if (task.type === 'negative' && (!task.counterDay || task.counterDay < day)) {

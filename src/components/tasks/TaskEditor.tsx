@@ -53,7 +53,9 @@ export default function TaskEditor() {
   const [repeatInterval, setRepeatInterval] = useState(existing?.repeatInterval || draftValues?.repeatInterval || 30);
   const [repeatUnit, setRepeatUnit] = useState<NonNullable<Task['repeatUnit']>>(existing?.repeatUnit || draftValues?.repeatUnit || 'min');
   const [tagsText, setTagsText] = useState((existing?.tags || []).join(', ') || draftValues?.tagsText || '');
-  const [date, setDate] = useState((existing?.type === 'sched' ? existing.schedDate || existing.planDate : existing?.planDate) || draftValues?.date || initialDate || '');
+  const [date, setDate] = useState(existing
+    ? (existing.type === 'sched' ? existing.schedDate || existing.planDate : existing.planDate) || ''
+    : draftValues?.date ?? initialDate ?? '');
   const [time, setTime] = useState(existing?.schedTime || draftValues?.time || '');
   const [alarmTime, setAlarmTime] = useState(existing?.alarmTime || draftValues?.alarmTime || '');
   const [winStart, setWinStart] = useState(existing?.windowStart || draftValues?.winStart || '07:00');
@@ -64,7 +66,7 @@ export default function TaskEditor() {
   const [counterEnabled, setCounterEnabled] = useState(existing ? hasTaskCounter(existing) : draftValues?.counterEnabled ?? preset?.type === 'counter');
   const [counterStep, setCounterStep] = useState(existing?.counterStep || draftValues?.counterStep || preset?.counterStep || 1);
   const [counterUnit, setCounterUnit] = useState<NonNullable<Task['counterUnit']>>(existing?.counterUnit || draftValues?.counterUnit || preset?.counterUnit || 'count');
-  const [negXp, setNegXp] = useState(existing?.negXp || draftValues?.negXp || 5);
+  const [negXp, setNegXp] = useState(existing?.negXp ?? draftValues?.negXp ?? 5);
   const [reminder, setReminder] = useState(existing?.reminderEnabled ?? draftValues?.reminder ?? true);
   const [advance, setAdvance] = useState(String(existing?.remindBeforeMinutes ?? draftValues?.advance ?? 0));
   const [error, setError] = useState('');
@@ -233,7 +235,7 @@ export default function TaskEditor() {
           <label className="el" htmlFor="task-counter-target">Ціль лічильника (0 — без цілі)<input id="task-counter-target" type="number" className="ei" min="0" value={cntTgt} onChange={e => setCntTgt(Number(e.target.value))} /></label>
           <p className="editor-hint">Наприклад, «Вода»: крок 250 мл; «Розтяжка»: 5 хв. Для щоденного обнулення вибери повторення «Щодня». Кількість таких задач не обмежена. Ціль обираєш сам; її досягнення не завершує задачу автоматично.</p>
         </>}
-        {type === 'negative' && <label className="el">Штраф досвіду<input type="number" className="ei" min="1" value={negXp} onChange={e => setNegXp(Math.max(1, Number(e.target.value)))} /></label>}
+        {type === 'negative' && <label className="el">Штраф досвіду (0 — без штрафу)<input type="number" className="ei" min="0" step="1" value={negXp} onChange={e => setNegXp(Math.max(0, Number(e.target.value)))} /></label>}
         <div className="ef"><label className="el" htmlFor="task-folder">Папка</label><div className="editor-row"><select id="task-folder" className="ei" value={folderId} onChange={e => setFolderId(e.target.value)}><option value="">Без папки</option>{folders.map(f => <option value={f.id} key={f.id}>{f.ico} {f.nm}</option>)}</select><button type="button" onClick={() => { const name = window.prompt('Назва нової папки:'); if (name?.trim()) { const id = addFolder(name.trim(), '📁'); if (id) { setFolderId(id); setDirty(true); } } }}>+ Папка</button></div></div>
         <div className="ef"><label className="el" htmlFor="task-tags">Теги через кому</label><input id="task-tags" className="ei" value={tagsText} onChange={e => setTagsText(e.target.value)} /></div>
         {!isNew && <div className="ef"><span className="el">Зберегти зміни й перенести</span><div className="editor-actions">{[15, 60, 180].map(min => <button key={min} type="button" onClick={() => submit(min)}>+{min < 60 ? min + ' хв' : min / 60 + ' год'}</button>)}<button type="button" onClick={() => submit('tomorrow')}>На завтра</button></div></div>}

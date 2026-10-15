@@ -128,6 +128,27 @@ test('day journal stays attached to its selected day', async ({ page }) => {
   await expect(journal).toHaveValue('Запис середи');
 });
 
+test('source-day presets include due repeats and exclude off-day or separately dated tasks', async ({ page }) => {
+  await boot(page, {
+    zones: [{ id: 3, nm: 'Зона', color: '#7ed321', slots: [], desc: '', prio: 1, active: true }],
+    planDayZones: { '2026-09-16': [{ zoneId: 3, s: '09:00', e: '10:00' }] },
+    tasks: [
+      task(401, 'Щоденна', { zoneId: 3, planDate: '2026-09-15', repeat: 'daily' }),
+      task(402, 'Не сьогодні custom', { zoneId: 3, planDate: undefined, repeat: 'custom', repeatDays: [true, false, false, false, true, false, false] }),
+      task(403, 'Не сьогодні weekly', { zoneId: 3, planDate: undefined, created: '2026-09-10T09:00:00.000Z', repeat: 'weekly' }),
+      task(404, 'Інший день', { zoneId: 3, planDate: '2026-09-17' }),
+    ],
+  });
+  await openTab(page, 'Пресети дня');
+  await page.getByRole('button', { name: 'Завантажити день', exact: true }).click();
+  await expect(page.locator('.day-presets-status')).toContainText('завантажено 1 зон і 1 типових задач');
+  await page.locator('#day-preset-name').fill('Перевірка дня');
+  await page.getByRole('button', { name: 'Зберегти пресет', exact: true }).click();
+  await page.clock.runFor(1000);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
+  expect(saved.dayTemplates.find((preset: any) => preset.name === 'Перевірка дня').tasks.map((entry: any) => entry.task.title)).toEqual(['Щоденна']);
+});
+
 test('rest-day toggle immediately updates the calendar', async ({ page }) => {
   await boot(page);
   await page.getByRole('button', { name: 'План', exact: true }).click();

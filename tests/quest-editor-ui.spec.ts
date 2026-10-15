@@ -6,6 +6,23 @@ async function selectTaskType(page: Page, type: string) {
   await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
 }
 
+test('a new undated task draft keeps its empty date through close and reload', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#add-fab').click();
+  await page.getByLabel('Що зробити?', { exact: true }).fill('Без прихованої дати');
+  await page.getByRole('button', { name: 'Без дати', exact: true }).click();
+  await page.getByRole('button', { name: '← Назад', exact: true }).click();
+  await page.reload();
+  await page.locator('#add-fab').click();
+  await expect(page.locator('#task-title')).toHaveValue('Без прихованої дати');
+  await expect(page.locator('#task-date')).toHaveValue('');
+  await page.locator('#edit-save-fab').click();
+  const data = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
+  expect(data.tasks).toHaveLength(1);
+  expect(data.tasks[0].planDate).toBeUndefined();
+  expect(data.taskEditorDraft).toBe('');
+});
+
 test('create a zoned checklist with steps and note, count a quest, then reload the real editor data', async ({ page }, info) => {
   await page.clock.install({ time: new Date('2026-10-14T18:30:00+03:00') });
   await page.goto('/');

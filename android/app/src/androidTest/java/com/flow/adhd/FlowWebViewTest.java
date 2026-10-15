@@ -37,7 +37,7 @@ public class FlowWebViewTest {
             assertEquals(BuildConfig.VERSION_NAME, value(scenario, "return document.querySelector('.release-note').getAttribute('data-version');").getString("value"));
             assertTrue(value(scenario, "return document.querySelector('.release-note').open;").getBoolean("value"));
             assertTrue(value(scenario, "return document.querySelector('.release-note').querySelectorAll('.release-check').length >= 1;").getBoolean("value"));
-            assertTrue(value(scenario, "return !!document.querySelector('.release-personal') && document.querySelector('.release-personal').textContent.trim().length > 0 && document.querySelector('.release-personal').textContent.toLowerCase().indexOf('для тебе') >= 0;").getBoolean("value"));
+            assertTrue(value(scenario, "return !!document.querySelector('.release-personal') && document.querySelector('.release-personal').textContent.trim().length > 0 && document.querySelector('.release-note').textContent.indexOf('Що тобі перевірити') >= 0;").getBoolean("value"));
             click(scenario, ".release-note:nth-of-type(2) > summary");
             assertTrue(value(scenario, "return document.querySelectorAll('.release-note')[1].open;").getBoolean("value"));
             click(scenario, ".whats-new-header button");
@@ -56,7 +56,8 @@ public class FlowWebViewTest {
         String title = "Android r2 Inbox " + UUID.randomUUID();
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             awaitReady(scenario);
-            click(scenario, "#tabs button:nth-child(3)");
+            click(scenario, "#tabs button:nth-child(4)");
+            click(scenario, "button[aria-label=\"Вхідні\"]");
             await(scenario, "document.querySelector('#quick-task') !== null", "Inbox opens");
             input(scenario, "#quick-task", title);
             click(scenario, ".quick-capture button");
@@ -68,7 +69,8 @@ public class FlowWebViewTest {
             await(scenario, "Array.prototype.some.call(document.querySelectorAll('#tasks-list .tc .tt'),"
                 + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";})",
                 "Undated simple capture is immediately available in Now");
-            click(scenario, "#tabs button:nth-child(3)");
+            click(scenario, "#tabs button:nth-child(4)");
+            click(scenario, "button[aria-label=\"Вхідні\"]");
             await(scenario, "Array.prototype.some.call(document.querySelectorAll('#inbox-sec .tt'),"
                 + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";})",
                 "Unplanned capture remains in Inbox for planning");
@@ -249,7 +251,7 @@ public class FlowWebViewTest {
             String date = value(scenario, "return document.querySelector('#task-date').value;").getString("value");
             assertTrue("Selected calendar date must be filled", date.matches("\\d{4}-\\d{2}-\\d{2}"));
             input(scenario, "#task-title", title);
-            click(scenario, ".editor-kinds button:nth-child(2)");
+            click(scenario, ".editor-kinds button:nth-child(3)");
             await(scenario, "document.querySelector('#task-time') !== null", "Scheduled time input opens");
             input(scenario, "#task-time", "10:30");
             assertEquals("Changing the type must keep the selected calendar day", date,

@@ -87,7 +87,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         tasks: s.tasks.map((x) => (x.id === id ? { ...x, counter: (x.counter || 0) + taskCounterStep(x), counterDay: fmtDate(new Date()) } : x)),
       }));
       get().incrementNegCount();
-      get().award(-(t.negXp || 5));
+      get().award(-(t.negXp ?? 5));
       return;
     }
 
@@ -470,7 +470,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
           next.counterStep = Number.isSafeInteger(patch.counterStep) && patch.counterStep! > 0 ? patch.counterStep : next.counterStep || 1;
           next.counterUnit = patch.counterUnit || next.counterUnit || 'count';
         }
-        if (next.type === 'negative') next.negXp = patch.negXp || 5;
+        if (next.type === 'negative') next.negXp = Number.isSafeInteger(patch.negXp) && patch.negXp! >= 0 ? patch.negXp : next.negXp ?? 5;
         next.tags = (patch.tags || []).map((s) => s.trim()).filter(Boolean);
 
         if (next.type === 'check' && (!t.items || t.items.length === 0) && Array.isArray(patch.items)) {

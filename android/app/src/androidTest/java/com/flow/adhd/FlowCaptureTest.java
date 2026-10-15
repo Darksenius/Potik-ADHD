@@ -175,7 +175,7 @@ public class FlowCaptureTest {
             SystemClock.sleep(500);
             assertEquals("Pending Done cannot be queued twice", 1,
                     countEvent(new JSONArray(bridge.getEventEnvelopes()), "task_done:" + counterId));
-            awaitForeground(context, "Зараз: 0 задач", null, null);
+            awaitForeground(context, "Виконано: " + counterTitle, null, "Зараз немає доречних квестів");
             assertEquals("Notification projection does not write task state", originalState, bridge.load());
 
             bridge.saveNotif(new JSONObject().put("taskList", new JSONArray()).put("questTasks", new JSONArray())
@@ -313,6 +313,110 @@ public class FlowCaptureTest {
         }
     }
 
+    @Test public void notificationDoneCanBeUndoneBeforeActivityDrainsExactlyOnce() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        FlowBridge bridge = new FlowBridge(context);
+        String previousNotif = bridge.getNotifJson();
+        String originalState = bridge.load();
+        long taskId = System.currentTimeMillis();
+        String title = "Undo shade " + UUID.randomUUID();
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        FlowNotifService.stop(context);
+        manager.cancel(FlowNotifService.NOTIF_ID);
+        for (int i = 0; i < 8; i++) manager.cancel(FlowNotifService.NOTIF_TASK_BASE + i);
+        manager.cancel(FlowNotifService.NOTIF_TASK_BASE + 100);
+        SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+        iso.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        String created = iso.format(new java.util.Date());
+        try {
+            JSONObject state = new JSONObject(originalState == null || originalState.isEmpty() ? "{}" : originalState);
+            JSONArray tasks = state.optJSONArray("tasks");
+            if (tasks == null) tasks = new JSONArray();
+            JSONObject task = new JSONObject().put("id", taskId).put("title", title).put("type", "simple")
+                    .put("done", false).put("someday", false).put("created", created).put("repeat", "none")
+                    .put("repeatDays", new JSONArray().put(false).put(false).put(false).put(false).put(false).put(false).put(false))
+                    .put("tags", new JSONArray()).put("completionCredited", false);
+            tasks.put(task);
+            state.put("tasks", tasks).put("nid", Math.max(state.optLong("nid", 300L), taskId + 1L));
+            bridge.save(state.toString());
+            long now = System.currentTimeMillis();
+            JSONArray rows = new JSONArray().put(new JSONObject(task.toString()));
+            JSONArray timeline = new JSONArray().put(new JSONObject().put("zoneId", 0).put("startAt", now - 60_000L)
+                    .put("endAt", now + 24L * 60L * 60L * 1000L));
+            bridge.saveNotif(new JSONObject().put("body", "1 активна · 0 виконано").put("done", 0).put("total", 1)
+                    .put("tasks", title).put("taskList", rows).put("questTasks", rows).put("questTimeline", timeline)
+                    .put("questTimelineUntil", now + 24L * 60L * 60L * 1000L).toString());
+            FlowNotifService.start(context); // No Activity until both shade actions finish.
+            showTaskNotifications(context);
+            Notification card = awaitTaskNotification(manager, FlowNotifService.NOTIF_TASK_BASE, "1.  " + title);
+            findServiceAction(card, FlowNotifService.ACTION_TASK_DONE).actionIntent.send(context, 0, null);
+            awaitTaskEventPrefix(bridge, "task_done:" + taskId);
+            Notification.Action undo = null;
+            long deadline = SystemClock.elapsedRealtime() + 8_000L;
+            while (SystemClock.elapsedRealtime() < deadline && undo == null) {
+                for (android.service.notification.StatusBarNotification item : manager.getActiveNotifications())
+                    if (item.getId() == FlowNotifService.NOTIF_ID) for (Notification.Action action : item.getNotification().actions)
+                        if ("Скасувати".contentEquals(action.title)) undo = action;
+                if (undo == null) SystemClock.sleep(50);
+            }
+            assertNotNull("Done notification must expose Undo without opening Activity", undo);
+            undo.actionIntent.send(context, 0, null);
+            JSONObject undoRow = null;
+            deadline = SystemClock.elapsedRealtime() + 8_000L;
+            while (SystemClock.elapsedRealtime() < deadline && undoRow == null) {
+                JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+                for (int i = 0; i < events.length(); i++) {
+                    JSONObject row = events.getJSONObject(i);
+                    String event = row.optString("event", "");
+                    if (!event.startsWith("task_undo:")) continue;
+                    JSONObject payload = new JSONObject(event.substring("task_undo:".length()));
+                    if (payload.optLong("id", -1L) == taskId) undoRow = row;
+                }
+                if (undoRow == null) SystemClock.sleep(50);
+            }
+            assertNotNull("Undo action must durably enqueue its replay while no Activity exists", undoRow);
+            JSONObject undoPayload = new JSONObject(undoRow.getString("event").substring("task_undo:".length()));
+            assertEquals(taskId, undoPayload.getLong("id")); assertEquals("done", undoPayload.getString("kind"));
+            assertTrue("Undo must be tapped within ten seconds of Done", undoPayload.getLong("undoneAt") - undoPayload.getLong("sourceAt") <= 10_000L);
+            JSONArray queued = new JSONArray(bridge.getEventEnvelopes());
+            int undoCount = 0;
+            for (int i = 0; i < queued.length(); i++) { String event = queued.getJSONObject(i).optString("event", ""); if (event.startsWith("task_undo:") && new JSONObject(event.substring("task_undo:".length())).optLong("id", -1L) == taskId) undoCount++; }
+            assertEquals(1, countEvent(queued, "task_done:" + taskId)); assertEquals(1, undoCount);
+            try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+                awaitWeb(scenario, "document.querySelector('#add-fab') !== null", "React app starts after native Undo");
+                awaitWeb(scenario, "(function(){var s=JSON.parse(window.FlowBridge.load()||'{}'),t=(s.tasks||[]).filter(function(x){return x.id===" + taskId
+                        + " && x.title===" + JSONObject.quote(title) + ";}),h=(s.taskHistory||[]).filter(function(e){return e.taskId===" + taskId
+                        + " && e.taskCreated===" + JSONObject.quote(created) + ";});return t.length===1 && !t[0].done && h.filter(function(e){return e.kind==='completed'}).length===1 && h.filter(function(e){return e.kind==='reopened'}).length===1;})()",
+                        "Room drains both shade actions before assertions");
+                JSONObject result = value(scenario, "var s=JSON.parse(window.FlowBridge.load()||'{}'),t=(s.tasks||[]).filter(function(x){return x.id===" + taskId
+                        + " && x.title===" + JSONObject.quote(title) + ";}),h=(s.taskHistory||[]).filter(function(e){return e.taskId===" + taskId
+                        + " && e.taskCreated===" + JSONObject.quote(created) + ";});return {tasks:t.length,done:t.length?t[0].done:null,completed:h.filter(function(e){return e.kind==='completed'}).length,reopened:h.filter(function(e){return e.kind==='reopened'}).length};");
+                JSONObject committed = result.getJSONObject("value");
+                assertEquals(1, committed.getInt("tasks")); assertFalse("Done→Undo leaves task open", committed.getBoolean("done"));
+                assertEquals(1, committed.getInt("completed")); assertEquals(1, committed.getInt("reopened"));
+                JSONArray remaining = new JSONArray(bridge.getEventEnvelopes());
+                assertEquals(0, countEvent(remaining, "task_done:" + taskId));
+                for (int i = 0; i < remaining.length(); i++) { String event = remaining.getJSONObject(i).optString("event", ""); if (event.startsWith("task_undo:")) assertNotEquals(taskId, new JSONObject(event.substring("task_undo:".length())).optLong("id", -1L)); }
+            }
+        } finally {
+            manager.cancel(FlowNotifService.NOTIF_ID);
+            for (int i = 0; i < 8; i++) manager.cancel(FlowNotifService.NOTIF_TASK_BASE + i); manager.cancel(FlowNotifService.NOTIF_TASK_BASE + 100);
+            try {
+                JSONArray events = new JSONArray(bridge.getEventEnvelopes());
+                JSONArray ownIds = new JSONArray();
+                for (int i = 0; i < events.length(); i++) {
+                    JSONObject row = events.getJSONObject(i);
+                    String event = row.optString("event", "");
+                    if (event.equals("task_done:" + taskId) || event.startsWith("task_undo:") && event.contains("\"id\":" + taskId)) ownIds.put(row.getLong("id"));
+                }
+                if (ownIds.length() > 0) bridge.saveWithEvents(originalState == null ? "{}" : originalState, ownIds.toString());
+            } catch (Exception ignored) {}
+            bridge.save(originalState == null ? "" : originalState);
+            bridge.saveNotif(previousNotif == null || previousNotif.isEmpty() ? "{}" : previousNotif);
+            FlowNotifService.stop(context);
+        }
+    }
+
     @Test public void separateShadeActionsQueueAndMaterializeThroughRoom() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         String suffix = UUID.randomUUID().toString();
@@ -391,12 +495,12 @@ public class FlowCaptureTest {
             JSONObject note = findBy(state.getJSONArray("qnotes"), "txt", noteText);
             assertEquals("impulse", note.getString("folder"));
             awaitAcknowledged(new FlowBridge(context), taskEventId, noteEventId);
-            evaluate(scenario, "document.querySelector('#tabs button:nth-child(3)').click();return true;");
-            awaitWeb(scenario, "document.querySelector('#inbox-sec') && document.querySelector('#inbox-sec').textContent.indexOf("
-                + JSONObject.quote(taskText) + ")>=0", "Task is accessible from Inbox");
             evaluate(scenario, "document.querySelector('#tabs button:nth-child(4)').click();return true;");
             awaitWeb(scenario, "document.querySelector('.more-menu') !== null", "More sections open");
-            evaluate(scenario, "var b=document.querySelector('.more-menu button[aria-label=\\\"Блокнот\\\"]');if(!b)throw new Error('Notes tab missing');b.click();return true;");
+            evaluate(scenario, "var b=Array.from(document.querySelectorAll('.more-menu button')).find(function(x){return x.getAttribute('aria-label')==='Вхідні';});if(!b)throw new Error('Inbox tab missing');b.click();return true;");
+            awaitWeb(scenario, "document.querySelector('#inbox-sec') && document.querySelector('#inbox-sec').textContent.indexOf("
+                + JSONObject.quote(taskText) + ")>=0", "Task is accessible from Inbox");
+            evaluate(scenario, "document.querySelector('#tabs button:nth-child(3)').click();return true;");
             awaitWeb(scenario, "document.querySelector('#qn-list') !== null", "Notes section opens");
             awaitWeb(scenario, "document.querySelector('#qn-list') && document.querySelector('#qn-list').textContent.indexOf("
                 + JSONObject.quote(noteText) + ")>=0", "Note is accessible in Notes");

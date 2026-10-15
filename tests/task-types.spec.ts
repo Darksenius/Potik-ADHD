@@ -24,6 +24,17 @@ function reloadStore() {
 test.beforeEach(() => useStore.setState(useStore.getInitialState(), true));
 test.afterEach(() => useStore.setState(useStore.getInitialState(), true));
 
+test('an explicitly neutral journal keeps zero XP penalty through save and reload', () => {
+  const state = useStore.getState();
+  const id = state.saveTask(null, { title: 'Запис без штрафу', type: 'negative', negXp: 0 });
+  expect(task(id).negXp).toBe(0);
+  reloadStore();
+  const xp = useStore.getState().xpTotal;
+  useStore.getState().toggleTask(id);
+  expect(task(id).counter).toBe(1);
+  expect(useStore.getState().xpTotal).toBe(xp);
+});
+
 for (const type of types) {
   test(`${type}: create, act, restore JSON, edit and convert without stale scheduling`, () => {
     const zone = useStore.getState().zones.find(candidate => candidate.id !== 0)!;
