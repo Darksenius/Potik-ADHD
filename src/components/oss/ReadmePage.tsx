@@ -1,0 +1,47 @@
+import { useState } from 'react';
+import { useStore } from '../../state/store';
+import OssPage, { useAppVersion } from './OssPage';
+import Icon from '../common/Icon';
+import type { IconName } from '../common/Icon';
+import type { TaskType } from '../../types';
+import taskTypeData from '../../content/task-types.json' with { type: 'json' };
+
+type TaskTypeInfo = { label: string; icon: IconName; xp: number; hint: string; description: string; example: string };
+const TYPE_CATALOG = taskTypeData as Record<TaskType, TaskTypeInfo>;
+const TYPES = (Object.keys(TYPE_CATALOG) as TaskType[]).map(type => ({ type, ...TYPE_CATALOG[type] }));
+
+export default function ReadmePage() {
+  const showPage = useStore(s => s.showPage);
+  const [ossOpen, setOssOpen] = useState(false);
+  const version = useAppVersion();
+  return <><main id="readme-page" className="page active">
+    <div id="rm-hdr"><h1>Потік · Довідка</h1><p>Панель квестів для реального життя · {version}</p></div>
+    <button type="button" className="secondary-action settings-return" onClick={() => showPage('settings')}>Назад до налаштувань</button>
+    <div className="rm-body">
+      <section className="rm-s"><h3><Icon name="quest" /> Що доречно зараз?</h3>
+        <p>Зони дня — це напрямки. «Підмести підлогу → Вечір» не заважає в Обід. У «Зараз» видно до п’яти доречних незавершених справ; закріплені пріоритети йдуть першими лише коли підходять зона, дата й час.</p>
+        <p>Нова справа без дати доступна одразу, якщо підходять її умови. Вхідні допомагають призначити їй день пізніше. Пропущені, майбутні та відкладені задачі залишаються у «Усі задачі», а заплановані на день — у Плані.</p>
+        <p>Почни з короткої назви. У редакторі обери «Коли?» й «У якій зоні?». Нотатка, кроки, лічильник і повторення — за потреби. Стан записує фактичний фокус; це не другий фільтр напрямків.</p>
+      </section>
+      <section className="rm-s"><h3><Icon name="inbox" /> Взаємодія зі шторки</h3>
+        <p>Постійне сповіщення — короткий інтерфейс: швидко записати задачу, записати нотатку або натиснути «Розгорнути». Задача потрапляє у Вхідні й поточний добір; нотатка — у папку «Імпульс» Блокнота.</p>
+        <p>«Розгорнути» показує до п’яти окремих карток. Натискання на картку відкриває саме цю задачу, з її кроками, лічильником і деталями.</p>
+        <ul><li><b>Виконано</b> — завершити показану справу.</li>
+          <li><b>Не зараз</b> — тимчасово запропонувати в наступній зоні сьогоднішнього фактичного розкладу. Якщо там нічого не зроблено, задача чекає наступного входження у попередню зону. В останній зоні це діє як «Не сьогодні».</li>
+          <li><b>Не сьогодні</b> — прив’язана справа чекає завтрашнього входження у власну зону; без прив’язки — рівно 23 години від натискання.</li></ul>
+        <p>Перенесення зберігає кроки й лічильник одного виконання та не змінює постійну зону або повторення. Для задач із сигналом воно переносить один сигнал у новий момент; попереднє нагадування заздалегідь скасовується.</p>
+      </section>
+      <details className="rm-s help-types"><summary><Icon name="counter" /> Типи задач і приклади</summary>
+        {TYPES.map(type => <article className="help-type" key={type.type}><h4><Icon name={type.icon} /> {type.label}</h4><p>{type.description}</p><p className="help-example">{type.example}</p></article>)}
+        <p>Повторення — спільна властивість. Завершення разової справи зберігається; повторювана отримує нове виконання за своїм правилом. Окремої автоматичної задачі води немає.</p>
+      </details>
+      <details className="rm-s help-types"><summary><Icon name="calendar" /> План, розклад і дані</summary>
+        <p>План показує задачі вибраного дня й дозволяє створити справу прямо на цей день. Шаблони дня та тижня задають зони; виняток конкретного дня має перевагу над базовим розкладом.</p>
+        <p>«Ще» відкриває всі задачі, Блокнот, Стан, Зони, Ідеї та Статистику. Ідеї — це справи «на колись». Усі задачі знаходять також справу з видаленою або вимкненою зоною: відкрий редактор і вибери іншу.</p>
+        <p>Налаштування містять тему, анімації, досвід, дозволи сповіщень та експорт/імпорт. Несумісні старі дані зберігаються в окремому архіві, який можна експортувати там само.</p>
+        <p>Експорт JSON зберігає повний стан. Імпорт може замінити або доповнити дані. «Аналіз ШІ» лише копіює промпт у буфер; далі ти сам обираєш, куди його вставити.</p>
+      </details>
+      <section className="rm-s"><h3><Icon name="help" /> Про застосунок</h3><p>Потік — відкрите програмне забезпечення за ліцензією AGPL v3. Ліцензія та вбудований вихідний код доступні офлайн.</p><button className="oss-btn" onClick={() => setOssOpen(true)}>Ліцензія та вихідний код</button></section>
+    </div>
+  </main><OssPage open={ossOpen} onClose={() => setOssOpen(false)} /></>;
+}

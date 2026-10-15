@@ -1,0 +1,6 @@
+.potik-icon{display:inline-block;width:1.5em;height:1.5em;flex-shrink:0;vertical-align:middle;background-image:url('/brand/potik-icons.png');background-repeat:no-repeat;background-size:600% 400%;pointer-events:none}
+[data-theme="light"] .potik-icon{filter:brightness(.42) saturate(1.8)}
+.nb .potik-icon,.tb .potik-icon{width:27px;height:27px}
+.more-menu strong{display:flex;align-items:center;gap:8px}
+#logo{display:flex;align-items:center;gap:8px}
+.potik-brand{width:30px;height:30px;object-fit:contain}

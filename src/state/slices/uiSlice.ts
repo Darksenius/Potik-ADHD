@@ -1,0 +1,133 @@
+import type { AppSlice } from '../store';
+import type { Preferences } from '../../types';
+import { fmtDate } from '../../utils/date';
+
+/**
+ * ══ UI ══ — навігаційний і фільтраційний стан, що реально потрібен
+ * кільком компонентам одночасно (тому й живе в глобальному сторі).
+ *
+ * СВІДОМО ВИКЛЮЧЕНО (буде локальним useState у відповідному компоненті,
+ * КОЛИ той буде побудований на Кроці 3 — не глобальний стан):
+ *   - editId, editRepDays        — форма редактора задачі (рядки 1213)
+ *   - slotRows, curPickerSlot    — форма редактора зони (рядок 1215)
+ *   - firedA                     — Set дедуплікації спрацьованих будильників
+ *                                  (рядок 1212), теж імперативна бухгалтерія
+ */
+export type PageId = 'main' | 'readme' | 'settings' | 'whatsnew';
+export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state' | 'inbox' | 'more' | 'alltasks';
+
+export interface UiSlice {
+  alarmTaskIds: number[];
+  theme: 'light' | 'dark';
+  preferences: Preferences;
+  setPreferences: (patch: Partial<Preferences>) => void;
+  currentPage: PageId;
+  currentTab: TabId;
+
+  /** ctxFilter — рядок 1212: 'all' | 'f:<folderId>' | 'neg' */
+  taskFilter: string;
+  /** curFolder — рядок 1214: фільтр папки нотаток */
+  noteFolder: string;
+  showDone: boolean;
+
+  /** planWeekOffset/planSelectedDay — рядок 1224, НЕ персистяться в оригіналі */
+  planWeekOffset: number;
+  planSelectedDay: string | null;
+
+  /**
+   * Керує відкриттям редактора задачі (майбутній TaskEditor, Крок 3):
+   * число — редагувати задачу з цим id; 'new' — нова задача (заміна
+   * openEdit(null)); null — редактор закритий. Покриває і виклик з
+   * nativeBridge (note:'...' → openEdit(null), рядок 4411), і клік ✎
+   * на картці задачі (openEdit(t.id), рядок 2235).
+   */
+  editorTaskId: number | 'new' | null;
+  editorInitialDate: string | null;
+
+  toggleTheme: () => void;
+  showPage: (page: PageId) => void;
+  switchTab: (tab: TabId) => void;
+  setTaskFilter: (filter: string) => void;
+  setNoteFolder: (folder: string) => void;
+  toggleShowDone: () => void;
+  requestNewTaskEditor: (date?: string) => void;
+  requestEditTask: (id: number) => void;
+  closeTaskEditor: () => void;
+  /** planSelDay(ds) — рядок 3400, без scrollIntoView (репорт 11.06 — совало інтерфейс) */
+  setPlanSelectedDay: (ds: string) => void;
+  /** weekShift(dir) — рядок 3325 */
+  shiftPlanWeek: (dir: -1 | 1) => void;
+  /** toast(msg) — рядки 2690-2699, DOM-тост замінено на похідний стан */
+  toastMessage: string | null;
+  showToast: (msg: string) => void;
+  dismissToast: () => void;
+  /**
+   * showBackupBanner() — рядки 2995-3034. Наповнюється ОДИН РАЗ при старті
+   * (checkBackupRecovery() у services/persistence.ts), UI — BackupBanner.tsx.
+   */
+  backupBanner: { taskCount: number; saveDate: string; data: unknown } | 'unreadable' | null;
+  setBackupBanner: (v: UiSlice['backupBanner']) => void;
+  dismissBackupBanner: () => void;
+
+  /**
+   * kbdOverlay — плаваючий оверлей клавіатури (kbdOpen()/kbdClose(), рядки 3064–3120).
+   */
+  kbdOverlay: KbdOverlayContext | null;
+  openKbdOverlay: (ctx: KbdOverlayContext) => void;
+  closeKbdOverlay: () => void;
+}
+
+export interface KbdOverlayContext {
+  hint: string;
+  placeholder: string;
+  initialValue?: string;
+  showTaskHint?: boolean;
+  folderSel?: string;
+  onSend: (text: string, folder?: string | null) => void;
+}
+
+export const createUiSlice: AppSlice<UiSlice> = (set) => ({
+  alarmTaskIds: [],
+  theme: 'dark',
+  preferences: { themeMode: 'system', reduceMotion: false, showGamification: true },
+  setPreferences: (patch) => set((s) => ({ preferences: { ...s.preferences, ...patch } })),
+  currentPage: 'main',
+  currentTab: 'tasks',
+  taskFilter: 'all',
+  noteFolder: 'all',
+  showDone: false,
+  planWeekOffset: 0,
+  planSelectedDay: null,
+  editorTaskId: null,
+  editorInitialDate: null,
+  toastMessage: null,
+  backupBanner: null,
+  kbdOverlay: null,
+
+  // toggleTheme() — рядки 1171–1175. Застосування data-theme до <html> —
+  // тепер робота useEffect у App.tsx, що читає це поле (див. App.tsx).
+  toggleTheme: () => set((s) => {
+    const theme = s.theme === 'light' ? 'dark' : 'light';
+    return { theme, preferences: { ...s.preferences, themeMode: theme } };
+  }),
+  showPage: (page) => set({ currentPage: page }),
+  switchTab: (tab) => set({ currentTab: tab }),
+  setTaskFilter: (filter) => set({ taskFilter: filter }),
+  setNoteFolder: (folder) => set({ noteFolder: folder }),
+  toggleShowDone: () => set((s) => ({ showDone: !s.showDone })),
+  requestNewTaskEditor: (date) => set({ editorTaskId: 'new', editorInitialDate: typeof date === 'string' ? date : null }),
+  requestEditTask: (id) => set({ editorTaskId: id, editorInitialDate: null }),
+  closeTaskEditor: () => set({ editorTaskId: null, editorInitialDate: null }),
+  setPlanSelectedDay: (ds) => set({ planSelectedDay: ds }),
+  shiftPlanWeek: (dir) => set((s) => {
+    const selected = s.planSelectedDay ? new Date(s.planSelectedDay + 'T12:00:00') : new Date();
+    selected.setDate(selected.getDate() + dir * 7);
+    return { planWeekOffset: s.planWeekOffset + dir, planSelectedDay: fmtDate(selected) };
+  }),
+  showToast: (msg) => set({ toastMessage: msg }),
+  dismissToast: () => set({ toastMessage: null }),
+  setBackupBanner: (v) => set({ backupBanner: v }),
+  dismissBackupBanner: () => set({ backupBanner: null }),
+  openKbdOverlay: (ctx) => set({ kbdOverlay: ctx }),
+  closeKbdOverlay: () => set({ kbdOverlay: null }),
+});

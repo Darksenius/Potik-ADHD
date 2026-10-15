@@ -1,17 +1,18 @@
 apply plugin: 'com.android.application'
 
-// ─── ВЕРСІЯ ЗАСТОСУНКУ ────────────────────────────────────────────────
-// Семантичне версіонування MAJOR.MINOR.PATCH. Міняй ЛИШЕ ці три числа.
-//   MAJOR — велике переписування / несумісні зміни
-//   MINOR — нові фічі без поломок
-//   PATCH — виправлення багів
-// versionCode рахується автоматично і ЗАВЖДИ монотонно зростає
-// (Google Play вимагає, щоб новіша збірка мала більший versionCode).
-//   правило: MAJOR*10000 + MINOR*100 + PATCH   (MINOR/PATCH < 100)
-//   1.0.0 → 10000 · 1.2.3 → 10203 · 2.0.0 → 20000
-def versionMajor = 1
-def versionMinor = 7
-def versionPatch = 5
+// package.json is the only version source: 1.7.6-r10 -> 1.7.6.r10 / 1070610.
+def packageVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version.toString()
+def versionMatch = packageVersion =~ /^(\d+)\.(\d+)\.(\d+)(?:-r(\d+))?$/
+if (!versionMatch.matches()) throw new GradleException("Unsupported package version: ${packageVersion}")
+def versionMajor = versionMatch[0][1].toInteger()
+def versionMinor = versionMatch[0][2].toInteger()
+def versionPatch = versionMatch[0][3].toInteger()
+def versionRevision = versionMatch[0][4] ? versionMatch[0][4].toInteger() : 0
+if (versionMinor > 99 || versionPatch > 99 || versionRevision > 99) {
+    throw new GradleException('Minor, patch and revision must be 0..99 for the Android versionCode formula')
+}
+def packageVersionCode = versionMajor * 1000000L + versionMinor * 10000L + versionPatch * 100L + versionRevision
+if (packageVersionCode < 1 || packageVersionCode > 2100000000L) throw new GradleException('Android versionCode is out of range')
 
 android {
     namespace = "com.flow.adhd"
@@ -20,8 +21,8 @@ android {
         applicationId "com.flow.adhd"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode versionMajor * 10000 + versionMinor * 100 + versionPatch
-        versionName "${versionMajor}.${versionMinor}.${versionPatch}"
+        versionCode packageVersionCode.toInteger()
+        versionName packageVersion.replace('-r', '.r')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -82,13 +83,15 @@ dependencies {
 }
 
 // ─── АВТОКОПІЯ APK ────────────────────────────────────────────────────
-// Після кожної збірки (gradlew assembleDebug АБО Build/Run в Android Studio)
-// готовий APK копіюється у D:\Kantor-non-admin\Flow як «Потік.apk» (перезапис).
+// Копіювання лише за явним -PflowApkOutput=<directory>.
+// Звичайна збірка залишає APK у теці build/outputs.
 // УВАГА: файл має лишатися в UTF-8 (без BOM), інакше ім'я і коментарі поб'ються.
 tasks.register('copyApkToFlow') {
     doLast {
         def src = layout.buildDirectory.file('outputs/apk/debug/app-debug.apk').get().asFile
-        def dir = new File('D:/Kantor-non-admin/Flow')
+        def destination = project.findProperty('flowApkOutput')
+        if (!destination) throw new GradleException('Use -PflowApkOutput=<directory> to copy an APK explicitly')
+        def dir = new File(destination.toString())
         dir.mkdirs()
         def dst = new File(dir, 'Потік.apk')
         java.nio.file.Files.copy(src.toPath(), dst.toPath(),
@@ -105,7 +108,7 @@ tasks.register('copyApkToFlow') {
     }
 }
 afterEvaluate {
-    tasks.named('assembleDebug').configure { finalizedBy 'copyApkToFlow' }
+    if (project.hasProperty('flowApkOutput')) tasks.named('assembleDebug').configure { finalizedBy 'copyApkToFlow' }
 }
 
 apply from: 'capacitor.build.gradle'

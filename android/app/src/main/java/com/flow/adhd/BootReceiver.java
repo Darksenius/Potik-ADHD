@@ -14,11 +14,26 @@ public class BootReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if (intent == null) return;
         String action = intent.getAction();
-        if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
+        boolean boot = Intent.ACTION_BOOT_COMPLETED.equals(action);
+        boolean clockChanged = Intent.ACTION_TIME_CHANGED.equals(action)
+                || Intent.ACTION_TIMEZONE_CHANGED.equals(action)
+                || Intent.ACTION_DATE_CHANGED.equals(action);
+        if (!boot && !clockChanged) return;
+
+        Context appContext = context.getApplicationContext();
+        PendingResult pending = goAsync();
+        FlowDatabase.executeStorage(() -> {
             try {
-                FlowNotifService.start(context);
-                FlowAlarmReceiver.scheduleAll(context);
-            } catch (Exception ignored) {}
-        }
+                if (boot) FlowNotifService.start(appContext);
+                // RTC deadlines and the native wall-day projection both depend
+                // on the device calendar. scheduleAll is reentrant on this lane.
+                FlowAlarmReceiver.scheduleAll(appContext);
+                if (clockChanged) FlowNotifService.start(appContext);
+            } catch (Exception e) {
+                android.util.Log.w("BootReceiver", "Unable to refresh native schedules", e);
+            } finally {
+                if (pending != null) pending.finish();
+            }
+        });
     }
 }

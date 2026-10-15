@@ -1,0 +1,492 @@
+/** Current domain and persisted contracts. Historical source-line comments are
+ * reference material, not a requirement to preserve the former HTML schema. */
+import type taskTypeCatalog from '../content/task-types.json';
+
+// ─────────────────────────────────────────────────────────────────────────
+// ЗОНИ  (оригінал: рядки 1185–1191, 1309–1517)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface ZoneSlot {
+  /** Час початку "HH:MM" */
+  s: string;
+  /** Час кінця "HH:MM" (може дорівнювати "24:00") */
+  e: string;
+}
+
+export interface Zone {
+  id: number;
+  nm: string;
+  color: string;
+  slots: ZoneSlot[];
+  desc?: string;
+  /** Пріоритет при перекритті зон (вища — виграє) */
+  prio?: number;
+  /** Вимкнена користувачем (тумблер), лишається у списку, але неактивна */
+  active?: boolean;
+  /** Ручний тумблер вимкнення (z.off), ВІД якого й обчислюється active */
+  off?: boolean;
+  /** Прив'язана до плану тижня/дня (а не безстрокова) — див. КОНСТРУКТОР ТИЖНЯ */
+  bound?: boolean;
+  /** «Діяти щодня попри прив'язку» — пін для згаслої прив'язаної зони */
+  actPin?: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ЗАДАЧІ  (оригінал: mkTask() рядки 1827–1845, TL/TXP рядки 1238–1239)
+// ─────────────────────────────────────────────────────────────────────────
+
+export type TaskType = keyof typeof taskTypeCatalog;
+
+/** Append-only facts. A task's next repeat never overwrites a past occurrence. */
+export interface TaskHistoryEvent {
+  id: string;
+  occurrenceId: string;
+  taskId: number;
+  taskCreated: string;
+  title: string;
+  type: TaskType;
+  kind: 'completed' | 'reopened';
+  sequence?: number;
+  at: number;
+  date: string;
+  time: string;
+  zoneId?: number | null;
+  counter?: number;
+  items?: ChecklistItem[];
+}
+
+export interface ChecklistItem {
+  text: string;
+  done: boolean;
+  credited?: boolean;
+}
+
+export type QuestDeferralKind = 'next-zone' | 'not-today';
+
+/** A temporary move shown in the quest panel without changing permanent scheduling. */
+export interface QuestDeferral {
+  kind: QuestDeferralKind;
+  requestedAt: number;
+  sourceZoneId: number;
+  targetZoneId: number;
+  startAt: number;
+  endAt?: number;
+}
+
+/** Primary-zone interval used by the shared quest selector and native snapshot. */
+export interface QuestTimelineSegment {
+  zoneId: number;
+  startAt: number;
+  endAt: number;
+}
+
+/**
+ * Задача. НЕ чистий discriminated union навмисно: оригінальний mkTask()
+ * створює один об'єкт і заповнює лише релевантні полю типу поля (решта —
+ * undefined), і рендер-функції по всьому коду читають `t.foo` одразу після
+ * перевірки `t.type==='foo-type'`. Точне звуження на discriminated union —
+ * можлива майбутня чистка (окремо від Кроку 1), але зараз пріоритет —
+ * проста модель підтримуваних типів; сумісність старих даних не вимагається.
+ */
+export interface Task {
+  id: number;
+  title: string;
+  type: TaskType;
+  done: boolean;
+  someday: boolean;
+  zoneId?: number | null;
+  zoneColor?: string | null;
+  zoneName?: string | null;
+  /** Прив'язка задачі до папки нотаток (окремо від zoneId) */
+  folderId?: string | null;
+  expanded?: boolean;
+  created: string; // ISO
+  trashed?: boolean;
+
+  // done-стан
+  doneDate?: string;   // "YYYY-MM-DD" (fmtDate)
+  doneAt?: string;     // "HH:MM"
+  completionCredited?: boolean; // XP and cumulative completion already credited for this occurrence
+  completionCreditDate?: string; // Date key for the occurrence that earned XP and cumulative completion
+  /** Identity of the current materialized occurrence; preserved through Undo/deferral. */
+  occurrenceId?: string;
+  snoozeUntil?: number; // epoch ms, task_skip / відкладання
+
+  // type === 'check'
+  items?: ChecklistItem[];
+
+  // type === 'counter' | 'negative'
+  counter?: number;
+  counterTarget?: number; // 0 means no goal; completing the task is a separate action
+  counterEnabled?: boolean;
+  counterStep?: number;
+  counterUnit?: 'count' | 'ml' | 'min';
+  counterCreditedProgress?: number;
+  counterDay?: string;
+  /** Разовий бонус XP уже нараховано за досягнення цілі (chgCnt) */
+  cntHit?: boolean;
+  negXp?: number;         // тільки 'negative' — скільки XP віднімається за клік
+  /** Temporary quest-panel deferral; never rewrites planDate or recurrence. */
+  questDeferral?: QuestDeferral;
+  /** Deferral archived while done so undo can restore the same pending occurrence. */
+  completionDeferral?: QuestDeferral;
+
+  // Optional details shared by all task types
+  note?: string;
+
+  // type === 'alarm'
+  alarmTime?: string;   // "HH:MM"
+  alarmFired?: boolean;
+
+  // type === 'sched'
+  schedDate?: string;   // "YYYY-MM-DD"
+  schedTime?: string;   // "HH:MM"
+  firedSched?: boolean;
+  firedPre?: boolean;   // додаткове нагадування вже спрацювало
+  reminderEnabled?: boolean;
+  /** Advance reminder in minutes; missing or 0 means no advance reminder. */
+  remindBeforeMinutes?: number;
+
+  // type === 'timewin'
+  windowStart?: string;
+  windowEnd?: string;
+  completedToday?: boolean;
+
+  // type === 'ctx'
+  ctxTags?: string[];
+
+  // type === 'zonelinked'
+  zoneDoneToday?: boolean;
+  zoneOccurrenceKey?: string;
+
+  // спільне для повторюваних задач будь-якого типу
+  repeat: 'none' | 'daily' | 'weekly' | 'weekdays' | 'weekend' | 'everyzone' | 'interval' | 'custom';
+  repeatDays: boolean[]; // 7 елементів, Пн..Нд
+  tags: string[];
+  // type==='interval' повторення
+  repeatMs?: number;
+  nextRepeatAt?: number; // epoch ms
+  /** Користувацькі поля редактора для repeat==='interval'; repeatMs похідне від них */
+  repeatInterval?: number;
+  repeatUnit?: 'sec' | 'min' | 'hour' | 'day' | 'week' | 'month';
+
+  // плановані на конкретний день з планувальника (не плутати з planItems!)
+  planDate?: string;
+
+  // м'яке видалення (кошик)
+  trashedAt?: number | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// РУТИНА / RECUR  (оригінал: рядки 1180–1184)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface RecurItem {
+  id: string;
+  nm: string;
+  color: string;
+  unit: 'check' | 'count' | 'ml' | 'min' | 'kcal';
+  val: number;
+  done: boolean;
+  step: number;
+  /** Шкідлива звичка (наприклад «Перекур») — інвертована логіка нагороди */
+  neg: boolean;
+  negXp: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// НОТАТКИ / ПАПКИ  (оригінал: mkNote() рядки 1257–1263, folders рядки 1192–1197)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface Folder {
+  id: string;
+  nm: string;
+  ico: string;
+}
+
+export interface QuickNote {
+  id: number;
+  txt: string;
+  folder: string;
+  time: string; // локалізований "HH:MM"
+  date: string; // "YYYY-MM-DD" (fmtDate) — потрібно для аналізу в планувальнику
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ГЕЙМІФІКАЦІЯ  (оригінал: рядки 1546–1604, FACHS рядки 1247–1254)
+// ─────────────────────────────────────────────────────────────────────────
+
+export type EnergyLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+/** Контекст, потрібний функціям-перевіркам досягнень (FACHS[].fn) */
+export interface AchievementCheckContext {
+  done: number;
+  xpTotal: number;
+  level: number;
+  zonesCount: number;
+}
+
+export interface Achievement {
+  id: string;
+  ico: string;
+  nm: string;
+  check: (ctx: AchievementCheckContext) => boolean;
+}
+
+export interface RareEvent {
+  id: number;
+  nm: string;
+  val: number;
+  dir: 'up' | 'down';
+  unit: string;
+}
+
+export interface FocusLogEntry {
+  val: string;
+  start: string; // ISO
+  end: string | null; // ISO, null поки триває
+  date: string; // "YYYY-MM-DD"
+  time: string; // "HH:MM"
+  dur?: number; // хвилини, проставляється при закритті запису
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ПЛАНУВАЛЬНИК  (оригінал: рядки 1224–1235, 3313–3921)
+// Ці карти НАВМИСНО живуть окремо від основного стану `S` в оригіналі —
+// у новому Store вони об'єднуються як окремий slice (planner), але
+// зберігають ідентичну форму ключів для сумісності зі старими бекапами.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Ключ — дата "YYYY-MM-DD" */
+export type DateKey = string;
+
+export interface PlanItem {
+  title: string;
+  done: boolean;
+  isEvent?: boolean;
+  isPrompt?: boolean;
+  time?: string;
+}
+
+export interface PlanDayZoneOverride {
+  zoneId: number;
+  s: string;
+  e: string;
+  /** Позначка "лише цей день" — editDailyZoneForDay() (рядок 3653) */
+  ov?: boolean;
+}
+
+export interface PlanRuleDay {
+  tplId: string;
+  rest: boolean;
+}
+
+export interface PlanRule {
+  id: string;
+  name: string;
+  start: DateKey;
+  end: DateKey;
+  days: PlanRuleDay[];
+}
+
+export interface DayLogEntry {
+  focus: string[];
+  energy: number;
+  /** unit==='check' → boolean; інші одиниці → рядок "150 мл" тощо (logDayData()) */
+  routineDone: Record<string, string | boolean>;
+  priorities: unknown[];
+  tasksDone: number;
+  note?: string;
+}
+
+/** Authored wall-clock range in a reusable day template. */
+export interface DayTemplateBlock {
+  zoneId: number;
+  s: string;
+  e: string;
+}
+
+export interface DayTemplate {
+  id: string;
+  name: string;
+  blocks: DayTemplateBlock[];
+}
+
+/** Cyclic week template, validated together with its referenced day templates. */
+export interface WeekTemplate {
+  id: string;
+  name: string;
+  days: PlanRuleDay[];
+}
+
+export interface PlannerState {
+  planItems: Record<DateKey, PlanItem[]>;
+  planRestDays: Record<DateKey, boolean>;
+  planSchedules: Record<DateKey, string>; // dateKey -> DayTemplate.id
+  planDayZones: Record<DateKey, PlanDayZoneOverride[]>;
+  planDayOff: Record<DateKey, number[]>; // dateKey -> zoneId[]
+  planRules: PlanRule[];
+  planDayLog: Record<DateKey, DayLogEntry>;
+  /**
+   * У оригіналі жили на верхньому рівні `S` (рядок 1198), а не серед
+   * plan*-змінних — органічний артефакт росту коду. Логічно це той самий
+   * домен «планувальник», тож тут згруповано разом. AppState все одно
+   * розкладає це в ту саму пласку форму JSON через `extends`, тому
+   * localStorage/Room-сумісність не порушується.
+   */
+  dayTemplates: DayTemplate[];
+  weekTemplates: WeekTemplate[];
+  weekTplSeeded: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ПОВНИЙ СТАН ЗАСТОСУНКУ  (оригінал: collectState()/applyState(), рядки 4258–4348)
+// Це ТОЧНА форма JSON, що йде у localStorage("flow_v2") ТА в Android Room
+// через window.FlowBridge.save(). Будь-яка зміна імені поля тут = втрата
+// даних для існуючих користувачів при першому запуску нової версії.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface NotifTaskListItem {
+  id: number;
+  title: string;
+  type: TaskType;
+  counter: number;
+  counterTarget: number;
+  counterEnabled: boolean;
+  counterStep: number;
+  counterUnit: string;
+  repeat: Task['repeat'];
+  repeatDays: boolean[];
+  anchorDate: string;
+  counterDay: string;
+}
+
+export type NotifQuestTask = Task & { priorityIndex: number };
+
+export type NotifQuestTimelineItem = QuestTimelineSegment;
+
+export interface NotifQuestWallDay {
+  date: DateKey;
+  segments: { zoneId: number; startMinute: number; endMinute: number }[];
+  assignedOccurrences: { zoneId: number; startMinute: number; endMinute: number }[];
+}
+
+export interface NotifZoneOccurrence {
+  zoneId: number;
+  startAt: number;
+  endAt: number;
+  key: string;
+}
+
+export interface NotifRoutineListItem {
+  id: string;
+  nm: string;
+  ico: string;
+  unit: string;
+  val: number;
+  step: number;
+  done: boolean;
+}
+
+export interface NotifSchedListItem {
+  id: number | string;
+  title: string;
+  dueMs: number;
+  fired: boolean;
+  repeat?: Task['repeat'];
+  repeatDays?: boolean[];
+  anchorDate?: string;
+  localTime?: string;
+  advanceMinutes?: number;
+}
+
+export interface NotifZoneTimelineItem {
+  id: number;
+  s: string;
+  e: string;
+  nm: string;
+  desc: string;
+  color: string;
+  prio: number;
+}
+
+/** fgNotifText() — рядки 3948–4097. Payload і для Android foreground-сервісу, і для Web Notification API. */
+export interface ForegroundNotifPayload {
+  zone: string;
+  zoneColor: string;
+  zoneTimeline: NotifZoneTimelineItem[];
+  zoneBaseline: NotifZoneTimelineItem[];
+  zoneTasksById: Record<number, string[]>;
+  zonelessTasks: string[];
+  urgentTasks: string[];
+  tlDate: string;
+  slots: string;
+  desc: string;
+  tasks: string;
+  taskList: NotifTaskListItem[];
+  questTasks: NotifQuestTask[];
+  questTimeline: NotifQuestTimelineItem[];
+  questWallDays: NotifQuestWallDay[];
+  questZoneOccurrences: NotifZoneOccurrence[];
+  questTimelineUntil: number;
+  questZones: { id: number; nm: string; desc: string; color: string }[];
+  routine: string;
+  routineList: NotifRoutineListItem[];
+  schedList: NotifSchedListItem[];
+  body: string;
+  time: string;
+  done: number;
+  total: number;
+  energy: number;
+  title: string;
+}
+
+export interface Preferences {
+  themeMode?: 'system' | 'light' | 'dark';
+  reduceMotion?: boolean;
+  showGamification?: boolean;
+  /** One-time migration guard for retiring the former default water task. */
+  waterSeedRetired?: boolean;
+}
+
+export interface AppState extends PlannerState {
+  formatVersion?: 2;
+  tasks: Task[];
+  taskHistory: TaskHistoryEvent[];
+  recur: RecurItem[];
+  zones: Zone[];
+  folders: Folder[];
+  qnotes: QuickNote[];
+
+  xp: number;
+  xpTotal: number;
+  level: number;
+  done: number;
+  streak: number;
+  negCount: number;
+  nid: number;
+  unlocked: string[];
+  energy: EnergyLevel;
+  lastEnergyXp: number;
+  dayXpGained: number;
+  xpDay: string;
+
+  priorities: (number | null)[]; // довжина 3
+  focusChips: string[];
+  focusLog: FocusLogEntry[];
+  currentFocus: string;
+
+  /**
+   * Рендериться у вкладці «Статистика» поруч із досягненнями (НЕ в планувальнику,
+   * попри назву) — точний домен-власник уточнюється; уточнюється на Кроці
+   * «Планувальник» (РІДКІСНІ ПОДІЇ, рядок 2556).
+   */
+  rareEvents: RareEvent[];
+
+  notepad: string;
+  theme: 'light' | 'dark';
+  preferences?: Preferences;
+
+  /** Додається лише при saveState(), не є частиною логічного стану */
+  saveDate?: string;
+}
