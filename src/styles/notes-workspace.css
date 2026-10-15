@@ -28,8 +28,6 @@
 .notes-collection-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .notes-collection-heading h3{font-size:17px;margin:0;color:var(--t1)}
 .notes-collection-heading h3 span{font-size:12px;color:var(--t2);margin-left:5px}
-.notes-folder-toggle{display:inline-flex;align-items:center;min-height:44px;padding:8px 10px;border:1px solid var(--b2);border-radius:9px;background:var(--s1);color:var(--t1);font-size:12px}
-.notes-folder-toggle .potik-icon{margin-right:6px;width:17px;height:17px}
 .notes-folder-filters{display:flex;flex-wrap:nowrap;max-width:100%;overflow-x:auto;margin:0 0 12px;padding-bottom:5px;-webkit-overflow-scrolling:touch}
 .notes-folder-filters .ftab{min-height:40px;flex-shrink:0;margin:3px 6px 3px 0;padding:8px 12px;font-size:12px;color:var(--t2);background:var(--s1);border-color:var(--b2);white-space:nowrap}
 .notes-folder-filters .ftab.act{color:var(--t1);border-color:var(--z);background:var(--s2)}

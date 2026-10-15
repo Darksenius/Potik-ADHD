@@ -2,46 +2,36 @@ import { useStore } from '../../state/store';
 import type { DateKey } from '../../types';
 import Icon from '../common/Icon';
 
+/** Apply-only preset picker for the selected day in План. */
 export default function DayTemplates({ ds }: { ds: DateKey }) {
   const dayTemplates = useStore((s) => s.dayTemplates);
   const applyDayTemplate = useStore((s) => s.applyDayTemplate);
-  const deleteDayTemplate = useStore((s) => s.deleteDayTemplate);
-  const saveDayTemplate = useStore((s) => s.saveDayTemplate);
 
   return (
     <div style={{ margin: '4px 0 8px' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
-        <Icon name="archive" /> Шаблони дня
+        <Icon name="archive" /> Пресети дня
       </div>
       {dayTemplates.length ? (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
           {dayTemplates.map((tp) => (
-            <span className="ptype" key={tp.id} onClick={() => applyDayTemplate(ds, tp.id)} title="Застосувати зони цього шаблону до дня">
-              {tp.name} ({(tp.blocks || []).length}){' '}
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteDayTemplate(tp.id);
-                }}
-                style={{ color: 'var(--t3)', cursor: 'pointer', padding: '0 3px' }}
-              >
-                ✕
-              </span>
-            </span>
+            <button
+              className="ptype"
+              type="button"
+              key={tp.id}
+              onClick={() => applyDayTemplate(ds, tp.id)}
+              title="Застосувати часові зони цього пресету до дня"
+              aria-label={`Застосувати пресет «${tp.name}» до дня`}
+            >
+              {tp.name} ({(tp.blocks || []).length})
+            </button>
           ))}
         </div>
       ) : (
-        <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 5 }}>Ще немає шаблонів — додай зони дня і збережи</div>
+        <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 5 }}>
+          Пресетів ще немає. Створи їх у «Ще» → «Пресети дня».
+        </div>
       )}
-      <button
-        className="pdd-add"
-        onClick={() => {
-          const nm = window.prompt('Назва шаблону:');
-          if (nm && nm.trim()) saveDayTemplate(ds, nm.trim());
-        }}
-      >
-        <Icon name="archive" /> Зберегти зони як шаблон
-      </button>
     </div>
   );
 }

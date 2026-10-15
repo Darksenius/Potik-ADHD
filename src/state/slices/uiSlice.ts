@@ -14,7 +14,7 @@ import { fmtDate } from '../../utils/date';
  *                                  (рядок 1212), теж імперативна бухгалтерія
  */
 export type PageId = 'main' | 'readme' | 'settings' | 'whatsnew';
-export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state' | 'inbox' | 'more' | 'alltasks';
+export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state' | 'inbox' | 'more' | 'alltasks' | 'notefolders' | 'daypresets';
 export type TaskEditorPreset = Partial<Pick<Task, 'type' | 'repeat' | 'counterUnit' | 'counterStep' | 'counterTarget'>>;
 
 export interface UiSlice {

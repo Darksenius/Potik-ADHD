@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../../state/store';
 import { flushAutosave } from '../../services/autosave';
 import { getSaveStatus, subscribeSaveStatus } from '../../services/saveStatus';
@@ -20,16 +20,10 @@ export default function NotesTab() {
   const setNoteFolder = useStore(s => s.setNoteFolder);
   const updateQuickNote = useStore(s => s.updateQuickNote);
   const deleteQuickNote = useStore(s => s.deleteQuickNote);
-  const addFolder = useStore(s => s.addFolder);
-  const deleteFolder = useStore(s => s.deleteFolder);
   const saveStatus = useSyncExternalStore(subscribeSaveStatus, getSaveStatus, getSaveStatus);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const [editFolder, setEditFolder] = useState('');
-  const [addingFolder, setAddingFolder] = useState(false);
-  const [manageFolders, setManageFolders] = useState(false);
-  const [folderName, setFolderName] = useState('');
-  const [folderIcon, setFolderIcon] = useState('📁');
   const [actionError, setActionError] = useState('');
   const [copyFeedback, setCopyFeedback] = useState<{ id: number; message: string } | null>(null);
   const [clipboardFallbackText, setClipboardFallbackText] = useState<string | null>(null);
@@ -86,14 +80,6 @@ export default function NotesTab() {
     state.award(10);
     state.requestEditTask(id);
     state.showToast('Задачу створено. Решта тексту — у її нотатці.');
-  }
-
-  function saveFolder(event: FormEvent) {
-    event.preventDefault();
-    const id = addFolder(folderName, folderIcon);
-    if (!id) return;
-    setNotepadFolder(id);
-    setFolderName(''); setFolderIcon('📁'); setAddingFolder(false);
   }
 
   async function copyNote(id: number, text: string) {
@@ -156,22 +142,11 @@ export default function NotesTab() {
 
     <section className="notes-collection" aria-labelledby="notes-collection-title">
       <div className="notes-collection-heading"><h3 id="notes-collection-title">Твої нотатки <span>{qnotes.length}</span></h3>
-        <button type="button" className="notes-folder-toggle" aria-expanded={manageFolders} onClick={() => setManageFolders(!manageFolders)}><Icon name="folder" /> Папки</button>
       </div>
       <div id="folder-tabs" className="notes-folder-filters" role="group" aria-label="Фільтр нотаток">
         <button type="button" className={'ftab' + (noteFolder === 'all' ? ' act' : '')} aria-pressed={noteFolder === 'all'} onClick={() => setNoteFolder('all')}>Усі</button>
         {folders.map(folder => <button type="button" className={'ftab' + (noteFolder === folder.id ? ' act' : '')} aria-pressed={noteFolder === folder.id} key={folder.id} onClick={() => setNoteFolder(folder.id)}>{folder.ico} {folder.nm} <span>{qnotes.filter(note => note.folder === folder.id).length}</span></button>)}
       </div>
-      {manageFolders && <div className="notes-folder-manager">
-        <button className="secondary-action" type="button" onClick={() => setAddingFolder(!addingFolder)}><Icon name="plus" /> Нова папка</button>
-        {addingFolder && <form className="notes-folder-form" onSubmit={saveFolder}>
-          <label className="el" htmlFor="notes-folder-name">Назва папки</label><input id="notes-folder-name" className="ei" autoFocus required value={folderName} onChange={e => setFolderName(e.target.value)} />
-          <label className="el" htmlFor="notes-folder-icon">Іконка</label><input id="notes-folder-icon" className="ei" value={folderIcon} onChange={e => setFolderIcon(e.target.value)} maxLength={8} />
-          <div className="notes-folder-actions"><button className="secondary-action" type="submit" disabled={!folderName.trim()}>Додати папку</button><button className="secondary-action" type="button" onClick={() => setAddingFolder(false)}>Скасувати</button></div>
-        </form>}
-        {folders.map(folder => <div className="notes-folder-manager-row" key={folder.id}><span>{folder.ico} {folder.nm}</span><button type="button" aria-label={'Видалити папку ' + folder.nm} onClick={() => { if (window.confirm(`Видалити папку «${folder.nm}»? Нотатки залишаться у списку «Усі».`)) deleteFolder(folder.id); }}><Icon name="trash" /></button></div>)}
-      </div>}
-
       <div id="qn-list">{!visibleNotes.length ? <p className="notes-empty">{noteFolder === 'all' ? 'Тут з’являться додані нотатки. Поточний текст уже зберігається у полі вище.' : 'У цій папці ще немає нотаток.'}</p>
         : visibleNotes.map(note => <article className="qn-row note-card" key={note.id}>
           {editingId === note.id ? <form aria-label="Редагувати нотатку" className="note-edit-form" onSubmit={e => { e.preventDefault(); saveEdit(); }} onKeyDown={e => {

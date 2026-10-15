@@ -11,8 +11,8 @@ function dayName(dayTemplates: { id: string; name: string }[], e: { tplId?: stri
   return t ? t.name : '?';
 }
 
-export default function WeekConstructor() {
-  const [open, setOpen] = useState(false);
+export default function WeekConstructor({ mode = 'apply' }: { mode?: 'apply' | 'manage' }) {
+  const [open, setOpen] = useState(mode === 'manage');
   const [draft, setDraft] = useState<WeekTemplate | null>(null);
   const [applyId, setApplyId] = useState<string | null>(null);
   const [applyStart, setApplyStart] = useState(fmtDate(new Date()));
@@ -83,14 +83,16 @@ export default function WeekConstructor() {
 
   return (
     <div id="wkc">
-      <div className="wkc-head" onClick={() => setOpen(!open)}>
-        <span className="wkc-title"><Icon name="calendar" /> Конструктор тижня</span>
+      <div className="wkc-head" onClick={() => setOpen(!open)} role="button" tabIndex={0} aria-expanded={open} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } }}>
+        <span className="wkc-title"><Icon name="calendar" /> {mode === 'manage' ? 'Шаблони графіків' : 'Графіки тижня'}</span>
         <span className={'wkc-arrow' + (open ? ' open' : '')}>▼</span>
       </div>
       {open && (
         <div className="wkc-body open">
           <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 5 }}>
-            Обери графік і застосуй на період — зони ляжуть по днях самі. ▶ — застосувати.
+            {mode === 'manage'
+              ? 'Керуй шаблонами графіків для повторюваного розкладу.'
+              : 'Обери графік і застосуй на період — зони ляжуть по днях самі. ▶ — застосувати.'}
           </div>
 
           {weekTemplates.length ? (
@@ -104,24 +106,34 @@ export default function WeekConstructor() {
                     </span>
                   ))}
                 </div>
-                <button
-                  className="wkc-btn go"
-                  onClick={() => {
-                    setDraft(null);
-                    setApplyId(applyId === tp.id ? null : tp.id);
-                  }}
-                >
-                  ▶
-                </button>
-                <button className="wkc-btn" onClick={() => startEdit(tp.id)}>✎</button>
-                <button className="wkc-btn" onClick={() => handleDelete(tp.id)}>✕</button>
+                {mode === 'apply' ? (
+                  <button
+                    className="wkc-btn go"
+                    type="button"
+                    aria-label={`Застосувати графік «${tp.name}»`}
+                    title={`Застосувати графік «${tp.name}»`}
+                    onClick={() => {
+                      setDraft(null);
+                      setApplyId(applyId === tp.id ? null : tp.id);
+                    }}
+                  >
+                    ▶
+                  </button>
+                ) : (
+                  <>
+                    <button className="wkc-btn" type="button" aria-label={`Редагувати графік «${tp.name}»`} onClick={() => startEdit(tp.id)}>✎</button>
+                    <button className="wkc-btn" type="button" aria-label={`Видалити графік «${tp.name}»`} onClick={() => handleDelete(tp.id)}>✕</button>
+                  </>
+                )}
               </div>
             ))
           ) : (
-            <div style={{ fontSize: 11, color: 'var(--t3)', padding: '4px 0' }}>Ще немає графіків — створи перший</div>
+            <div style={{ fontSize: 11, color: 'var(--t3)', padding: '4px 0' }}>
+              {mode === 'manage' ? 'Ще немає графіків — створи перший' : 'Графіків ще немає. Створи їх у «Ще» → «Пресети дня».'}
+            </div>
           )}
 
-          {!!planRules.length && (
+          {mode === 'apply' && !!planRules.length && (
             <>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '9px 0 3px' }}>
                 ✓ Застосовано
@@ -138,7 +150,7 @@ export default function WeekConstructor() {
             </>
           )}
 
-          {applyId && (() => {
+          {mode === 'apply' && applyId && (() => {
             const tp = weekTemplates.find((x) => x.id === applyId);
             if (!tp) return null;
             return (
@@ -243,7 +255,7 @@ export default function WeekConstructor() {
             </div>
           )}
 
-          {!draft && (
+          {mode === 'manage' && !draft && (
             <button className="pdd-add" style={{ marginTop: 8 }} onClick={startNew}>
               + Новий графік
             </button>

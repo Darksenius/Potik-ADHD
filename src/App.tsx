@@ -7,12 +7,14 @@ import Tabs from './components/layout/Tabs';
 import ZoneCard from './components/zones/ZoneCard';
 import TasksTab from './components/tasks/TasksTab';
 import NotesTab from './components/notes/NotesTab';
+import NoteFoldersTab from './components/notes/NoteFoldersTab';
 import StateTab from './components/focus/StateTab';
 import ZonesTab from './components/zones/ZonesTab';
 import IdeasTab from './components/tasks/IdeasTab';
 import StatsTab from './components/stats/StatsTab';
 import TaskEditor from './components/tasks/TaskEditor';
 import PlannerTab from './components/planner/PlannerTab';
+import DayPresetsTab from './components/planner/DayPresetsTab';
 import ReadmePage from './components/oss/ReadmePage';
 import Toast from './components/common/Toast';
 import BackupBanner from './components/common/BackupBanner';
@@ -65,7 +67,9 @@ export default function App() {
 
             {currentTab === 'tasks' && <TasksTab />}
             {currentTab === 'notes' && <NotesTab />}
+            {currentTab === 'notefolders' && <NoteFoldersTab />}
             {currentTab === 'planner' && <PlannerTab />}
+            {currentTab === 'daypresets' && <DayPresetsTab />}
             {currentTab === 'state' && <StateTab />}
             {currentTab === 'zones' && <ZonesTab />}
             {currentTab === 'ideas' && <IdeasTab />}
