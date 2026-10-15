@@ -75,6 +75,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const zone = zoneId ? get().zones.find((z) => z.id === zoneId) : null;
     const task = createTaskRecord(nid, title, type, zoneId ?? null, zone, alarmTime);
     set((s) => ({ tasks: [task, ...s.tasks], nid: s.nid + 1 }));
+    if (title.trim()) get().recordProgressDay();
     return task;
   },
 
@@ -87,6 +88,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         tasks: s.tasks.map((x) => (x.id === id ? { ...x, counter: (x.counter || 0) + taskCounterStep(x), counterDay: fmtDate(new Date()) } : x)),
       }));
       get().incrementNegCount();
+      get().recordProgressDay();
       get().award(-(t.negXp ?? 5));
       return;
     }
@@ -144,7 +146,10 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       get().incrementDoneCount();
       get().award(TASK_XP[t.type] ?? 10);
     }
-    if (done) offerTaskUndo(undoBefore, 'done', now.getTime());
+    if (done) {
+      get().recordProgressDay(now.getTime());
+      offerTaskUndo(undoBefore, 'done', now.getTime());
+    }
   },
 
   /** A durable tap from yesterday records that occurrence, never today's progress. */
@@ -166,6 +171,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     set({ taskHistory: [...history, historyEvent(snapshot, 'completed', completedAt,
       occurrenceId, nextHistorySequence(history))] });
     get().incrementDoneCount();
+    get().recordProgressDay(completedAt);
     get().award(TASK_XP[task.type]);
     return true;
   },
@@ -495,6 +501,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       }),
     }));
 
+    if (get().tasks.some(t => t.id === taskId)) get().recordProgressDay();
     return taskId;
   },
 

@@ -1,0 +1,51 @@
+.app-updates {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid var(--b1);
+  padding-top: 11px;
+}
+
+.app-updates-links {
+  display: grid;
+  grid-gap: 8px;
+}
+
+.app-updates-links a {
+  display: block;
+  min-height: 36px;
+  padding: 10px;
+  border: 1px solid var(--b2);
+  border-radius: 8px;
+  background: var(--s2);
+}
+
+.app-updates a {
+  color: var(--z);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-updates-installed,
+.app-updates-result p { margin: 0; }
+
+.app-updates button,
+.app-updates-download {
+  justify-self: start;
+  min-height: 36px;
+  border: 1px solid var(--b2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--s2);
+  color: var(--t1) !important;
+  cursor: pointer;
+  font: 700 11px 'Syne', sans-serif;
+  text-decoration: none !important;
+}
+
+.app-updates button:disabled { opacity: .7; cursor: progress; }
+.app-updates button:focus-visible,
+.app-updates a:focus-visible { outline: 2px solid var(--z); outline-offset: 2px; }
+
+.app-updates-result { display: grid; gap: 7px; }

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { initializeProgression } from '../src/utils/progression';
 
 async function boot(page: Page, data: object = {}) {
   await page.clock.install({ time: new Date('2026-09-16T12:00:00+03:00') });
@@ -74,7 +75,7 @@ test('all sections remain reachable through primary tabs and More without runtim
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await boot(page);
-  for (const label of ['Зараз', 'Нотатки', 'План', 'Стан', 'Зони', 'Ідеї', 'Стат']) {
+  for (const label of ['Зараз', 'Нотатки', 'План', 'Стан', 'Зони', 'Ідеї', 'Статистика']) {
     await openTab(page, label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label).toBe(true);
   }
@@ -190,7 +191,7 @@ test('legacy saved state keeps task details, notes, statistics and planner data'
   await boot(page, legacy);
   await page.clock.runFor(2000);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
-  expect(saved).toMatchObject(legacy);
+  expect(saved).toMatchObject({ ...legacy, ...initializeProgression(legacy) });
   expect(saved.nid).toBeGreaterThan(900);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });

@@ -1,5 +1,6 @@
 import { useStore } from '../../state/store';
 import { useClock } from '../../hooks/useClock';
+import { xpForLevel } from '../../utils/progression';
 
 export default function ProgressBars() {
   const hm = useClock();
@@ -8,8 +9,8 @@ export default function ProgressBars() {
   const showXp = useStore((s) => s.preferences.showGamification !== false);
 
   const dayPct = Math.round(((hm.h * 60 + hm.m) / 1440) * 100);
-  const xpNeeded = level * 100; // XPL(level) — рядок 1547
-  const xpPct = xpNeeded ? Math.round((xp / xpNeeded) * 100) : 0;
+  const xpNeeded = xpForLevel(level);
+  const xpPct = xpNeeded ? Math.min(100, Math.round((xp / xpNeeded) * 100)) : 0;
 
   return (
     <div id="prog-wrap">

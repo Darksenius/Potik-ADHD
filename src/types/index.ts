@@ -228,12 +228,20 @@ export interface AchievementCheckContext {
   xpTotal: number;
   level: number;
   zonesCount: number;
+  activeDays: number;
+}
+
+export interface AchievementProgress {
+  current: number;
+  target: number;
 }
 
 export interface Achievement {
   id: string;
   ico: string;
   nm: string;
+  description: string;
+  progress: (ctx: AchievementCheckContext) => AchievementProgress;
   check: (ctx: AchievementCheckContext) => boolean;
 }
 
@@ -471,6 +479,8 @@ export interface AppState extends PlannerState {
   xp: number;
   xpTotal: number;
   level: number;
+  progressionVersion: number;
+  progressDays: string[];
   done: number;
   streak: number;
   negCount: number;

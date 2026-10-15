@@ -3,6 +3,7 @@ import { useStore } from '../../state/store';
 import OssPage, { useAppVersion } from '../oss/OssPage';
 import ExportImportSection from '../notes/ExportImportSection';
 import NotificationDiagnostics from './NotificationDiagnostics';
+import AppUpdates from './AppUpdates';
 import { requestAndShowNotification } from '../../services/webNotifications';
 import { listRecoveryArchives, saveIsBlocked, showRecoveryBanner } from '../../services/persistence';
 import type { RecoveryArchive } from '../../services/persistence';
@@ -93,9 +94,10 @@ export default function SettingsPage() {
     </details>
 
     <details className="settings-group">
-      <summary><span><strong>Про застосунок і допомога</strong><small>Довідка, версія та ліцензія</small></span></summary>
+      <summary><span><strong>Про застосунок і допомога</strong><small>Оновлення, GitHub, довідка та ліцензія</small></span></summary>
       <div className="settings-group-content">
         <p>Потік {version}</p>
+        <AppUpdates installedVersion={version} />
         <button type="button" onClick={() => useStore.getState().showPage('readme')}>Відкрити довідку</button>
         <button type="button" onClick={() => setOssOpen(true)}>Ліцензія та вихідний код</button>
       </div>

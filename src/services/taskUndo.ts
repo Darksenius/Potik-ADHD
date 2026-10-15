@@ -24,6 +24,7 @@ export const getTaskUndoNotice = () => notice;
 export function subscribeTaskUndo(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 export function clearTaskUndo() { if (timer) clearTimeout(timer); pending = null; publish(null); }
 export function captureTaskUndo(id: number): TaskUndoBefore | undefined {
+  if (useStore.getState().progressionVersion !== 2) useStore.getState().initializeProgression();
   const state = useStore.getState(), task = state.tasks.find(t => t.id === id);
   return task ? { task: clone(task), globals: globals(state) } : undefined;
 }
@@ -52,6 +53,8 @@ function restorePending(force = false): boolean {
     ? [...state.taskHistory, historyEvent(undo.after, 'reopened', Date.now(), undo.after.occurrenceId, nextHistorySequence(state.taskHistory))]
     : state.taskHistory;
   useStore.setState({ ...patch, tasks: state.tasks.map(t => t.id === task.id ? clone(undo.task) : t), taskHistory, xpPopup: null, levelUpFlash: null });
+  // Activity is a lasting fact even when the task action itself is undone.
+  useStore.getState().checkAchievements();
   return true;
 }
 export function undoTaskAction(): boolean {

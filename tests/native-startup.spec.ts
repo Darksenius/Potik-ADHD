@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { initializeProgression } from '../src/utils/progression';
 
 // Use the runtime actually embedded in the APK. Its legacy Plugins listener
 // returns a synchronous handle, unlike the Promise-based registerPlugin API.
@@ -64,7 +65,7 @@ for (const saved of [false, true]) {
     if (saved) {
       await expect(page.getByText('Збережена задача', { exact: true })).toBeVisible();
       const state = await page.evaluate(() => JSON.parse((window as any).__nativeState));
-      expect(state).toMatchObject(previousState);
+      expect(state).toMatchObject({ ...previousState, ...initializeProgression(previousState) });
       // Deliver a notification action through the real native callback registry.
       await page.evaluate(() => {
         const w = window as any;

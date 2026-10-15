@@ -1,0 +1,49 @@
+.progression-card{background:var(--s1);background:linear-gradient(135deg,color-mix(in srgb,var(--xp) 12%,var(--s1)),var(--s1) 68%);border:1px solid var(--b1);border-color:color-mix(in srgb,var(--xp) 32%,var(--b1));border-radius:var(--r);padding:14px;margin-bottom:12px}
+.progression-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.progression-eyebrow{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)}
+.progression-heading h2{font-size:15px;line-height:1.3;margin:3px 0 0;color:var(--t1)}
+.progression-total{display:flex;align-items:center;gap:4px;color:var(--xp);font:700 11px 'Space Mono',monospace;white-space:nowrap}
+.progression-total .potik-icon{width:13px;height:13px}
+#lvl-badge{display:flex;flex-direction:column;align-items:center;line-height:1.15}
+#lvl-badge span{font-size:8px;font-weight:600;opacity:.85;max-width:94px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.progression-level-copy{font-size:10px;color:var(--t2);margin:11px 0 5px}
+.progression-track,.achievement-track{height:6px;border-radius:10px;background:var(--s2);overflow:hidden}
+.progression-fill,.journey-fill,.achievement-fill{height:100%;border-radius:inherit;background:var(--xp);transition:width .25s ease}
+.journey-summary{display:flex;align-items:center;gap:10px;margin:13px 0 7px}
+.journey-summary>div:first-child{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.journey-summary strong{font:700 22px 'Space Mono',monospace;color:var(--z)}
+.journey-summary strong span{font-size:13px;color:var(--t3)}
+.journey-summary>div:first-child>span{font-size:10px;color:var(--t2)}
+.journey-note{font-size:10px;line-height:1.35;color:var(--t3)}
+.journey-activity-note{margin-top:8px}
+.journey-fill{background:var(--z)}
+.next-milestone{margin-top:8px;font-size:10px;line-height:1.4;color:var(--t2)}
+.next-milestone strong{color:var(--z)}
+.progression-token-head{display:flex;align-items:center;justify-content:space-between;margin:0 1px 6px}
+.progression-token-head .bl{margin:0}
+.progression-token-head>span{font:10px 'Space Mono',monospace;color:var(--t3)}
+.token-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin-bottom:13px}
+.token{min-width:0;min-height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:5px 2px;border:1px solid var(--b1);border-radius:8px;background:var(--s1);color:var(--t3);text-align:center}
+.token-earned{border-color:var(--xp);border-color:color-mix(in srgb,var(--xp) 55%,var(--b1));color:var(--t1)}
+.token-mark{width:25px;height:25px;display:flex;align-items:center;justify-content:center;border:1px solid var(--b2);border-radius:50%;font:700 9px 'Space Mono',monospace;color:var(--t3);opacity:.85}
+.token-earned .token-mark{border-color:var(--xp);background:var(--xp);color:var(--bg);opacity:1}
+.token-name{width:100%;max-width:100%;font-size:9px;font-weight:700;line-height:1.15;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal;overflow-wrap:anywhere}
+.token-unlock{font:8px 'Space Mono',monospace;color:var(--t3)}
+.progression-section-title{margin-top:13px}
+.achievement-list{display:grid;gap:6px;margin-bottom:14px}
+.achievement-card{display:flex;gap:9px;padding:9px;border:1px solid var(--b1);border-radius:9px;background:var(--s1);opacity:.78}
+.achievement-earned{border-color:var(--xp);border-color:color-mix(in srgb,var(--xp) 38%,var(--b1));opacity:1}
+.achievement-mark{width:25px;height:25px;flex:none;display:grid;place-items:center;border-radius:7px;background:var(--s2);color:var(--t3)}
+.achievement-earned .achievement-mark{background:var(--s2);background:color-mix(in srgb,var(--xp) 16%,var(--s2));color:var(--xp)}
+.achievement-copy{min-width:0;flex:1}
+.achievement-title{font-size:11px;font-weight:700;color:var(--t1)}
+.achievement-description{font-size:10px;line-height:1.35;color:var(--t3);margin-top:2px}
+.achievement-progress-copy{font:9px 'Space Mono',monospace;color:var(--t2);margin:5px 0 3px}
+.achievement-track{height:4px}
+.achievement-fill{background:var(--xp)}
+.all-achievements{margin:0 0 14px;border:1px solid var(--b1);border-radius:9px;background:var(--s1)}
+.all-achievements summary{padding:9px 11px;font-size:11px;font-weight:700;color:var(--t2);cursor:pointer;list-style-position:inside}
+.all-achievements[open] summary{border-bottom:1px solid var(--b1)}
+.all-achievement-list{padding:8px;margin:0}
+@media(max-width:360px){.token-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.journey-summary{align-items:flex-start;flex-direction:column;gap:4px}}
+@media(prefers-reduced-motion:reduce){.progression-fill,.journey-fill,.achievement-fill{transition:none}}

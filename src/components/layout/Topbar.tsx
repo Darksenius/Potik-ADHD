@@ -1,4 +1,5 @@
 import { useStore } from '../../state/store';
+import { titleForLevel } from '../../utils/progression';
 import Icon from '../common/Icon';
 
 export default function Topbar() {
@@ -11,7 +12,7 @@ export default function Topbar() {
       <div id="logo"><span className="potik-brand-frame"><img className="potik-brand" src="/brand/potik-mark.png" alt="" /></span>Потік</div>
       {showXp && <div className="top-r">
         <div id="xp-badge"><Icon name="chart" /> <span id="xpd">{xp}</span></div>
-        <div id="lvl-badge">LVL {level}</div>
+        <div id="lvl-badge" title={titleForLevel(level)}>LVL {level}<span>{titleForLevel(level)}</span></div>
       </div>}
     </div>
   );

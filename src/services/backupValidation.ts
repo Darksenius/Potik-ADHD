@@ -68,6 +68,7 @@ const fields: Record<string, Check> = {
   qnotes: array(shape({ id, txt: str, folder: str, time: str, date: str }, ['id', 'txt'], { folder: 'general', time: '', date: '' })),
   recur: array(shape({ id: str, nm: str, color: str, unit: oneOf(['check', 'count', 'ml', 'min', 'kcal']), val: num, done: bool, step: num, neg: bool, negXp: num }, ['id', 'nm'], { color: '#4f8ef7', unit: 'check', val: 0, done: false, step: 1, neg: false, negXp: 5 })),
   xp: num, xpTotal: num, level: num, done: num, streak: num, negCount: num, nid: id,
+  progressionVersion: oneOf([0, 1, 2]), progressDays: strings,
   unlocked: strings, energy: oneOf([0, 1, 2, 3, 4, 5]), lastEnergyXp: num, dayXpGained: num, xpDay: str,
   priorities: array(nullable(id)), focusChips: strings,
   focusLog: array(shape({ val: str, start: str, end: nullable(str), date: str, time: str, dur: num }, ['val', 'start'], { end: null, date: '', time: '' })),

@@ -170,6 +170,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
         [ds]: { ...(s.planDayLog[ds] || { focus: [], energy: 0, routineDone: {}, priorities: [], tasksDone: 0 }), note: text },
       },
     }));
+    if (text.trim()) get().recordProgressDay();
   },
 
   addDayZone: (ds, zoneId, s, e) => {
@@ -178,6 +179,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
     const blocks = get().materializeDay(ds).concat([{ zoneId, ...range }]);
     set((st) => ({ planDayZones: { ...st.planDayZones, [ds]: blocks } }));
     get().recalculateZoneUsage();
+    get().recordProgressDay();
   },
   updateDayZone: (ds, index, start, end) => {
     const range = normalizeDayRange(start, end);
@@ -185,6 +187,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
     const blocks = get().materializeDay(ds).map((b, i) => i === index ? { ...b, ...range, ov: true } : b);
     set(st => ({ planDayZones: { ...st.planDayZones, [ds]: blocks } }));
     get().recalculateZoneUsage();
+    get().recordProgressDay();
   },
 
   removeDayZone: (ds, index) => {
@@ -283,6 +286,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
       return { dayTemplates: [...s.dayTemplates, template] };
     });
     get().recalculateZoneUsage();
+    get().recordProgressDay();
   },
 
   applyDayTemplate: (ds, templateId) => {
@@ -302,6 +306,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
       };
     });
     get().recalculateZoneUsage();
+    get().recordProgressDay();
   },
 
   deleteDayTemplate: (templateId) => {
@@ -486,6 +491,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
       return { planDayZones, planRestDays, planDayOff, planRules, tasks, nid };
     });
     get().recalculateZoneUsage();
+    get().recordProgressDay();
   },
 
   deleteRule: (index) => {

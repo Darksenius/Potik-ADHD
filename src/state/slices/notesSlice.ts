@@ -69,15 +69,18 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
       date: fmtDate(now),
     };
     set((s) => ({ qnotes: [note, ...s.qnotes], qnid: s.qnid + 1 }));
+    if (text.trim()) get().recordProgressDay();
     return note;
   },
 
   updateQuickNote: (id, text, folder) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (!get().qnotes.some(n => n.id === id && (n.txt !== trimmed || (folder && n.folder !== folder)))) return;
     set((s) => ({
       qnotes: s.qnotes.map((n) => (n.id === id ? { ...n, txt: trimmed, folder: folder || n.folder } : n)),
     }));
+    get().recordProgressDay();
   },
 
   deleteQuickNote: (id) => {
@@ -89,7 +92,11 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
     return FOLDER_ICO[folderId] || (f ? f.ico : '📝');
   },
 
-  setNotepad: (text) => set({ notepad: text }),
+  setNotepad: (text) => {
+    if (text === get().notepad) return;
+    set({ notepad: text });
+    if (text.trim()) get().recordProgressDay();
+  },
   setNotepadFolder: (id) => set({ notepadFolder: id }),
 
   saveNotepadAsNote: (folder) => {
@@ -101,6 +108,7 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
     const note: QuickNote = { id: get().qnid, txt: v, folder: destination,
       time: now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' }), date: fmtDate(now) };
     set(s => ({ qnotes: [note, ...s.qnotes], qnid: s.qnid + 1, notepad: '', notepadFolder: destination }));
+    get().recordProgressDay();
     return note;
   },
 

@@ -27,6 +27,40 @@ import org.junit.runner.RunWith;
 public class FlowWebViewTest {
     private static final long UI_TIMEOUT_MS = 45000;
 
+    @Test public void progressionFromNotePersistsAndUpdateLinksAreAvailable() throws Exception {
+        String text = "Progression r20 " + UUID.randomUUID();
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitReady(scenario);
+            click(scenario, "#tabs button:nth-child(3)");
+            await(scenario, "document.querySelector('#notepad') !== null", "Notes opens");
+            textArea(scenario, "#notepad", text);
+            await(scenario, "JSON.parse(window.FlowBridge.load() || '{}').notepad === " + JSONObject.quote(text),
+                "Written note is durable");
+            JSONObject saved = value(scenario, "return JSON.parse(window.FlowBridge.load());").getJSONObject("value");
+            assertEquals(2, saved.getInt("progressionVersion"));
+            JSONArray days = saved.getJSONArray("progressDays");
+            assertTrue("Writing records activity", days.length() >= 1);
+            click(scenario, "#tabs button:nth-child(4)");
+            click(scenario, "button[aria-label=\"Статистика\"]");
+            await(scenario, "document.querySelectorAll('.token-grid .token').length === 20", "Collection renders on old WebView");
+            assertTrue(value(scenario, "return document.querySelector('#stats-sec').innerText.indexOf('100') >= 0;").getBoolean("value"));
+            scenario.recreate();
+            awaitReady(scenario);
+            JSONObject reloaded = value(scenario, "return JSON.parse(window.FlowBridge.load());").getJSONObject("value");
+            assertEquals(days.toString(), reloaded.getJSONArray("progressDays").toString());
+            assertEquals(saved.getInt("level"), reloaded.getInt("level"));
+            assertEquals(saved.getInt("xp"), reloaded.getInt("xp"));
+            click(scenario, "#nav button:last-child");
+            await(scenario, "document.querySelector('.app-updates') !== null", "Update controls exist");
+            value(scenario, "document.querySelector('.app-updates').closest('details').open=true;return true;");
+            assertEquals("https://github.com/Darksenius/Potik-ADHD/releases/latest", value(scenario,
+                "return document.querySelector('.app-updates a[href$=\"/releases/latest\"]').href;").getString("value"));
+            assertEquals("https://github.com/Darksenius/Potik-ADHD", value(scenario,
+                "return document.querySelector('.app-updates a').href;").getString("value"));
+            assertTrue(value(scenario, "return document.querySelector('.app-updates button').textContent.indexOf('Перевірити') >= 0;").getBoolean("value"));
+        }
+    }
+
     @Test public void personalReleaseNotesOpenReturnAndSurviveActivityRecreation() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             awaitReady(scenario);

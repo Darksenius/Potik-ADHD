@@ -10,7 +10,7 @@ const destinations: { id: TabId; icon: 'quest' | 'inbox' | 'note' | 'focus' | 'z
   { id: 'notefolders', icon: 'folder', label: 'Папки нотаток', description: 'Створення та видалення папок' },
   { id: 'daypresets', icon: 'calendar', label: 'Пресети дня', description: 'Типові задачі, зони й графіки тижня' },
   { id: 'ideas', icon: 'idea', label: 'Ідеї', description: 'Справи, які чекають свого часу' },
-  { id: 'stats', icon: 'chart', label: 'Стат', description: 'Історія та досягнення' },
+  { id: 'stats', icon: 'chart', label: 'Статистика', description: 'Рівні, активні дні й досягнення' },
 ];
 
 export default function MoreTab() {

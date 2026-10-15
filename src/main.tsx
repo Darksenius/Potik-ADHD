@@ -25,6 +25,7 @@ function bootstrap() {
   // loadState() тепер повертає saveDate завантажених даних (або null, якщо
   // даних не було) — точний відповідник _loadedSaveDate з оригіналу.
   const loadedSaveDate = loadState();
+  useStore.getState().initializeProgression();
   preparePendingNativeDeferrals();
   if (loadedSaveDate !== null) {
     useStore.getState().dailyResetIfNeeded(loadedSaveDate);

@@ -25,6 +25,7 @@ test.afterEach(() => { delete (globalThis as any).window; delete (globalThis as 
 test('exported fields including empty arrays, long focus history and preferences fully restore', () => {
   useStore.setState({ tasks: [task(901)], qnotes: [{ id: 502, txt: 'Нотатка', date: '2026-10-08', time: '10:00', folder: 'impulse' }], notepad: 'Мій блокнот', xp: 31, xpTotal: 731, level: 4, focusChips: [], focusLog: Array.from({ length: 130 }, (_, i) => ({ val: String(i), start: '2026-10-08T09:00:00.000Z', end: null, date: '2026-10-08', time: '12:00' })), planRestDays: { '2026-10-10': true }, planDayLog: { '2026-10-07': { focus: [], energy: 2, routineDone: {}, priorities: [], tasksDone: 2, note: 'Історія' } }, preferences: { themeMode: 'light', reduceMotion: true, showGamification: false } });
   useStore.getState().recalculateZoneUsage();
+  useStore.getState().initializeProgression();
   const before = collectState();
   useStore.setState(useStore.getInitialState(), true);
   expect(importState(before, 'restore')).toBe(1);

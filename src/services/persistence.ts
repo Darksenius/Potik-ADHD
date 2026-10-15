@@ -7,6 +7,7 @@ import { seedKnownCompletions } from '../utils/taskHistory';
 import { normalizePlannerTasks } from './plannerMigration';
 import { normalizeRoutineTasks } from './routineMigration';
 import { markSaveError, markSaveSaved } from './saveStatus';
+import { initializeProgression } from '../utils/progression';
 
 /** Stable storage slot. formatVersion distinguishes the persisted domain schema. */
 export const LS_KEY = 'flow_v2';
@@ -28,6 +29,8 @@ export function collectState(): AppState {
     xp: s.xp,
     xpTotal: s.xpTotal,
     level: s.level,
+    progressionVersion: s.progressionVersion,
+    progressDays: s.progressDays,
     done: s.done,
     streak: s.streak,
     negCount: s.negCount,
@@ -94,7 +97,13 @@ export function applyState(raw: unknown, replace = false): boolean {
     patch.taskHistory = seedKnownCompletions(patch.taskHistory || current.taskHistory, tasks);
     const qnotes = patch.qnotes || current.qnotes;
     const qnid = Math.max(100, ...qnotes.map(n => n.id + 1));
+    // Old XP fields use the legacy curve even when merged into an already-open v2 workspace.
+    if (parsed.progressionVersion === undefined && ['xp', 'level', 'xpTotal'].some(key => key in parsed)) {
+      patch.progressionVersion = 0;
+    }
+    Object.assign(patch, initializeProgression({ ...current, ...patch }));
     useStore.setState({ ...patch, nid, qnid });
+    useStore.getState().checkAchievements();
     return true;
   } catch { return false; }
 }

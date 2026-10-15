@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useStore } from '../../state/store';
+import { titleForLevel } from '../../utils/progression';
 import Modal from './Modal';
 import Icon from './Icon';
 import '../../styles/reward-feedback.css';
@@ -25,8 +26,8 @@ export default function RewardFeedback() {
     {popup && (enabled || popup.tone === 'muted') && <div className={'reward-feedback reward-' + popup.tone} role="status" aria-live="polite">
       {popup.text}
     </div>}
-    {enabled && level !== null && <Modal title={'Рівень ' + level + '!'} onClose={dismissLevel}>
-      <div className="level-reward"><Icon name="chart" /><p>Твої дії накопичуються. Новий рівень уже твій.</p>
+    {enabled && level !== null && <Modal title={'Рівень ' + level + ' · ' + titleForLevel(level)} onClose={dismissLevel}>
+      <div className="level-reward"><Icon name="chart" /><p>Твої кроки накопичуються у власному темпі. Новий ранг уже твій.</p>
         <button type="button" className="secondary-action" onClick={dismissLevel}>Продовжити</button>
       </div>
     </Modal>}
