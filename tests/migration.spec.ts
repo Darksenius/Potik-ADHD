@@ -212,7 +212,7 @@ test('5/2 schedule applies for two weeks and a manual exception affects only one
   page.on('dialog', d => d.accept());
   await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.locator('.wkc-head').click();
-  await page.locator('.wkc-row').filter({ hasText: '5/2' }).getByRole('button', { name: '▶', exact: true }).click();
+  await page.getByRole('button', { name: 'Застосувати графік «5/2»', exact: true }).click();
   await page.locator('.wkc-panel input[type=date]').fill('2026-09-14');
   await page.locator('.wkc-panel select').selectOption('14');
   await page.getByRole('button', { name: 'Застосувати', exact: true }).click();
