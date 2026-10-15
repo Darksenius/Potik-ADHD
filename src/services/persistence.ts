@@ -6,6 +6,7 @@ import { buildForegroundNotifPayload } from '../bridge/notifPayload';
 import { seedKnownCompletions } from '../utils/taskHistory';
 import { normalizePlannerTasks } from './plannerMigration';
 import { normalizeRoutineTasks } from './routineMigration';
+import { markSaveError, markSaveSaved } from './saveStatus';
 
 /** Stable storage slot. formatVersion distinguishes the persisted domain schema. */
 export const LS_KEY = 'flow_v2';
@@ -52,6 +53,7 @@ export function collectState(): AppState {
     weekTemplates: s.weekTemplates || [],
     weekTplSeeded: !!s.weekTplSeeded,
     notepad: s.notepad || '',
+    notepadFolder: s.notepadFolder,
     theme: s.theme || 'dark',
     preferences: s.preferences,
     saveDate: new Date().toDateString(),
@@ -193,9 +195,13 @@ export function readRecoveryArchive(name?: string): string {
  * the next launch. A browser quota failure cannot invalidate a Room commit. */
 export function saveState(eventIds?: number[]): boolean {
   lastSaveFailure = null;
-  if (saveBlocked || useStore.getState().backupBanner) { lastSaveFailure = 'recovery'; return false; }
+  if (saveBlocked || useStore.getState().backupBanner) {
+    lastSaveFailure = 'recovery'; markSaveError(getSaveErrorMessage()); return false;
+  }
   let json: string;
-  try { json = JSON.stringify(collectState()); } catch { lastSaveFailure = 'serialize'; return false; }
+  try { json = JSON.stringify(collectState()); } catch {
+    lastSaveFailure = 'serialize'; markSaveError(getSaveErrorMessage()); return false;
+  }
   const fb = flowBridge();
   let nativeSaved = false;
   let localSaved = false;
@@ -203,6 +209,7 @@ export function saveState(eventIds?: number[]): boolean {
     lastSaveFailure = 'native';
     try { if (fb?.getLastSaveError?.() === 'storage_full') lastSaveFailure = 'storage_full'; } catch { /* Keep the generic write error. */ }
     useStore.getState().showToast('Не вдалося зберегти дані в Android. Зміни ще не збережено: повтори спробу або зроби експорт, перш ніж закривати застосунок.');
+    markSaveError(getSaveErrorMessage());
     return false;
   };
   try {
@@ -223,8 +230,14 @@ export function saveState(eventIds?: number[]): boolean {
     try { fb.saveNotif(JSON.stringify(buildForegroundNotifPayload())); } catch { /* Snapshot can be refreshed later. */ }
     try { fb.writeBackup(json); } catch { /* Does not invalidate Room state. */ }
   }
-  if (!nativeSaved && !localSaved) { lastSaveFailure = 'browser'; useStore.getState().showToast(getSaveErrorMessage()); }
-  return nativeSaved || localSaved;
+  if (!nativeSaved && !localSaved) {
+    lastSaveFailure = 'browser';
+    useStore.getState().showToast(getSaveErrorMessage());
+    markSaveError(getSaveErrorMessage());
+    return false;
+  }
+  markSaveSaved();
+  return true;
 }
 
 export function loadState(): string | null {

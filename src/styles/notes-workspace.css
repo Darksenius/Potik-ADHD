@@ -1,0 +1,60 @@
+.notes-page-heading{margin:16px 0}
+.notes-page-heading h2{font-size:22px;color:var(--t1);margin:0 0 5px}
+.notes-page-heading p,.note-file-hint{font-size:12px;line-height:1.5;color:var(--t2)}
+.note-composer{padding:15px;border:1px solid var(--b2);border-radius:16px;background:var(--s1);margin-bottom:24px}
+.note-composer-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap}
+.note-composer-heading label{font-size:15px;font-weight:700;margin:0 8px 4px 0}
+.note-save-status{display:inline-flex;align-items:center;font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:4px}
+.note-save-status .potik-icon{margin-right:5px}
+.note-save-status.saved{color:var(--t2)}
+.note-save-status.error{color:var(--neg)}
+.notes-workspace #notepad{box-sizing:border-box;width:100%;min-height:140px;margin:0;padding:13px;background:var(--s2);color:var(--t1);border:1px solid var(--b2);border-radius:11px;font-family:inherit;font-size:16px;line-height:1.6;resize:vertical}
+.notes-workspace #notepad:focus{border-color:var(--z);outline:2px solid var(--z);outline-offset:2px}
+.note-composer-meta{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;margin:10px 0 16px;font-size:11px;line-height:1.5;color:var(--t2)}
+.note-composer-meta p{flex:1 1 170px;margin:0 8px 5px 0}
+.note-composer-meta>span{white-space:nowrap;font-size:10px}
+.note-destination{display:grid;grid-template-columns:minmax(90px,.8fr) minmax(0,1.2fr);grid-gap:10px;gap:10px;align-items:center;font-size:12px;color:var(--t2);margin-bottom:12px}
+.note-destination .ei{box-sizing:border-box;width:100%;min-width:0;min-height:44px;margin:0;font-size:14px;background:var(--s2);color:var(--t1)}
+.note-composer-actions,.note-edit-actions{display:flex;flex-wrap:wrap;margin:0 -4px}
+.note-composer-actions>button,.note-edit-actions>button{flex:1 1 150px;min-height:46px;margin:4px;padding:10px 12px;border:1px solid var(--b2);border-radius:10px;font:inherit;font-size:13px;font-weight:700;line-height:1.4;display:inline-flex;align-items:center;justify-content:center}
+.note-composer-actions .potik-icon{margin-right:7px;width:18px;height:18px}
+.note-file-button{background:var(--z);color:#10151d;border-color:var(--z)}
+.note-task-button{background:var(--s2);color:var(--t1)}
+.note-composer-actions>button:disabled,.note-edit-actions>button:disabled{opacity:.45;cursor:default}
+.note-file-hint{margin:9px 0 0;font-size:11px}
+.note-save-error{padding:12px;margin:10px 0;border-left:3px solid var(--neg);border-radius:8px;background:var(--s2);color:var(--t1);font-size:12px;line-height:1.6}
+.note-save-error p{margin:0}
+.note-save-error button{min-height:44px;padding:8px 12px;margin-top:8px;border:1px solid var(--b2);border-radius:8px;color:var(--t1);background:var(--s1)}
+.notes-collection-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.notes-collection-heading h3{font-size:17px;margin:0;color:var(--t1)}
+.notes-collection-heading h3 span{font-size:12px;color:var(--t2);margin-left:5px}
+.notes-folder-toggle{display:inline-flex;align-items:center;min-height:44px;padding:8px 10px;border:1px solid var(--b2);border-radius:9px;background:var(--s1);color:var(--t1);font-size:12px}
+.notes-folder-toggle .potik-icon{margin-right:6px;width:17px;height:17px}
+.notes-folder-filters{display:flex;flex-wrap:nowrap;max-width:100%;overflow-x:auto;margin:0 0 12px;padding-bottom:5px;-webkit-overflow-scrolling:touch}
+.notes-folder-filters .ftab{min-height:40px;flex-shrink:0;margin:3px 6px 3px 0;padding:8px 12px;font-size:12px;color:var(--t2);background:var(--s1);border-color:var(--b2);white-space:nowrap}
+.notes-folder-filters .ftab.act{color:var(--t1);border-color:var(--z);background:var(--s2)}
+.notes-folder-filters .ftab span{opacity:.7;margin-left:5px;font-size:10px}
+.notes-folder-manager{padding:12px;margin-bottom:16px;border:1px solid var(--b2);border-radius:12px;background:var(--s1)}
+.notes-folder-manager .secondary-action{min-height:44px;font-size:13px}
+.notes-folder-manager .notes-folder-form{margin:10px 0}
+.notes-folder-manager .ei{min-height:44px;font-size:16px}
+.notes-folder-manager-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:13px;color:var(--t2);border-bottom:1px solid var(--b1)}
+.notes-folder-manager-row:last-child{border-bottom:0}
+.notes-folder-manager-row>span{min-width:0;overflow-wrap:break-word;word-break:break-word}
+.notes-folder-manager-row button{flex-shrink:0;width:44px;height:44px;margin-left:8px;border:0;border-radius:8px;background:transparent;color:var(--t2)}
+.notes-workspace .note-card{display:block;padding:14px;margin:10px 0;border:1px solid var(--b2);border-radius:13px;background:var(--s1)}
+.note-card-meta{display:flex;justify-content:space-between;flex-wrap:wrap;font-size:10px;line-height:1.5;color:var(--t2);margin-bottom:10px}
+.note-card-meta>span{display:inline-flex;align-items:center;margin:0 8px 4px 0;min-width:0;word-break:break-word}
+.note-card-meta .potik-icon{margin-right:5px}
+.note-card-meta time{white-space:nowrap;margin-bottom:4px}
+.notes-workspace .qn-txt{font-size:15px;line-height:1.65;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;min-width:0}
+.note-card-actions{display:flex;align-items:center;justify-content:flex-end;margin-top:10px;border-top:1px solid var(--b1);padding-top:5px}
+.note-card-actions>button{width:44px;height:44px;margin-left:4px;border:0;border-radius:9px;background:transparent;color:var(--t2);font-size:21px;flex-shrink:0}
+.note-card-actions>button:hover{background:var(--s2)}
+.note-card-actions .notes-copy-feedback{font:inherit;font-size:10px;line-height:1.4;white-space:normal;flex:1;min-width:0}
+.note-edit-form{width:100%;min-width:0}
+.note-edit-form .tnote,.note-edit-form .ei{box-sizing:border-box;width:100%;min-height:46px;margin-top:6px;font-size:16px}
+.note-edit-form .tnote{min-height:170px;line-height:1.6}
+.note-edit-form .el{font-size:12px;display:block;color:var(--t2);margin-top:8px}
+.notes-empty{padding:15px 0;font-size:13px;line-height:1.6;color:var(--t2)}
+@media(max-width:360px){.note-composer{padding:12px}.note-composer-actions>button{flex-basis:100%}.note-composer-meta>span{margin-top:2px}}

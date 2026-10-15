@@ -71,7 +71,7 @@ const fields: Record<string, Check> = {
   unlocked: strings, energy: oneOf([0, 1, 2, 3, 4, 5]), lastEnergyXp: num, dayXpGained: num, xpDay: str,
   priorities: array(nullable(id)), focusChips: strings,
   focusLog: array(shape({ val: str, start: str, end: nullable(str), date: str, time: str, dur: num }, ['val', 'start'], { end: null, date: '', time: '' })),
-  currentFocus: str, notepad: str, theme: oneOf(['light', 'dark']),
+  currentFocus: str, notepad: str, notepadFolder: str, theme: oneOf(['light', 'dark']),
   preferences: shape({ themeMode: oneOf(['system', 'light', 'dark']), reduceMotion: bool, showGamification: bool, waterSeedRetired: bool }),
   rareEvents: array(shape({ id, nm: str, val: num, dir: oneOf(['up', 'down']), unit: str }, ['id', 'nm'], { val: 0, dir: 'up', unit: '' })),
   dayTemplates: array(shape({ id: str, name: str, blocks: array(block) }, ['id', 'name'], { blocks: [] })),

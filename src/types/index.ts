@@ -486,6 +486,7 @@ export interface AppState extends PlannerState {
   rareEvents: RareEvent[];
 
   notepad: string;
+  notepadFolder?: string;
   theme: 'light' | 'dark';
   preferences?: Preferences;
 

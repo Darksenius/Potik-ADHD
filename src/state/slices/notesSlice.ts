@@ -23,6 +23,7 @@ export interface NotesSlice {
   qnotes: QuickNote[];
   folders: Folder[];
   notepad: string;
+  notepadFolder: string;
   /** Наступний вільний id для нотаток (було глобальне `qnid`, стартувало зі 100) */
   qnid: number;
 
@@ -37,8 +38,9 @@ export interface NotesSlice {
 
   /** setNotepad — частина npMeta(), рядок 2313 (лише дані, лічильники символів/слів — робота компонента) */
   setNotepad: (text: string) => void;
+  setNotepadFolder: (id: string) => void;
   /** npSave() — рядки 2314–2330, без DOM-анімації (те — робота компонента) */
-  saveNotepadAsNote: () => void;
+  saveNotepadAsNote: (folder?: string) => QuickNote | undefined;
 
   /** doSaveFolder()/efAddFolder() — рядки 2354–2362, 2384–2392 */
   addFolder: (name: string, icon?: string) => string;
@@ -54,6 +56,7 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
   qnotes: [],
   folders: SEED_FOLDERS,
   notepad: '',
+  notepadFolder: 'thought',
   qnid: 100,
 
   addQuickNote: (text, folder = 'impulse') => {
@@ -87,12 +90,18 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
   },
 
   setNotepad: (text) => set({ notepad: text }),
+  setNotepadFolder: (id) => set({ notepadFolder: id }),
 
-  saveNotepadAsNote: () => {
+  saveNotepadAsNote: (folder) => {
     const v = get().notepad.trim();
     if (!v) return;
-    get().addQuickNote(v, 'thought');
-    set({ notepad: '' });
+    const now = new Date();
+    const target = folder ?? get().notepadFolder;
+    const destination = get().folders.some(f => f.id === target) ? target : get().folders[0]?.id || '';
+    const note: QuickNote = { id: get().qnid, txt: v, folder: destination,
+      time: now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' }), date: fmtDate(now) };
+    set(s => ({ qnotes: [note, ...s.qnotes], qnid: s.qnid + 1, notepad: '', notepadFolder: destination }));
+    return note;
   },
 
   addFolder: (name, icon) => {
@@ -110,6 +119,7 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
       qnotes: s.qnotes.map((n) => (n.folder === id ? { ...n, folder: 'general' } : n)),
       tasks: s.tasks.map((t) => (t.folderId === id ? { ...t, folderId: null } : t)),
       noteFolder: s.noteFolder === id ? 'all' : s.noteFolder,
+      notepadFolder: s.notepadFolder === id ? s.folders.find(f => f.id !== id)?.id || '' : s.notepadFolder,
       taskFilter: s.taskFilter === 'f:' + id ? 'all' : s.taskFilter,
     }));
   },
