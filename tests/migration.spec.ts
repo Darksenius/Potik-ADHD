@@ -134,8 +134,8 @@ test('zones can be edited and disabled without losing their tasks', async ({ pag
   await openTab(page, 'Зони');
   await page.getByRole('button', { name: 'Редагувати зону Робота', exact: true }).click();
   await page.getByLabel('Назва зони').fill('Робочий фокус');
-  await page.getByRole('dialog', { name: 'Редагування зони' }).getByLabel('Початок', { exact: true }).first().fill('10:00');
-  await page.getByRole('button', { name: 'Зберегти зміни', exact: true }).click();
+  await page.getByLabel('Початок 1', { exact: true }).fill('10:00');
+  await page.getByRole('button', { name: 'Зберегти зону', exact: true }).click();
   await page.getByRole('button', { name: 'Вимкнути Робочий фокус', exact: true }).click();
   await page.clock.runFor(1000);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
@@ -292,7 +292,7 @@ test('daily counter tasks support millilitres instead of forcing a count', async
   await openTab(page, 'Стан');
   await page.getByRole('button', { name: 'Лічильник', exact: true }).click();
   await page.getByLabel('Що зробити?', { exact: true }).fill('Чай');
-  await page.getByLabel('Одиниця', { exact: true }).selectOption('ml');
+  await page.getByLabel('Одиниця лічильника', { exact: true }).selectOption('ml');
   await page.getByLabel('Крок + / −', { exact: true }).fill('100');
   await page.getByRole('button', { name: 'Створити задачу', exact: true }).click();
   await page.locator('.daily-task-list .tc').filter({ hasText: 'Чай' }).getByRole('button', { name: 'Збільшити: Чай', exact: true }).click();

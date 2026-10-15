@@ -5,7 +5,7 @@
   bottom: 0;
   left: 0;
   inset: 0;
-  z-index: 620;
+  z-index: 1000;
   display: flex;
   align-items: stretch;
   justify-content: stretch;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { Zone } from '../../types';
 import { useStore } from '../../state/store';
 import { normalizeDayRange } from '../../utils/date';
@@ -76,7 +77,7 @@ export default function ZoneEditor({ zone, onClose }: { zone: Zone; onClose: () 
     onClose();
   };
 
-  return (
+  return createPortal((
     <div className="zone-editor-backdrop" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
       <form ref={panelRef} className="zone-editor-shell" role="dialog" aria-modal="true" aria-labelledby="zone-editor-title" onSubmit={save}>
         <header className="zone-editor-header">
@@ -143,12 +144,12 @@ export default function ZoneEditor({ zone, onClose }: { zone: Zone; onClose: () 
                   <div className="zone-slot-times">
                     <label>
                       <span>Початок</span>
-                      <input type="time" required value={slot.s} onChange={event => setSlots(current => current.map((item, i) => i === index ? { ...item, s: event.target.value } : item))} />
+                      <input aria-label={'Початок ' + (index + 1)} type="time" required value={slot.s} onChange={event => setSlots(current => current.map((item, i) => i === index ? { ...item, s: event.target.value } : item))} />
                     </label>
                     <span className="zone-slot-dash">→</span>
                     <label>
                       <span>Кінець</span>
-                      <input type="time" required value={slot.e === '24:00' ? '00:00' : slot.e} onChange={event => setSlots(current => current.map((item, i) => i === index ? { ...item, e: event.target.value === '00:00' ? '24:00' : event.target.value } : item))} />
+                      <input aria-label={'Кінець ' + (index + 1)} type="time" required value={slot.e === '24:00' ? '00:00' : slot.e} onChange={event => setSlots(current => current.map((item, i) => i === index ? { ...item, e: event.target.value === '00:00' ? '24:00' : event.target.value } : item))} />
                     </label>
                   </div>
                 </div>
@@ -167,10 +168,10 @@ export default function ZoneEditor({ zone, onClose }: { zone: Zone; onClose: () 
           <span className="zone-editor-hint">Зміни збережуться для цієї зони в усіх планах.</span>
           <div>
             <button type="button" className="zone-editor-cancel" onClick={onClose}>Скасувати</button>
-            <button type="submit" className="zone-editor-save">Зберегти зміни</button>
+            <button type="submit" className="zone-editor-save">Зберегти зону</button>
           </div>
         </footer>
       </form>
     </div>
-  );
+  ), document.body);
 }
