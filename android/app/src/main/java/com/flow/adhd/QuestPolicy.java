@@ -69,6 +69,8 @@ final class QuestPolicy {
         String repeat = "none";
         String created = "";
         String doneDate = "";
+        String doneAt = "";
+        String occurrenceId = "";
         String completionCreditDate = "";
         String planDate = "";
         String schedDate = "";
@@ -99,13 +101,16 @@ final class QuestPolicy {
         boolean firedSched;
         boolean firedPre;
         boolean alarmFired;
+        boolean completionCredited;
         boolean[] repeatDays = new boolean[7];
         Deferral deferral;
+        Deferral completionDeferral;
 
         static Builder builder(String id) { return new Builder(id); }
         Task copy() {
             Task c = new Task();
             c.id=id; c.title=title; c.type=type; c.repeat=repeat; c.created=created; c.doneDate=doneDate;
+            c.doneAt=doneAt; c.occurrenceId=occurrenceId;
             c.completionCreditDate=completionCreditDate;
             c.planDate=planDate; c.schedDate=schedDate; c.schedTime=schedTime; c.alarmTime=alarmTime;
             c.windowStart=windowStart; c.windowEnd=windowEnd; c.zoneOccurrenceKey=zoneOccurrenceKey;
@@ -115,7 +120,8 @@ final class QuestPolicy {
             c.completedToday=completedToday; c.zoneDoneToday=zoneDoneToday; c.counterEnabled=counterEnabled;
             c.reminderEnabled=reminderEnabled; c.firedSched=firedSched; c.alarmFired=alarmFired;
             c.remindBeforeMinutes=remindBeforeMinutes; c.firedPre=firedPre;
-            c.repeatDays=repeatDays.clone(); c.deferral=deferral;
+            c.completionCredited=completionCredited;
+            c.repeatDays=repeatDays.clone(); c.deferral=deferral; c.completionDeferral=completionDeferral;
             return c;
         }
         static Task fromJson(JSONObject row) {
@@ -124,6 +130,7 @@ final class QuestPolicy {
             t.id=row.optString("id", ""); t.title=row.optString("title", "Задача");
             t.type=row.optString("type", "simple"); t.repeat=row.optString("repeat", "none");
             t.created=row.optString("created", ""); t.doneDate=row.optString("doneDate", "");
+            t.doneAt=row.optString("doneAt", ""); t.occurrenceId=row.optString("occurrenceId", "");
             t.completionCreditDate=row.optString("completionCreditDate", "");
             t.planDate=row.optString("planDate", ""); t.schedDate=row.optString("schedDate", "");
             t.schedTime=row.optString("schedTime", ""); t.alarmTime=row.optString("alarmTime", "");
@@ -141,10 +148,13 @@ final class QuestPolicy {
             t.reminderEnabled=!row.has("reminderEnabled")||row.optBoolean("reminderEnabled", true);
             t.firedSched=row.optBoolean("firedSched", false); t.alarmFired=row.optBoolean("alarmFired", false);
             t.firedPre=row.optBoolean("firedPre", false);
+            t.completionCredited=row.optBoolean("completionCredited", false);
             t.remindBeforeMinutes=Math.max(0,row.optInt("remindBeforeMinutes", 0));
             JSONArray days=row.optJSONArray("repeatDays");
             if(days!=null) for(int i=0;i<Math.min(7,days.length());i++) t.repeatDays[i]=days.optBoolean(i,false);
             JSONObject d=row.optJSONObject("questDeferral"); if(d!=null) t.deferral=deferralFromJson(d);
+            JSONObject completion=row.optJSONObject("completionDeferral");
+            if(completion!=null) t.completionDeferral=deferralFromJson(completion);
             return t;
         }
     }
@@ -176,12 +186,14 @@ final class QuestPolicy {
     }
 
     static final class Event {
-        static final int DONE=1, SKIP=2, INCREMENT=3, DECREMENT=4, DEFER=5, CAPTURE_TASK=6;
+        static final int DONE=1, SKIP=2, INCREMENT=3, DECREMENT=4, DEFER=5, CAPTURE_TASK=6, UNDO=7;
         final int type; final String taskId; final long createdAt; final Deferral deferral; final String captureTitle;
-        Event(int type,String taskId,long at,Deferral deferral) { this(type,taskId,at,deferral,""); }
-        Event(int type,String taskId,long at,Deferral deferral,String captureTitle) {
+        final Undo undo;
+        Event(int type,String taskId,long at,Deferral deferral) { this(type,taskId,at,deferral,"",null); }
+        Event(int type,String taskId,long at,Deferral deferral,String captureTitle) { this(type,taskId,at,deferral,captureTitle,null); }
+        Event(int type,String taskId,long at,Deferral deferral,String captureTitle,Undo undo) {
             this.type=type; this.taskId=taskId==null?"":taskId; this.createdAt=at;
-            this.deferral=deferral; this.captureTitle=captureTitle==null?"":captureTitle;
+            this.deferral=deferral; this.captureTitle=captureTitle==null?"":captureTitle; this.undo=undo;
         }
         static Event done(String id,long at) { return new Event(DONE,id,at,null); }
         static Event skip(String id,long at) { return new Event(SKIP,id,at,null); }
@@ -189,6 +201,16 @@ final class QuestPolicy {
         static Event decrement(String id,long at) { return new Event(DECREMENT,id,at,null); }
         static Event defer(String id,long at,Deferral d) { return new Event(DEFER,id,at,d); }
         static Event captureTask(String id,String title,long at) { return new Event(CAPTURE_TASK,id,at,null,title); }
+        static Event undo(Undo value) { return new Event(UNDO, value.id, value.undoneAt, null, "", value); }
+    }
+
+    static final class Undo {
+        final String id, created, kind;
+        final long sourceAt, undoneAt;
+        final JSONObject before;
+        Undo(String id,String created,String kind,long sourceAt,long undoneAt,JSONObject before) {
+            this.id=id; this.created=created; this.kind=kind; this.sourceAt=sourceAt; this.undoneAt=undoneAt; this.before=before;
+        }
     }
 
     static final class Selection {
@@ -526,7 +548,59 @@ final class QuestPolicy {
         if(raw.startsWith("task_dec:"))return Event.decrement(raw.substring(9),at);
         String prefix="task_defer:";
         if(raw.startsWith(prefix)){ int cut=raw.indexOf(':',prefix.length()); if(cut<=prefix.length()||cut==raw.length()-1)return null; try{return Event.defer(raw.substring(prefix.length(),cut),at,deferralFromJson(new JSONObject(raw.substring(cut+1))));}catch(Exception ignored){return null;} }
+        if(raw.startsWith("task_undo:")) {
+            try {
+                JSONObject json = new JSONObject(raw.substring("task_undo:".length()));
+                String rawId = json.optString("id", "");
+                if (!rawId.matches("[1-9][0-9]{0,15}")) return null;
+                long numericId = Long.parseLong(rawId);
+                if (numericId >= 9_007_199_254_740_991L) return null;
+                String created = json.optString("created", "");
+                String kind = json.optString("kind", "");
+                long sourceAt = json.optLong("sourceAt", 0L);
+                long undoneAt = json.optLong("undoneAt", 0L);
+                JSONObject before = json.optJSONObject("before");
+                if (created.isEmpty() || created.length() > 128 || !("done".equals(kind) || "defer".equals(kind))
+                        || sourceAt <= 0 || undoneAt < sourceAt || undoneAt - sourceAt > 10_000L
+                        || at <= 0 || Math.abs(at - undoneAt) > 1000L || !validUndoBefore(before)
+                        || "done".equals(kind) && !Boolean.FALSE.equals(before.opt("done"))) return null;
+                return Event.undo(new Undo(rawId, created, kind, sourceAt, undoneAt, before));
+            } catch (Exception ignored) { return null; }
+        }
         return null;
+    }
+
+    private static final String[] UNDO_RUNTIME_FIELDS = {"done", "doneDate", "doneAt", "questDeferral",
+            "completionDeferral", "snoozeUntil", "firedSched", "firedPre", "alarmFired", "completedToday",
+            "zoneDoneToday", "nextRepeatAt", "occurrenceId", "completionCredited", "completionCreditDate"};
+
+    private static boolean validUndoBefore(JSONObject before) {
+        if (before == null || before.length() != UNDO_RUNTIME_FIELDS.length) return false;
+        for (String field : UNDO_RUNTIME_FIELDS) if (!before.has(field)) return false;
+        if (!nullableBoolean(before, "done") || !nullableBoolean(before, "firedSched")
+                || !nullableBoolean(before, "firedPre") || !nullableBoolean(before, "alarmFired")
+                || !nullableBoolean(before, "completedToday") || !nullableBoolean(before, "zoneDoneToday")
+                || !nullableBoolean(before, "completionCredited")) return false;
+        if (!nullableString(before, "doneDate") || !nullableString(before, "doneAt")
+                || !nullableString(before, "occurrenceId") || !nullableString(before, "completionCreditDate")) return false;
+        if (!nullableNumber(before, "snoozeUntil") || !nullableNumber(before, "nextRepeatAt")) return false;
+        if (!nullableDeferral(before, "questDeferral") || !nullableDeferral(before, "completionDeferral")) return false;
+        return true;
+    }
+
+    private static boolean nullableBoolean(JSONObject object,String key) {
+        Object value=object.opt(key); return value==null||value==JSONObject.NULL||value instanceof Boolean;
+    }
+    private static boolean nullableString(JSONObject object,String key) {
+        Object value=object.opt(key); return value==null||value==JSONObject.NULL||value instanceof String;
+    }
+    private static boolean nullableNumber(JSONObject object,String key) {
+        Object value=object.opt(key); return value==null||value==JSONObject.NULL
+                ||value instanceof Number&&Double.isFinite(((Number)value).doubleValue());
+    }
+    private static boolean nullableDeferral(JSONObject object,String key) {
+        Object value=object.opt(key);
+        return value==null||value==JSONObject.NULL||value instanceof JSONObject&&deferralFromJson((JSONObject)value)!=null;
     }
 
     /** Projects Room commands onto a copy so actions remain correct while WebView is closed. */
@@ -539,7 +613,9 @@ final class QuestPolicy {
         List<Task> result=new ArrayList<>(); Map<String,Task> byId=new HashMap<>();
         String today=localDate(now,zone);
         Set<String> pendingDeferrals=new HashSet<>();
-        if(events!=null)for(Event event:events)if(event!=null&&(event.type==Event.DEFER||event.type==Event.SKIP))pendingDeferrals.add(event.taskId);
+        if(events!=null)for(Event event:events)if(event!=null&&(event.type==Event.DEFER||event.type==Event.SKIP
+                ||event.type==Event.UNDO&&event.undo!=null&&event.undo.before!=null
+                &&event.undo.before.optJSONObject("questDeferral")!=null))pendingDeferrals.add(event.taskId);
         if(source!=null)for(Task row:source)if(row!=null){Task copy=row.copy();
             if(isCalendarCounter(copy)&&copy.deferral==null&&!pendingDeferrals.contains(copy.id)
                     &&!copy.counterDay.isEmpty()&&copy.counterDay.compareTo(today)<0)copy.counter=0;
@@ -556,12 +632,22 @@ final class QuestPolicy {
         if(events==null)return result;
         for(Event e:events){
             if(e==null||e.createdAt<=0)continue; Task t=byId.get(e.taskId);
+            if(e.type==Event.UNDO) {
+                if(t!=null&&e.undo!=null&&!createdAfter(t,e.undo.undoneAt,zone)
+                        &&canApplyUndo(t,e.undo,zone)) applyUndo(t,e.undo);
+                continue;
+            }
             if(t==null||"negative".equals(t.type)||createdAfter(t,e.createdAt,zone)
                     ||isCurrentlyDone(t,now,timeline,zone,occurrences))continue;
             switch(e.type){
                 case Event.DONE:
                     if(!completionApplies(t,e.createdAt,now,timeline,zone,occurrences))break;
+                    t.completionDeferral=t.deferral;
                     t.done=true;t.doneDate=localDate(e.createdAt,zone);
+                    t.doneAt=localTime(e.createdAt,zone);
+                    if(!t.completionCredited)t.completionCreditDate=t.doneDate;
+                    t.completionCredited=true;
+                    t.occurrenceId=taskOccurrenceId(t,e.createdAt,timeline,zone,occurrences);
                     t.snoozeUntil=0L;t.deferral=null;
                     if("timewin".equals(t.type))t.completedToday=sameLocalDate(e.createdAt,now,zone);
                     if("zonelinked".equals(t.type)){
@@ -582,11 +668,70 @@ final class QuestPolicy {
                 }
                 case Event.INCREMENT: case Event.DECREMENT:
                     if(sameLocalDate(e.createdAt,now,zone)&&isCounter(t)){long d=e.type==Event.INCREMENT?t.counterStep:-t.counterStep;t.counter=(int)Math.max(0L,Math.min(Integer.MAX_VALUE,(long)t.counter+d));t.counterDay=localDate(e.createdAt,zone);} break;
-                case Event.DEFER: if(e.deferral!=null)t.deferral=e.deferral;break;
+                case Event.DEFER: if(e.deferral!=null){
+                    t.occurrenceId=taskOccurrenceId(t,e.deferral.requestedAt,timeline,zone,occurrences);
+                    t.deferral=e.deferral;t.completionDeferral=null;t.snoozeUntil=0L;t.firedSched=false;t.firedPre=false;t.alarmFired=false;
+                }break;
                 default: break;
             }
         }
         return result;
+    }
+
+    private static boolean canApplyUndo(Task task, Undo undo, TimeZone zone) {
+        if (!task.id.equals(undo.id) || !task.created.equals(undo.created)) return false;
+        if ("done".equals(undo.kind)) {
+            if (!task.done || !task.doneDate.isEmpty() && !task.doneDate.equals(localDate(undo.sourceAt, zone))) return false;
+            return task.doneAt.isEmpty() || task.doneAt.equals(localTime(undo.sourceAt, zone));
+        }
+        return task.deferral != null && task.deferral.requestedAt == undo.sourceAt;
+    }
+
+    private static void applyUndo(Task task, Undo undo) {
+        JSONObject before=undo.before;
+        task.done=before.optBoolean("done",false);
+        task.doneDate=undoString(before,"doneDate"); task.doneAt=undoString(before,"doneAt");
+        task.deferral=undoDeferral(before,"questDeferral");
+        task.completionDeferral=undoDeferral(before,"completionDeferral");
+        task.snoozeUntil=before.optLong("snoozeUntil",0L);
+        task.firedSched=before.optBoolean("firedSched",false); task.firedPre=before.optBoolean("firedPre",false);
+        task.alarmFired=before.optBoolean("alarmFired",false); task.completedToday=before.optBoolean("completedToday",false);
+        task.zoneDoneToday=before.optBoolean("zoneDoneToday",false); task.nextRepeatAt=before.optLong("nextRepeatAt",0L);
+        task.occurrenceId=undoString(before,"occurrenceId");
+        // Native projection cannot reverse XP/history. Keep the current credit
+        // marker until JS applies the same action snapshot and its gamification path.
+    }
+
+    private static String undoString(JSONObject json,String key) {
+        Object value=json.opt(key); return value==null||value==JSONObject.NULL?"":String.valueOf(value);
+    }
+
+    private static Deferral undoDeferral(JSONObject json,String key) {
+        JSONObject value=json.optJSONObject(key); return value==null?null:deferralFromJson(value);
+    }
+
+    private static String taskOccurrenceId(Task task,long at,List<Segment> timeline,TimeZone zone,
+                                           OccurrenceIndex occurrences) {
+        if (task.occurrenceId != null && !task.occurrenceId.isEmpty()) return task.occurrenceId;
+        long origin = task.deferral == null ? at : task.deferral.requestedAt;
+        String day = !task.counterDay.isEmpty() ? task.counterDay
+                : !task.planDate.isEmpty() ? task.planDate : localDate(origin, zone);
+        String suffix;
+        if ("everyzone".equals(task.repeat)) {
+            String zoneKey = task.zoneOccurrenceKey;
+            if (zoneKey.isEmpty() && task.hasZone)
+                zoneKey = occurrenceKeyAt(task, origin, timeline, zone, occurrences);
+            suffix = "zone:" + (!zoneKey.isEmpty() ? zoneKey : day + ":" + task.zoneId);
+        } else if ("interval".equals(task.repeat)) suffix = "interval:" + at;
+        else if (task.repeat != null && !task.repeat.isEmpty() && !"none".equals(task.repeat)) suffix = "day:" + day;
+        else suffix = "once";
+        return task.id + "@" + task.created + "|" + suffix;
+    }
+
+    static String localTime(long at,TimeZone zone) {
+        Calendar c=Calendar.getInstance(zone==null?TimeZone.getDefault():zone,Locale.US);
+        c.setTimeInMillis(at);
+        return String.format(Locale.US,"%02d:%02d",c.get(Calendar.HOUR_OF_DAY),c.get(Calendar.MINUTE));
     }
 
     static Selection select(List<Task> source,List<Segment> timeline,long timelineUntil,long now,TimeZone zone,int limit) {

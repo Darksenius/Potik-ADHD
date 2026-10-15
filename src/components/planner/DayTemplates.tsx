@@ -20,10 +20,10 @@ export default function DayTemplates({ ds }: { ds: DateKey }) {
               type="button"
               key={tp.id}
               onClick={() => applyDayTemplate(ds, tp.id)}
-              title="Застосувати часові зони цього пресету до дня"
+              title="Застосувати часові зони й додати типові задачі до дня"
               aria-label={`Застосувати пресет «${tp.name}» до дня`}
             >
-              {tp.name} ({(tp.blocks || []).length})
+              {tp.name} · {(tp.blocks || []).length} зон · {(tp.tasks || []).length} задач
             </button>
           ))}
         </div>

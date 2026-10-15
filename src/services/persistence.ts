@@ -54,6 +54,7 @@ export function collectState(): AppState {
     weekTplSeeded: !!s.weekTplSeeded,
     notepad: s.notepad || '',
     notepadFolder: s.notepadFolder,
+    taskEditorDraft: s.taskEditorDraft,
     theme: s.theme || 'dark',
     preferences: s.preferences,
     saveDate: new Date().toDateString(),

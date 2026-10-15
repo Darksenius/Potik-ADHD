@@ -41,7 +41,7 @@ const questDeferral: Check = (value, path) => {
   return result;
 };
 const task = shape({
-  id, legacyRoutineId: str, title: str, type: oneOf(Object.keys(taskTypeCatalog)),
+  id, legacyRoutineId: str, dayPresetKey: str, title: str, type: oneOf(Object.keys(taskTypeCatalog)),
   done: bool, someday: bool, zoneId: nullable(id), zoneColor: nullable(str), zoneName: nullable(str), folderId: nullable(str),
   expanded: bool, created: str, trashed: bool, doneDate: str, doneAt: str, completionCredited: bool, completionCreditDate: str, snoozeUntil: num,
   questDeferral, completionDeferral: questDeferral, occurrenceId: str,
@@ -71,10 +71,16 @@ const fields: Record<string, Check> = {
   unlocked: strings, energy: oneOf([0, 1, 2, 3, 4, 5]), lastEnergyXp: num, dayXpGained: num, xpDay: str,
   priorities: array(nullable(id)), focusChips: strings,
   focusLog: array(shape({ val: str, start: str, end: nullable(str), date: str, time: str, dur: num }, ['val', 'start'], { end: null, date: '', time: '' })),
-  currentFocus: str, notepad: str, notepadFolder: str, theme: oneOf(['light', 'dark']),
+  currentFocus: str, notepad: str, notepadFolder: str, taskEditorDraft: str, theme: oneOf(['light', 'dark']),
   preferences: shape({ themeMode: oneOf(['system', 'light', 'dark']), reduceMotion: bool, showGamification: bool, waterSeedRetired: bool }),
   rareEvents: array(shape({ id, nm: str, val: num, dir: oneOf(['up', 'down']), unit: str }, ['id', 'nm'], { val: 0, dir: 'up', unit: '' })),
-  dayTemplates: array(shape({ id: str, name: str, blocks: array(block) }, ['id', 'name'], { blocks: [] })),
+  dayTemplates: array(shape({ id: str, name: str, blocks: array(block), tasks: array(shape({ id: str, task: (value, path) => {
+    const source = object(value, path);
+    if (typeof source.title !== 'string' || !Object.keys(taskTypeCatalog).includes(String(source.type))) fail(path);
+    const checked = task({ ...source, id: 0 }, path) as Obj;
+    delete checked.id;
+    return checked;
+  } }, ['id', 'task'])) }, ['id', 'name'], { blocks: [] })),
   weekTemplates: array(shape({ id: str, name: str, days: array(ruleDay) }, ['id', 'name'], { days: [] })),
   weekTplSeeded: bool,
   planItems: map(array(shape({ title: str, done: bool, isEvent: bool, isPrompt: bool, time: str }, ['title'], { done: false }))),

@@ -8,6 +8,8 @@ import ZoneCard from './components/zones/ZoneCard';
 import TasksTab from './components/tasks/TasksTab';
 import NotesTab from './components/notes/NotesTab';
 import NoteFoldersTab from './components/notes/NoteFoldersTab';
+import SharedCaptureDialog from './components/notes/SharedCaptureDialog';
+import TaskUndoNotice from './components/common/TaskUndoNotice';
 import StateTab from './components/focus/StateTab';
 import ZonesTab from './components/zones/ZonesTab';
 import IdeasTab from './components/tasks/IdeasTab';
@@ -88,6 +90,8 @@ export default function App() {
       <ImpulseReview />
       <BackupBanner />
       <KbdOverlay />
+      <SharedCaptureDialog />
+      <TaskUndoNotice />
     </>
   );
 }

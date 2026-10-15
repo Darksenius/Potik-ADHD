@@ -7,13 +7,15 @@ import type {
   DayLogEntry,
   PlanDayZoneOverride,
   DayTemplate,
+  DayTemplateTask,
   WeekTemplate,
 } from '../../types';
-import { fmtDate, addDaysDs } from '../../utils/date';
-import { ruleFor, dayBlocksFor, dayIsRestFor } from './plannerHelpers';
+import { fmtDate, addDaysDs, isDateKey } from '../../utils/date';
+import { ruleFor, ruleEntry, dayBlocksFor, dayIsRestFor } from './plannerHelpers';
 import { ULBL } from './routineSlice';
 import { COUNTER_UNITS, hasTaskCounter } from '../../utils/taskCounter';
 import { completedTaskOccurrences } from '../../utils/taskHistory';
+import { appendDayPresetTasks, sanitizeDayPresetTask } from '../../utils/dayPresetTasks';
 
 /** getWeekStart() — рядки 3316–3319. Понеділок тижня зі зсувом `off` (у тижнях). */
 export function getWeekStart(off: number): Date {
@@ -34,6 +36,29 @@ export interface DayStats {
   focusList: string[];
   energy: number;
   routineDone: Record<string, string | boolean>;
+}
+
+function freezeAppliedDayTemplateBlocks(
+  templateId: string,
+  planDayZones: Record<DateKey, PlanDayZoneOverride[]>,
+  planRules: PlanRule[],
+  dayTemplates: DayTemplate[]
+): Record<DateKey, PlanDayZoneOverride[]> {
+  let frozen = planDayZones;
+  for (const rule of planRules) {
+    if (!isDateKey(rule.start) || !isDateKey(rule.end) || rule.end < rule.start) continue;
+    for (let ds = rule.start; isDateKey(ds) && ds <= rule.end;) {
+      if (!planDayZones[ds] && ruleFor(planRules, ds)?.id === rule.id && ruleEntry(rule, ds)?.tplId === templateId) {
+        if (frozen === planDayZones) frozen = { ...planDayZones };
+        frozen[ds] = dayBlocksFor(ds, planDayZones, planRules, dayTemplates).map((block) => ({ ...block }));
+      }
+      if (ds === rule.end) break;
+      const next = addDaysDs(ds, 1);
+      if (!isDateKey(next) || next <= ds) break;
+      ds = next;
+    }
+  }
+  return frozen;
 }
 
 export interface PlannerSlice {
@@ -70,8 +95,8 @@ export interface PlannerSlice {
   /** dayEditDaily(zid) — рядки 3653–3661 */
   editDailyZoneForDay: (ds: DateKey, zoneId: number) => void;
 
-  /** saveDayTemplate() — рядки 3663–3671, ім'я приходить від компонента (не prompt() у сторі) */
-  saveDayTemplate: (ds: DateKey, name: string) => void;
+  /** Save or update an authored day preset without binding it to a real date. */
+  saveDayTemplate: (template: Omit<DayTemplate, 'id'> & { id?: string }) => void;
   /** applyDayTemplate(id) — рядки 3672–3677 */
   applyDayTemplate: (ds: DateKey, templateId: string) => void;
   /** delDayTemplate(id) — рядки 3678–3681 */
@@ -215,26 +240,75 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
     get().recalculateZoneUsage();
   },
 
-  saveDayTemplate: (ds, name) => {
-    const blocks = get()
-      .dayBlocks(ds)
-      .map((b) => ({ zoneId: b.zoneId, s: b.s, e: b.e }));
-    if (!blocks.length || !name.trim()) return;
-    const template: DayTemplate = { id: 'tpl' + Date.now(), name: name.trim(), blocks };
-    set((s) => ({ dayTemplates: [...s.dayTemplates, template] }));
+  saveDayTemplate: (draft) => {
+    const name = (draft.name || '').trim();
+    if (!name) return;
+    set((s) => {
+      const existingIndex = draft.id ? s.dayTemplates.findIndex((template) => template.id === draft.id) : -1;
+      const id = existingIndex >= 0 ? draft.id! : (draft.id || (() => {
+        const base = `tpl${Date.now()}`;
+        let candidate = base;
+        let suffix = 1;
+        while (s.dayTemplates.some((template) => template.id === candidate)) candidate = `${base}-${suffix++}`;
+        return candidate;
+      })());
+      const template: DayTemplate = {
+        id,
+        name,
+        blocks: (draft.blocks || []).filter((block) => Number.isSafeInteger(block.zoneId) && !!block.s && !!block.e)
+          .map((block) => ({ zoneId: block.zoneId, s: block.s, e: block.e })),
+        tasks: (() => {
+          const result: DayTemplateTask[] = [];
+          const usedIds = new Set<string>();
+          (draft.tasks || []).forEach((entry) => {
+            let safe = sanitizeDayPresetTask(entry);
+            if (!safe) return;
+            let id = safe.id;
+            let suffix = 1;
+            while (usedIds.has(id)) id = `${safe.id}-${suffix++}`;
+            if (id !== safe.id) safe = { ...safe, id };
+            usedIds.add(id);
+            result.push(safe);
+          });
+          return result;
+        })(),
+      };
+      let planDayZones = s.planDayZones;
+      if (existingIndex >= 0) {
+        planDayZones = freezeAppliedDayTemplateBlocks(id, s.planDayZones, s.planRules, s.dayTemplates);
+        const dayTemplates = s.dayTemplates.slice();
+        dayTemplates[existingIndex] = template;
+        return { dayTemplates, planDayZones };
+      }
+      return { dayTemplates: [...s.dayTemplates, template] };
+    });
     get().recalculateZoneUsage();
   },
 
   applyDayTemplate: (ds, templateId) => {
+    if (!isDateKey(ds)) {
+      get().showToast('Вибери коректну дату для застосування пресету.');
+      return;
+    }
     const tp = get().dayTemplates.find((x) => x.id === templateId);
     if (!tp) return;
     const blocks = (tp.blocks || []).map((b) => ({ zoneId: b.zoneId, s: b.s, e: b.e }));
-    set((s) => ({ planDayZones: { ...s.planDayZones, [ds]: blocks } }));
+    set((s) => {
+      const appended = appendDayPresetTasks(s.tasks, s.nid, tp.id, tp.tasks || [], ds, s.zones);
+      return {
+        planDayZones: { ...s.planDayZones, [ds]: blocks },
+        tasks: appended.tasks,
+        nid: appended.nid,
+      };
+    });
     get().recalculateZoneUsage();
   },
 
   deleteDayTemplate: (templateId) => {
-    set((s) => ({ dayTemplates: s.dayTemplates.filter((x) => x.id !== templateId) }));
+    set((s) => ({
+      dayTemplates: s.dayTemplates.filter((x) => x.id !== templateId),
+      planDayZones: freezeAppliedDayTemplateBlocks(templateId, s.planDayZones, s.planRules, s.dayTemplates),
+    }));
     get().recalculateZoneUsage();
   },
 
@@ -364,7 +438,19 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
   applyWeekTemplate: (templateId, startDs, spanDays) => {
     const tp = get().weekTemplates.find((x) => x.id === templateId);
     if (!tp || !((tp.days as unknown[]) || []).length) return;
+    if (!isDateKey(startDs)) {
+      get().showToast('Вибери коректну дату початку графіка.');
+      return;
+    }
+    if (!Number.isSafeInteger(spanDays) || spanDays < 1 || spanDays > 3660) {
+      get().showToast('Період графіка має бути від 1 до 3660 днів.');
+      return;
+    }
     const endDs = addDaysDs(startDs, spanDays - 1);
+    if (!isDateKey(endDs)) {
+      get().showToast('Дата завершення графіка виходить за межі календаря.');
+      return;
+    }
 
     set((s) => {
       const planDayZones = { ...s.planDayZones };
@@ -377,14 +463,27 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
         delete planDayOff[ds];
       }
       const planRules = s.planRules.filter((r) => !(r.start >= startDs && r.end <= endDs));
-      planRules.push({
+      const appliedRule = {
         id: 'pr' + Date.now(),
         name: tp.name || '',
         start: startDs,
         end: endDs,
         days: JSON.parse(JSON.stringify(tp.days)),
-      });
-      return { planDayZones, planRestDays, planDayOff, planRules };
+      };
+      planRules.push(appliedRule);
+      let tasks = s.tasks;
+      let nid = s.nid;
+      for (let i = 0; i < spanDays; i++) {
+        const ds = addDaysDs(startDs, i);
+        const scheduledTemplateId = ruleEntry(appliedRule, ds)?.tplId;
+        if (!scheduledTemplateId) continue;
+        const dayTemplate = s.dayTemplates.find((template) => template.id === scheduledTemplateId);
+        if (!dayTemplate?.tasks?.length) continue;
+        const appended = appendDayPresetTasks(tasks, nid, dayTemplate.id, dayTemplate.tasks, ds, s.zones);
+        tasks = appended.tasks;
+        nid = appended.nid;
+      }
+      return { planDayZones, planRestDays, planDayOff, planRules, tasks, nid };
     });
     get().recalculateZoneUsage();
   },

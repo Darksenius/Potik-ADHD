@@ -13,6 +13,12 @@ async function boot(page: Page) {
   await expect(page.locator('#add-fab')).toBeVisible();
 }
 
+async function selectTaskType(page: Page, type: string) {
+  const select = page.locator('#task-type');
+  if (!(await select.isVisible())) await page.locator('.editor-type-section summary').click();
+  await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
+}
+
 async function openInbox(page: Page) {
   await page.getByRole('button', { name: 'Ще', exact: true }).click();
   await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
@@ -33,7 +39,7 @@ test('baseline: existing note task creates Today, reloads, edits inline, and rel
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?').fill(title);
   await page.getByText('Додаткові можливості', { exact: true }).click();
-  await page.getByLabel('Тип задачі', { exact: true }).selectOption('note');
+  await selectTaskType(page, 'note');
   const editorNote = page.locator('#task-note, #edit-body textarea').first();
   await editorNote.fill(multiline);
   await page.locator('#edit-save-fab').click();
@@ -98,15 +104,15 @@ test('simple optional note survives type changes, reload, inline edit, and inten
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?').fill(title);
   await page.getByRole('button', { name: 'Без дати', exact: true }).click();
-  await expect(page.locator('.schedule-preview')).toContainText('Без дати — доступна');
+  await expect(page.locator('.schedule-preview')).toContainText('Без дати: задача доступна');
   await page.locator('#task-note-section summary').click();
   await page.locator('#task-note').fill(multiline);
   await page.screenshot({ path: info.outputPath('notes-editor-320.png'), fullPage: true, animations: 'disabled' });
   await page.getByText('Додаткові можливості', { exact: true }).click();
-  await page.getByLabel('Тип задачі', { exact: true }).selectOption('note');
+  await selectTaskType(page, 'note');
   await expect(page.locator('#task-note')).toHaveCount(1);
   await expect(page.locator('#task-note')).toHaveValue(multiline);
-  await page.getByLabel('Тип задачі', { exact: true }).selectOption('simple');
+  await selectTaskType(page, 'simple');
   await expect(page.locator('#task-note')).toHaveValue(multiline);
   await page.locator('#edit-save-fab').click();
 
@@ -151,7 +157,7 @@ test('scheduled optional note opens from its calendar day with the same ID and s
   const title = 'Scheduled note ' + Date.now();
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?').fill(title);
-  await page.getByRole('button', { name: 'Запланована На точну дату й час' }).click();
+  await page.getByRole('button', { name: 'На дату й час План і сигнал за розкладом' }).click();
   await page.getByLabel('Дата *', { exact: true }).fill('2026-10-09');
   await page.getByLabel('Час *', { exact: true }).fill('14:30');
   await page.locator('#task-note-section summary').click();
@@ -167,7 +173,7 @@ test('scheduled optional note opens from its calendar day with the same ID and s
   await page.getByRole('button', { name: title, exact: true }).click();
   await expect(page.locator('#task-note-section')).toHaveJSProperty('open', true);
   await expect(page.locator('#task-note')).toHaveValue(multiline);
-  await page.getByRole('button', { name: 'Проста Без обов’язкового часу', exact: true }).click();
+  await page.getByRole('button', { name: 'Без точного часу У списку задач, коли підходять умови', exact: true }).click();
   await page.getByRole('button', { name: 'Без дати', exact: true }).click();
   await expect(page.locator('#task-note')).toHaveValue(multiline);
   await page.locator('#edit-save-fab').click();

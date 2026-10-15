@@ -8,7 +8,7 @@ const destinations: { id: TabId; icon: 'quest' | 'inbox' | 'note' | 'focus' | 'z
   { id: 'state', icon: 'focus', label: 'Стан', description: 'Фокус, енергія, пріоритети й повсякденні задачі' },
   { id: 'zones', icon: 'zones', label: 'Зони', description: 'Розклад і контексти дня' },
   { id: 'notefolders', icon: 'folder', label: 'Папки нотаток', description: 'Створення та видалення папок' },
-  { id: 'daypresets', icon: 'calendar', label: 'Пресети дня', description: 'Типові зони дня та графіки тижня' },
+  { id: 'daypresets', icon: 'calendar', label: 'Пресети дня', description: 'Типові задачі, зони й графіки тижня' },
   { id: 'ideas', icon: 'idea', label: 'Ідеї', description: 'Справи, які чекають свого часу' },
   { id: 'stats', icon: 'chart', label: 'Стат', description: 'Історія та досягнення' },
 ];

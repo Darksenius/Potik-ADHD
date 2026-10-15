@@ -18,6 +18,9 @@ export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' 
 export type TaskEditorPreset = Partial<Pick<Task, 'type' | 'repeat' | 'counterUnit' | 'counterStep' | 'counterTarget'>>;
 
 export interface UiSlice {
+  sharedNoteIds: number[];
+  enqueueSharedNote: (id: number) => void;
+  dismissSharedNote: (id: number) => void;
   alarmTaskIds: number[];
   theme: 'light' | 'dark';
   preferences: Preferences;
@@ -92,6 +95,9 @@ export interface KbdOverlayContext {
 }
 
 export const createUiSlice: AppSlice<UiSlice> = (set) => ({
+  sharedNoteIds: [],
+  enqueueSharedNote: (id) => set(s => ({ sharedNoteIds: s.sharedNoteIds.includes(id) ? s.sharedNoteIds : [...s.sharedNoteIds, id] })),
+  dismissSharedNote: (id) => set(s => ({ sharedNoteIds: s.sharedNoteIds.filter(noteId => noteId !== id) })),
   alarmTaskIds: [],
   theme: 'dark',
   preferences: { themeMode: 'system', reduceMotion: false, showGamification: true },

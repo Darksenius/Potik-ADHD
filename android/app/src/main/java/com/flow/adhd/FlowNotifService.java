@@ -7,6 +7,8 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -17,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.RemoteInput;
 
@@ -45,6 +48,7 @@ public class FlowNotifService extends Service {
     public static final String ACTION_TASK_NOT_TODAY = "com.flow.adhd.ACTION_TASK_NOT_TODAY";
     public static final String ACTION_TASK_INC   = "com.flow.adhd.ACTION_TASK_INC";
     public static final String ACTION_TASK_DEC   = "com.flow.adhd.ACTION_TASK_DEC";
+    public static final String ACTION_TASK_UNDO  = "com.flow.adhd.ACTION_TASK_UNDO";
     public static final String ACTION_RC_INC     = "com.flow.adhd.ACTION_RC_INC";
     public static final String ACTION_RC_DEC     = "com.flow.adhd.ACTION_RC_DEC";
     public static final String ACTION_RC_DONE    = "com.flow.adhd.ACTION_RC_DONE";
@@ -55,6 +59,7 @@ public class FlowNotifService extends Service {
     public static final String EXTRA_ID  = "flow_item_id";
     public static final String EXTRA_KIND = "flow_kind"; // "tasks" | "rc"
     static final String EXTRA_ACTION_GENERATION = "flow_action_generation";
+    private static final String EXTRA_UNDO_TOKEN = "flow_undo_token";
     public static final String FLOW_EVENT = "com.flow.adhd.FLOW_EVENT";
 
     private static final int  COLOR_FLOW   = 0xFF4f8ef7;
@@ -72,6 +77,12 @@ public class FlowNotifService extends Service {
     private final Map<Integer, Runnable> tempCancelCallbacks = new HashMap<>();
     private static final long UI_REFRESH_QUIET_MS = 1_500L;
     private static final long UI_REFRESH_MAX_BURST_MS = 4_000L;
+    private static final long UNDO_WINDOW_MS = 10_000L;
+    private static final String UNDO_PREFS = "flow_task_undo";
+    private static final String[] UNDO_RUNTIME_FIELDS = {"done", "doneDate", "doneAt", "questDeferral",
+            "completionDeferral", "snoozeUntil", "firedSched", "firedPre", "alarmFired", "completedToday",
+            "zoneDoneToday", "nextRepeatAt", "occurrenceId", "completionCredited", "completionCreditDate"};
+    private Runnable undoExpiryCallback;
 
     @Override
     public void onCreate() {
@@ -216,9 +227,21 @@ public class FlowNotifService extends Service {
                 break;
 
             case ACTION_TASK_DONE: {
+                invalidatePendingUndo(null);
                 String id = intent.getStringExtra(EXTRA_ID);
                 if (isTaskActionAvailable(id, intent.getStringExtra(EXTRA_ACTION_GENERATION))) {
-                    pushAndNotify("task_done:" + id);
+                    QuestPolicy.Task task = findQuestTask(id);
+                    long actionAt = System.currentTimeMillis();
+                    JSONObject before = captureRuntimeBefore(task);
+                    if (before != null) {
+                        try { before.put("done", false); }
+                        catch (Exception ignored) { before = null; }
+                    }
+                    String event = "task_done:" + id;
+                    bridge.pushEventAt(event, actionAt);
+                    if (before != null) storePendingUndo(task, "done", actionAt, before, findQuestTask(id));
+                    broadcastEvent(event);
+                    setCaptureReceipt("Виконано: " + receiptTaskTitle(task));
                     FlowAlarmReceiver.scheduleNextDue(this, bridge);
                 }
                 cancelTaskNotification(intent, id);
@@ -229,6 +252,7 @@ public class FlowNotifService extends Service {
             case ACTION_TASK_SKIP: // Older action IDs now map to the agreed "Не зараз" behavior.
             case ACTION_TASK_NEXT_ZONE:
             case ACTION_TASK_NOT_TODAY: {
+                invalidatePendingUndo(null);
                 String id = intent.getStringExtra(EXTRA_ID);
                 if (isTaskActionAvailable(id, intent.getStringExtra(EXTRA_ACTION_GENERATION))) {
                     QuestPolicy.Task task = findQuestTask(id);
@@ -241,7 +265,12 @@ public class FlowNotifService extends Service {
                                 ? QuestPolicy.deferNotToday(task, timeline, actionAt, zone)
                                 : QuestPolicy.deferNextZone(task, timeline, actionAt, zone);
                         if (deferral != null) {
-                            pushAndNotify(deferral.asEvent(id));
+                            JSONObject before = captureRuntimeBefore(task);
+                            String event = deferral.asEvent(id);
+                            bridge.pushEventAt(event, deferral.requestedAt);
+                            if (before != null) storePendingUndo(task, "defer", deferral.requestedAt, before, findQuestTask(id));
+                            broadcastEvent(event);
+                            setCaptureReceipt(deferralReceipt(task, deferral));
                             // Replace any old date alarm immediately; the WebView may stay closed.
                             FlowAlarmReceiver.scheduleNextDue(this, bridge);
                         } else setCaptureReceipt("Відкрий Потік, щоб оновити зони");
@@ -256,6 +285,7 @@ public class FlowNotifService extends Service {
             }
             case ACTION_TASK_INC:
             case ACTION_TASK_DEC: {
+                invalidatePendingUndo(null);
                 String id = intent.getStringExtra(EXTRA_ID);
                 JSONObject task = findCurrentTask(id);
                 if (task != null && isCounterTask(task)
@@ -266,6 +296,12 @@ public class FlowNotifService extends Service {
                 }
                 rebuildFromDb();
                 if (task != null && isCounterTask(task)) showTaskNotifications();
+                break;
+            }
+            case ACTION_TASK_UNDO: {
+                handleTaskUndo(intent);
+                rebuildFromDb();
+                showTaskNotifications();
                 break;
             }
             case ACTION_RC_INC: {
@@ -524,13 +560,21 @@ public class FlowNotifService extends Service {
                 .setContentIntent(openPI)
                 .setOngoing(true)
                 .setSilent(true)
+                .setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setStyle(inbox)
                 .addAction(buildCaptureAction(KEY_TASK, "+ Задача", "Назва задачі", ACTION_CAPTURE_TASK, 2))
-                .addAction(buildCaptureAction(KEY_NOTE, "+ Нотатка", "Текст нотатки", ACTION_CAPTURE_NOTE, 4))
-                .addAction(actionService(android.R.drawable.ic_menu_agenda, "Розгорнути", ACTION_SHOW_TASKS, 3));
+                .addAction(buildCaptureAction(KEY_NOTE, "+ Нотатка", "Текст нотатки", ACTION_CAPTURE_NOTE, 4));
+
+        UndoCapture undo = activeUndo();
+        if (undo != null) {
+            scheduleUndoExpiry(undo);
+            b.addAction(buildUndoAction(undo));
+        } else {
+            b.addAction(actionService(android.R.drawable.ic_menu_agenda, "Розгорнути", ACTION_SHOW_TASKS, 3));
+        }
 
         if (total > 0) b.setProgress(100, done * 100 / total, false);
 
@@ -700,6 +744,28 @@ public class FlowNotifService extends Service {
     private String findTaskTitle(String id) {
         JSONObject task = findCurrentTask(id);
         return task == null ? "Задача" : task.optString("title", "Задача");
+    }
+
+    private String receiptTaskTitle(QuestPolicy.Task task) {
+        String title = task == null ? "Задачу" : task.title;
+        if (title == null || title.trim().isEmpty()) title = "Задачу";
+        title = title.trim();
+        return title.length() > 80 ? title.substring(0, 77).trim() + "…" : title;
+    }
+
+    private String deferralReceipt(QuestPolicy.Task task, QuestPolicy.Deferral deferral) {
+        String title = receiptTaskTitle(task);
+        String verb = QuestPolicy.DEFERRAL_NOT_TODAY.equals(deferral.kind) ? "Не сьогодні" : "Не зараз";
+        String target = "";
+        if (QuestPolicy.DEFERRAL_NEXT_ZONE.equals(deferral.kind) && deferral.targetZoneId > 0) {
+            JSONObject notif = readNotifObject();
+            JSONObject zone = notif == null ? null : findQuestZone(notif.optJSONArray("questZones"), deferral.targetZoneId);
+            if (zone != null) target = zone.optString("nm", "").trim();
+        }
+        String when = new java.text.SimpleDateFormat("d MMM, HH:mm", java.util.Locale.forLanguageTag("uk"))
+                .format(new java.util.Date(deferral.startAt));
+        if (!target.isEmpty()) return verb + ": «" + title + "» → " + target + " · " + when;
+        return verb + ": «" + title + "» → " + when;
     }
 
     private boolean isTaskActionAvailable(String id, String expectedGeneration) {
@@ -1122,6 +1188,257 @@ public class FlowNotifService extends Service {
     private void pushAndNotify(String event) {
         bridge.pushEvent(event);
         broadcastEvent(event);
+    }
+
+    private static final class UndoCapture {
+        String token, id, created, kind, beforeJson, expectedAfterJson;
+        long sourceAt, expiresAt;
+    }
+
+    private SharedPreferences undoPreferences() {
+        return getSharedPreferences(UNDO_PREFS, Context.MODE_PRIVATE);
+    }
+
+    private UndoCapture activeUndo() {
+        SharedPreferences prefs = undoPreferences();
+        String token = prefs.getString("token", "");
+        if (token == null || token.isEmpty()) return null;
+        long expiresAt = prefs.getLong("expiresAt", 0L);
+        if (expiresAt <= System.currentTimeMillis()) {
+            invalidatePendingUndo(token);
+            return null;
+        }
+        UndoCapture result = new UndoCapture();
+        result.token = token;
+        result.id = prefs.getString("id", "");
+        result.created = prefs.getString("created", "");
+        result.kind = prefs.getString("kind", "");
+        result.sourceAt = prefs.getLong("sourceAt", 0L);
+        result.expiresAt = expiresAt;
+        result.beforeJson = prefs.getString("before", "");
+        result.expectedAfterJson = prefs.getString("expectedAfter", "");
+        if (result.id.isEmpty() || result.created.isEmpty() || result.beforeJson.isEmpty() || result.expectedAfterJson.isEmpty()
+                || !("done".equals(result.kind) || "defer".equals(result.kind)) || result.sourceAt <= 0) {
+            invalidatePendingUndo(token);
+            return null;
+        }
+        return result;
+    }
+
+    private void storePendingUndo(QuestPolicy.Task task, String kind, long sourceAt, JSONObject before,
+                                 QuestPolicy.Task expectedAfter) {
+        if (task == null || expectedAfter == null || !task.id.equals(expectedAfter.id)
+                || !task.created.equals(expectedAfter.created) || sourceAt <= 0 || before == null
+                || sourceAt + UNDO_WINDOW_MS <= System.currentTimeMillis()) return;
+        try {
+            long id = Long.parseLong(task.id);
+            if (id <= 0 || id >= 9_007_199_254_740_991L) return;
+            String token = UUID.randomUUID().toString();
+            long expiresAt = sourceAt + UNDO_WINDOW_MS;
+            JSONObject expectedAfterJson = runtimeSnapshot(expectedAfter);
+            boolean saved = undoPreferences().edit()
+                    .putString("token", token).putString("id", task.id).putString("created", task.created)
+                    .putString("kind", kind).putLong("sourceAt", sourceAt).putLong("expiresAt", expiresAt)
+                    .putString("before", before.toString()).putString("expectedAfter", expectedAfterJson.toString()).commit();
+            if (saved) {
+                UndoCapture undo = activeUndo();
+                if (undo != null) scheduleUndoExpiry(undo);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void invalidatePendingUndo(String expectedToken) {
+        SharedPreferences prefs = undoPreferences();
+        if (expectedToken != null && !expectedToken.equals(prefs.getString("token", ""))) return;
+        prefs.edit().clear().commit();
+        if (handler != null && undoExpiryCallback != null) handler.removeCallbacks(undoExpiryCallback);
+        undoExpiryCallback = null;
+    }
+
+    private void scheduleUndoExpiry(UndoCapture undo) {
+        if (handler == null || undo == null) return;
+        if (undoExpiryCallback != null) handler.removeCallbacks(undoExpiryCallback);
+        final String token = undo.token;
+        undoExpiryCallback = () -> FlowDatabase.executeStorage(() -> {
+            UndoCapture current = activeUndo();
+            if (current == null || !token.equals(current.token)) {
+                scheduleCoalescedUiRefresh();
+                return;
+            }
+            long remaining = current.expiresAt - System.currentTimeMillis();
+            if (remaining > 0L) handler.postDelayed(undoExpiryCallback, remaining);
+            else {
+                invalidatePendingUndo(token);
+                scheduleCoalescedUiRefresh();
+            }
+        });
+        handler.postDelayed(undoExpiryCallback, Math.max(0L, undo.expiresAt - System.currentTimeMillis()));
+    }
+
+    private NotificationCompat.Action buildUndoAction(UndoCapture undo) {
+        Intent intent = new Intent(this, FlowNotifService.class);
+        intent.setAction(ACTION_TASK_UNDO);
+        intent.setData(Uri.parse("flow://task/undo/" + Uri.encode(undo.token)));
+        intent.putExtra(EXTRA_UNDO_TOKEN, undo.token);
+        PendingIntent pending = PendingIntent.getService(this, 9910,
+                intent, flagImmutable() | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new NotificationCompat.Action.Builder(android.R.drawable.ic_menu_revert, "Скасувати", pending)
+                .setShowsUserInterface(false).build();
+    }
+
+    private JSONObject captureRuntimeBefore(QuestPolicy.Task effectiveTask) {
+        if (effectiveTask == null || effectiveTask.id.isEmpty() || effectiveTask.created.isEmpty()) return null;
+        JSONObject notif = readNotifObject();
+        JSONArray rows = notif == null ? null : notif.optJSONArray("questTasks");
+        JSONObject source = null;
+        if (rows != null) for (int i = 0; i < rows.length(); i++) {
+            JSONObject candidate = rows.optJSONObject(i);
+            if (candidate != null && effectiveTask.id.equals(candidate.optString("id", ""))) {
+                source = candidate; break;
+            }
+        }
+        if (source == null) {
+            source = new JSONObject();
+            try {
+                source.put("id", effectiveTask.id);
+                source.put("created", effectiveTask.created);
+                source.put("title", effectiveTask.title);
+                source.put("type", effectiveTask.type);
+            } catch (Exception ignored) { return null; }
+        }
+        if (!effectiveTask.created.equals(source.optString("created", ""))) return null;
+        QuestPolicy.Task rawTask = QuestPolicy.Task.fromJson(source);
+        JSONObject before = new JSONObject();
+        try {
+            for (String field : UNDO_RUNTIME_FIELDS) {
+                before.put(field, source.has(field) && !source.isNull(field) ? source.get(field) : JSONObject.NULL);
+            }
+            putProjectedBoolean(before, "done", rawTask.done, effectiveTask.done);
+            putProjectedString(before, "doneDate", rawTask.doneDate, effectiveTask.doneDate);
+            putProjectedString(before, "doneAt", rawTask.doneAt, effectiveTask.doneAt);
+            putProjectedDeferral(before, "questDeferral", rawTask.deferral, effectiveTask.deferral);
+            putProjectedDeferral(before, "completionDeferral", rawTask.completionDeferral, effectiveTask.completionDeferral);
+            putProjectedLong(before, "snoozeUntil", rawTask.snoozeUntil, effectiveTask.snoozeUntil);
+            putProjectedBoolean(before, "firedSched", rawTask.firedSched, effectiveTask.firedSched);
+            putProjectedBoolean(before, "firedPre", rawTask.firedPre, effectiveTask.firedPre);
+            putProjectedBoolean(before, "alarmFired", rawTask.alarmFired, effectiveTask.alarmFired);
+            putProjectedBoolean(before, "completedToday", rawTask.completedToday, effectiveTask.completedToday);
+            putProjectedBoolean(before, "zoneDoneToday", rawTask.zoneDoneToday, effectiveTask.zoneDoneToday);
+            putProjectedLong(before, "nextRepeatAt", rawTask.nextRepeatAt, effectiveTask.nextRepeatAt);
+            putProjectedString(before, "occurrenceId", rawTask.occurrenceId, effectiveTask.occurrenceId);
+            putProjectedBoolean(before, "completionCredited", rawTask.completionCredited, effectiveTask.completionCredited);
+            putProjectedString(before, "completionCreditDate", rawTask.completionCreditDate, effectiveTask.completionCreditDate);
+            return before;
+        } catch (Exception ignored) { return null; }
+    }
+
+    private static void putProjectedBoolean(JSONObject before, String key, boolean raw, boolean effective) throws Exception {
+        if (raw != effective) before.put(key, effective);
+    }
+    private static void putProjectedLong(JSONObject before, String key, long raw, long effective) throws Exception {
+        if (raw != effective) before.put(key, effective);
+    }
+    private static void putProjectedString(JSONObject before, String key, String raw, String effective) throws Exception {
+        if (!java.util.Objects.equals(raw, effective)) before.put(key, effective == null || effective.isEmpty() ? JSONObject.NULL : effective);
+    }
+    private static void putProjectedDeferral(JSONObject before, String key, QuestPolicy.Deferral raw,
+                                             QuestPolicy.Deferral effective) throws Exception {
+        String rawJson = raw == null ? "" : raw.toJson();
+        String effectiveJson = effective == null ? "" : effective.toJson();
+        if (!rawJson.equals(effectiveJson)) before.put(key,
+                effective == null ? JSONObject.NULL : new JSONObject(effectiveJson));
+    }
+
+    private void handleTaskUndo(Intent intent) {
+        UndoCapture undo = activeUndo();
+        String token = intent.getStringExtra(EXTRA_UNDO_TOKEN);
+        long now = System.currentTimeMillis();
+        if (undo == null || token == null || !token.equals(undo.token)
+                || now < undo.sourceAt || now > undo.expiresAt) {
+            setCaptureReceipt("Цю дію вже не можна скасувати");
+            return;
+        }
+        QuestPolicy.Task task = findQuestTask(undo.id);
+        JSONObject row = findQuestTaskRow(undo.id);
+        if (task == null || !undo.created.equals(task.created)
+                || row != null && (!undo.created.equals(row.optString("created", ""))
+                    || row.optBoolean("trashed", false) || row.optBoolean("someday", false))) {
+            invalidatePendingUndo(token);
+            setCaptureReceipt("Задача вже змінилася");
+            return;
+        }
+        String currentRuntime;
+        try { currentRuntime = runtimeSnapshot(task).toString(); }
+        catch (Exception ignored) { currentRuntime = ""; }
+        if (!undo.expectedAfterJson.equals(currentRuntime)) {
+            invalidatePendingUndo(token);
+            setCaptureReceipt("Задача вже змінилася");
+            return;
+        }
+        boolean expected = "done".equals(undo.kind)
+                ? task.done && undo.sourceAt <= now && QuestPolicy.localDate(undo.sourceAt, java.util.TimeZone.getDefault()).equals(task.doneDate)
+                    && (task.doneAt.isEmpty() || task.doneAt.equals(QuestPolicy.localTime(undo.sourceAt, java.util.TimeZone.getDefault())))
+                : task.deferral != null && task.deferral.requestedAt == undo.sourceAt;
+        if (!expected) {
+            invalidatePendingUndo(token);
+            setCaptureReceipt("Задача вже змінилася");
+            return;
+        }
+        try {
+            long numericId = Long.parseLong(undo.id);
+            JSONObject payload = new JSONObject();
+            payload.put("id", numericId);
+            payload.put("created", undo.created);
+            payload.put("kind", undo.kind);
+            payload.put("sourceAt", undo.sourceAt);
+            payload.put("undoneAt", now);
+            payload.put("before", new JSONObject(undo.beforeJson));
+            String event = "task_undo:" + payload.toString();
+            bridge.pushEventAt(event, now);
+            invalidatePendingUndo(token);
+            broadcastEvent(event);
+            setCaptureReceipt("Скасовано: " + receiptTaskTitle(task));
+            FlowAlarmReceiver.scheduleNextDue(this, bridge);
+        } catch (Exception e) {
+            setCaptureReceipt("Не вдалося скасувати дію");
+        }
+    }
+
+    private static JSONObject runtimeSnapshot(QuestPolicy.Task task) throws Exception {
+        JSONObject snapshot = new JSONObject();
+        for (String field : UNDO_RUNTIME_FIELDS) {
+            Object value;
+            switch (field) {
+                case "done": value = task.done; break;
+                case "doneDate": value = task.doneDate; break;
+                case "doneAt": value = task.doneAt; break;
+                case "questDeferral": value = task.deferral == null ? JSONObject.NULL : new JSONObject(task.deferral.toJson()); break;
+                case "completionDeferral": value = task.completionDeferral == null ? JSONObject.NULL : new JSONObject(task.completionDeferral.toJson()); break;
+                case "snoozeUntil": value = task.snoozeUntil; break;
+                case "firedSched": value = task.firedSched; break;
+                case "firedPre": value = task.firedPre; break;
+                case "alarmFired": value = task.alarmFired; break;
+                case "completedToday": value = task.completedToday; break;
+                case "zoneDoneToday": value = task.zoneDoneToday; break;
+                case "nextRepeatAt": value = task.nextRepeatAt; break;
+                case "occurrenceId": value = task.occurrenceId; break;
+                case "completionCredited": value = task.completionCredited; break;
+                case "completionCreditDate": value = task.completionCreditDate; break;
+                default: throw new IllegalArgumentException("Unknown undo runtime field");
+            }
+            snapshot.put(field, value);
+        }
+        return snapshot;
+    }
+
+    private JSONObject findQuestTaskRow(String id) {
+        JSONObject notif = readNotifObject();
+        JSONArray rows = notif == null ? null : notif.optJSONArray("questTasks");
+        if (rows != null) for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row != null && id != null && id.equals(row.optString("id", ""))) return row;
+        }
+        return null;
     }
 
     private void broadcastEvent(String event) {

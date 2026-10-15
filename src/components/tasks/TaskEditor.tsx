@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useStore } from '../../state/store';
 import type { Task, TaskType } from '../../types';
 import { fmtDate, WD } from '../../utils/date';
 import { saveState, saveIsBlocked, getSaveErrorMessage, showRecoveryBanner } from '../../services/persistence';
+import { flushAutosave } from '../../services/autosave';
+import { getSaveStatus, subscribeSaveStatus } from '../../services/saveStatus';
 import { repeatDueOn } from '../../utils/taskSchedule';
 import { COUNTER_UNITS, hasTaskCounter } from '../../utils/taskCounter';
+import { readTaskEditorDraft, writeTaskEditorDraft } from './taskEditorDraft';
+import './taskEditor.css';
 import taskTypeData from '../../content/task-types.json' with { type: 'json' };
 
 type TaskTypeInfo = { label: string; icon: string; xp: number; hint: string; description: string; example: string };
@@ -35,39 +39,51 @@ export default function TaskEditor() {
   const closeTaskEditor = useStore(s => s.closeTaskEditor);
   const isNew = editorTaskId === 'new';
   const existing = !isNew ? tasks.find(t => t.id === editorTaskId) : undefined;
-  const [title, setTitle] = useState(existing?.title || '');
-  const [type, setType] = useState<TaskType>(existing?.type || preset?.type || 'simple');
-  const [zoneId, setZoneId] = useState(existing?.zoneId ? String(existing.zoneId) : '');
-  const [folderId, setFolderId] = useState(existing?.folderId || '');
-  const [repeat, setRepeat] = useState<Task['repeat']>(existing?.repeat || preset?.repeat || 'none');
-  const [repeatDays, setRepeatDays] = useState(existing?.repeatDays?.slice() || Array<boolean>(7).fill(false));
-  const [repeatInterval, setRepeatInterval] = useState(existing?.repeatInterval || 30);
-  const [repeatUnit, setRepeatUnit] = useState(existing?.repeatUnit || 'min');
-  const [tagsText, setTagsText] = useState((existing?.tags || []).join(', '));
-  const [date, setDate] = useState((existing?.type === 'sched' ? existing.schedDate || existing.planDate : existing?.planDate) || initialDate || '');
-  const [time, setTime] = useState(existing?.schedTime || '');
-  const [alarmTime, setAlarmTime] = useState(existing?.alarmTime || '');
-  const [winStart, setWinStart] = useState(existing?.windowStart || '07:00');
-  const [winEnd, setWinEnd] = useState(existing?.windowEnd || '09:00');
-  const [note, setNote] = useState(existing?.note || '');
-  const [checklistDraft, setChecklistDraft] = useState('');
-  const [cntTgt, setCntTgt] = useState(existing?.counterTarget ?? preset?.counterTarget ?? (existing?.type === 'counter' ? 10 : 0));
-  const [counterEnabled, setCounterEnabled] = useState(existing ? hasTaskCounter(existing) : preset?.type === 'counter');
-  const [counterStep, setCounterStep] = useState(existing?.counterStep || preset?.counterStep || 1);
-  const [counterUnit, setCounterUnit] = useState<Task['counterUnit']>(existing?.counterUnit || preset?.counterUnit || 'count');
-  const [negXp, setNegXp] = useState(existing?.negXp || 5);
-  const [reminder, setReminder] = useState(existing?.reminderEnabled !== false);
-  const [advance, setAdvance] = useState(String(existing?.remindBeforeMinutes || 0));
+  const [draftOnOpen] = useState(() => readTaskEditorDraft(useStore.getState().taskEditorDraft));
+  const draftSeedConflicts = !!draftOnOpen && (!!initialDate || !!preset)
+    && (draftOnOpen.seed?.initialDate !== initialDate || JSON.stringify(draftOnOpen.seed?.preset ?? null) !== JSON.stringify(preset ?? null));
+  const [draftConflict, setDraftConflict] = useState(draftSeedConflicts);
+  const draftValues = isNew && !draftConflict ? draftOnOpen?.values : undefined;
+  const [title, setTitle] = useState(existing?.title || draftValues?.title || '');
+  const [type, setType] = useState<TaskType>(existing?.type || draftValues?.type || preset?.type || 'simple');
+  const [zoneId, setZoneId] = useState(existing?.zoneId ? String(existing.zoneId) : draftValues?.zoneId || '');
+  const [folderId, setFolderId] = useState(existing?.folderId || draftValues?.folderId || '');
+  const [repeat, setRepeat] = useState<Task['repeat']>(existing?.repeat || draftValues?.repeat || preset?.repeat || 'none');
+  const [repeatDays, setRepeatDays] = useState(existing?.repeatDays?.slice() || draftValues?.repeatDays || Array<boolean>(7).fill(false));
+  const [repeatInterval, setRepeatInterval] = useState(existing?.repeatInterval || draftValues?.repeatInterval || 30);
+  const [repeatUnit, setRepeatUnit] = useState<NonNullable<Task['repeatUnit']>>(existing?.repeatUnit || draftValues?.repeatUnit || 'min');
+  const [tagsText, setTagsText] = useState((existing?.tags || []).join(', ') || draftValues?.tagsText || '');
+  const [date, setDate] = useState((existing?.type === 'sched' ? existing.schedDate || existing.planDate : existing?.planDate) || draftValues?.date || initialDate || '');
+  const [time, setTime] = useState(existing?.schedTime || draftValues?.time || '');
+  const [alarmTime, setAlarmTime] = useState(existing?.alarmTime || draftValues?.alarmTime || '');
+  const [winStart, setWinStart] = useState(existing?.windowStart || draftValues?.winStart || '07:00');
+  const [winEnd, setWinEnd] = useState(existing?.windowEnd || draftValues?.winEnd || '09:00');
+  const [note, setNote] = useState(existing?.note || draftValues?.note || '');
+  const [checklistDraft, setChecklistDraft] = useState(draftValues?.checklistDraft || '');
+  const [cntTgt, setCntTgt] = useState(existing?.counterTarget ?? draftValues?.cntTgt ?? preset?.counterTarget ?? (existing?.type === 'counter' ? 10 : 0));
+  const [counterEnabled, setCounterEnabled] = useState(existing ? hasTaskCounter(existing) : draftValues?.counterEnabled ?? preset?.type === 'counter');
+  const [counterStep, setCounterStep] = useState(existing?.counterStep || draftValues?.counterStep || preset?.counterStep || 1);
+  const [counterUnit, setCounterUnit] = useState<NonNullable<Task['counterUnit']>>(existing?.counterUnit || draftValues?.counterUnit || preset?.counterUnit || 'count');
+  const [negXp, setNegXp] = useState(existing?.negXp || draftValues?.negXp || 5);
+  const [reminder, setReminder] = useState(existing?.reminderEnabled ?? draftValues?.reminder ?? true);
+  const [advance, setAdvance] = useState(String(existing?.remindBeforeMinutes ?? draftValues?.advance ?? 0));
   const [error, setError] = useState('');
   const [keepPast, setKeepPast] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [savedNewId, setSavedNewId] = useState<number | null>(null);
+  const saveStatus = useSyncExternalStore(subscribeSaveStatus, getSaveStatus, getSaveStatus);
   const scheduled = type === 'sched';
   const special = type !== 'simple' && type !== 'sched';
   const today = fmtDate(new Date());
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const pastTime = scheduled && date && time && new Date(date + 'T' + time).getTime() < Date.now();
   const dateLabel = date ? new Date(date + 'T12:00:00').toLocaleDateString('uk', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'місцевим часом';
+  const currentDraftText = writeTaskEditorDraft({ title, type, zoneId, folderId, repeat, repeatDays, repeatInterval, repeatUnit, tagsText, date, time, alarmTime, winStart, winEnd, note, checklistDraft, cntTgt, counterEnabled, counterStep, counterUnit, negXp, reminder, advance }, initialDate, preset);
+  useEffect(() => {
+    if (!isNew || draftConflict) return;
+    if (currentDraftText !== useStore.getState().taskEditorDraft) useStore.getState().setTaskEditorDraft(currentDraftText);
+  }, [isNew, draftConflict, currentDraftText]);
   if (editorTaskId == null || (!isNew && !existing)) return null;
 
   function chooseType(value: TaskType) {
@@ -76,7 +92,42 @@ export default function TaskEditor() {
     if (value === 'sched' && !date) setDate(today);
   }
   function close() {
+    if (isNew) {
+      if (!draftConflict && !flushAutosave()) { setError(getSaveErrorMessage()); return; }
+      closeTaskEditor(); return;
+    }
     if (!dirty || window.confirm('Залишити редактор без збереження змін?')) closeTaskEditor();
+  }
+  function discardDraft() {
+    const savedDraft = useStore.getState().taskEditorDraft;
+    useStore.getState().setTaskEditorDraft('');
+    if (!flushAutosave()) {
+      useStore.getState().setTaskEditorDraft(savedDraft);
+      setError(getSaveErrorMessage());
+      return;
+    }
+    closeTaskEditor();
+  }
+  function restoreDraft() {
+    const values = draftOnOpen?.values;
+    if (!values) return;
+    setTitle(values.title); setType(values.type); setZoneId(values.zoneId); setFolderId(values.folderId);
+    setRepeat(values.repeat); setRepeatDays(values.repeatDays.slice()); setRepeatInterval(values.repeatInterval); setRepeatUnit(values.repeatUnit);
+    setTagsText(values.tagsText); setDate(values.date); setTime(values.time); setAlarmTime(values.alarmTime);
+    setWinStart(values.winStart); setWinEnd(values.winEnd); setNote(values.note); setChecklistDraft(values.checklistDraft);
+    setCntTgt(values.cntTgt); setCounterEnabled(values.counterEnabled); setCounterStep(values.counterStep);
+    setCounterUnit(values.counterUnit); setNegXp(values.negXp); setReminder(values.reminder); setAdvance(values.advance);
+    setKeepPast(false); setError(''); setDraftConflict(false); setDirty(true);
+  }
+  function startThisDraft() {
+    const savedDraft = useStore.getState().taskEditorDraft;
+    useStore.getState().setTaskEditorDraft('');
+    if (!flushAutosave()) {
+      useStore.getState().setTaskEditorDraft(savedDraft);
+      setError(getSaveErrorMessage());
+      return;
+    }
+    setError(''); setDraftConflict(false); setDirty(false);
   }
   function submit(snooze?: number | 'tomorrow') {
     if (!title.trim()) { setError('Напиши, що потрібно зробити.'); return; }
@@ -87,8 +138,7 @@ export default function TaskEditor() {
       && !repeatDueOn({ repeat, repeatDays } as Task, new Date(date + 'T12:00:00'))) {
       setError('Вибрана дата не входить у дні повторення. Зміни першу дату або дні повторення.'); return;
     }
-    if (type === 'zonelinked' && !zoneId) { setError('Вибери зону для цієї задачі.'); return; }
-    if (repeat === 'everyzone' && !zoneId) { setError('Для повторення при вході в зону вибери зону.'); return; }
+    if ((type === 'zonelinked' || repeat === 'everyzone') && (!zoneId || !zones.some(z => String(z.id) === zoneId))) { setError('Вибери наявну зону для цієї задачі.'); return; }
     if ((counterEnabled || type === 'counter') && type !== 'negative' && (!Number.isSafeInteger(counterStep) || counterStep <= 0 || !Number.isSafeInteger(cntTgt) || cntTgt < 0)) {
       setError('Введи цілий крок, більший за 0, і цілу ціль — 0 або більше.'); return;
     }
@@ -105,11 +155,21 @@ export default function TaskEditor() {
     if (saveIsBlocked() || useStore.getState().backupBanner) {
       saveState(); setError(getSaveErrorMessage()); return;
     }
+    if (isNew && draftConflict) { setError('Спочатку відкинь або віднови наявну чернетку, щоб не замінити її.'); return; }
     const retainedId = savedNewId !== null && tasks.some(t => t.id === savedNewId) ? savedNewId : null;
+    if (isNew) useStore.getState().setTaskEditorDraft(currentDraftText);
+    const beforeCreate = isNew ? useStore.getState() : undefined;
     const id = saveTask(isNew ? retainedId : existing!.id, patch);
     if (isNew) setSavedNewId(id);
     if (snooze !== undefined) snoozeTask(id, snooze);
-    if (!saveState()) { setError(getSaveErrorMessage()); return; }
+    if (isNew) useStore.getState().setTaskEditorDraft('');
+    if (!saveState()) {
+      if (beforeCreate) {
+        useStore.setState({ tasks: beforeCreate.tasks, nid: beforeCreate.nid, taskEditorDraft: beforeCreate.taskEditorDraft });
+        setSavedNewId(retainedId);
+      }
+      setError(getSaveErrorMessage()); return;
+    }
     closeTaskEditor();
     useStore.getState().showToast(snooze === undefined ? 'Задачу збережено' : 'Зміни збережено, задачу перенесено');
   }
@@ -118,18 +178,24 @@ export default function TaskEditor() {
     <div id="edit-header"><button className="edit-back" onClick={close}>← Назад</button><h2 id="task-editor-title">{isNew ? 'Нова задача' : 'Редагування задачі'}</h2></div>
     <form id="edit-body" onChange={() => { setDirty(true); setError(''); }} onSubmit={e => { e.preventDefault(); submit(); }}>
       <div className="ef"><label className="el" htmlFor="task-title">Що зробити?</label><input id="task-title" className="ei" value={title} onChange={e => setTitle(e.target.value)} placeholder="Наприклад, забрати посилку" autoFocus /></div>
-      <div className="editor-kinds" aria-label="Основний тип задачі">
-        <button type="button" aria-pressed={type === 'simple'} onClick={() => chooseType('simple')}>Проста<span>Без обов’язкового часу</span></button>
-        <button type="button" aria-pressed={scheduled} onClick={() => chooseType('sched')}>Запланована<span>На точну дату й час</span></button>
+      {isNew && draftConflict && <div className="editor-warning" role="status"><p>Збережена чернетка має іншу дату або попереднє налаштування. Можеш відновити її або відкинути й продовжити з переданими цій формі значеннями.</p><div className="editor-actions"><button type="button" onClick={restoreDraft}>Відновити чернетку</button><button type="button" onClick={startThisDraft}>Відкинути чернетку й почати цю</button></div></div>}
+      {isNew && !draftConflict && <div className="editor-draft-status" role="status" aria-live="polite">{saveStatus.phase === 'pending' ? 'Зберігаю чернетку…' : saveStatus.phase === 'error' ? `Не вдалося зберегти чернетку: ${saveStatus.message || 'помилка збереження'}` : draftOnOpen ? 'Чернетку збережено на цьому пристрої.' : 'Налаштування чернетки зберігаються на цьому пристрої.'}<button type="button" onClick={discardDraft}>Відкинути чернетку</button></div>}
+      <div className="editor-kinds" aria-label="Коли задача потрібна">
+        <button type="button" aria-pressed={type === 'simple'} onClick={() => chooseType('simple')}>Без точного часу<span>У списку задач, коли підходять умови</span></button>
+        <button type="button" aria-pressed={type === 'zonelinked'} onClick={() => chooseType('zonelinked')}>У зоні<span>Показується в обраній зоні</span></button>
+        <button type="button" aria-pressed={scheduled} onClick={() => chooseType('sched')}>На дату й час<span>План і сигнал за розкладом</span></button>
       </div>
-      <div className="ef">
-        <label className="el" htmlFor="task-type">Тип задачі</label>
-        <select id="task-type" className="ei" value={type} onChange={e => chooseType(e.target.value as TaskType)} aria-describedby="task-type-hint">
-          {TYPE_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}
-        </select>
-        <p className="editor-hint">Усі {TYPE_OPTIONS.length} типів доступні тут.</p>
-        <p id="task-type-hint" className="editor-hint">{TYPE_HINTS[type]}</p>
-      </div>
+      <details className="editor-section editor-type-section" open={special || undefined}>
+        <summary>Тип і додаткові налаштування{special ? ' · ' + TYPE_OPTIONS.find(o => o.value === type)?.label : ''}</summary>
+        <div className="ef">
+          <label className="el" htmlFor="task-type">Тип задачі</label>
+          <select id="task-type" className="ei" value={type} onChange={e => chooseType(e.target.value as TaskType)} aria-describedby="task-type-hint">
+            {TYPE_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}
+          </select>
+          <p className="editor-hint">Усі {TYPE_OPTIONS.length} типів залишаються доступними. Поточний вибір: {TYPE_OPTIONS.find(o => o.value === type)?.label}.</p>
+          <p id="task-type-hint" className="editor-hint">{TYPE_HINTS[type]}</p>
+        </div>
+      </details>
       {isNew && type === 'check' && <label className="el" htmlFor="task-checklist">Кроки — кожен із нового рядка<textarea id="task-checklist" className="ei" rows={4} value={checklistDraft} onChange={e => setChecklistDraft(e.target.value)} placeholder={'Зібрати речі\nПеревірити документи\nВийти з дому'} /></label>}
       <details id="task-note-section" className="editor-section" open={type === 'note' || !!note || undefined}>
         <summary>Нотатка (необов’язково)</summary>
@@ -153,7 +219,7 @@ export default function TaskEditor() {
             <option value="0">Без додаткового нагадування</option><option value="5">За 5 хвилин</option><option value="15">За 15 хвилин</option><option value="60">За годину</option><option value="1440">За добу</option>
           </select></label>}
         </div>}
-        <div className="ef"><label className="el" htmlFor="task-zone">У якій зоні?</label><select id="task-zone" className="ei" value={zoneId} onChange={e => setZoneId(e.target.value)}><option value="">Будь-яка зона</option>{zoneId && !zones.some(z => String(z.id) === zoneId) && <option value={zoneId}>Зону видалено — вибери іншу</option>}{zones.map(z => <option value={z.id} key={z.id}>{z.nm}</option>)}</select><p className="editor-hint">Наприклад, «Підмести підлогу» у Вечорі. В інший час задача є в Плані та всіх задачах.</p></div>
+        <div className="ef"><label className="el" htmlFor="task-zone">У якій зоні?</label><select id="task-zone" className="ei" value={zoneId} onChange={e => setZoneId(e.target.value)}><option value="">Будь-яка зона</option>{zoneId && !zones.some(z => String(z.id) === zoneId) && <option value={zoneId}>Зону видалено — вибери іншу</option>}{zones.map(z => <option value={z.id} key={z.id}>{z.nm}</option>)}</select><p className="editor-hint">Для типу «У зоні» або повторення «Кожна зона» потрібно вибрати наявну зону.</p></div>
       </section>
       <details className="editor-section" open={special || counterEnabled || undefined}>
         <summary>Додаткові можливості{special ? ' · ' + TYPE_OPTIONS.find(o => o.value === type)?.label : ''}</summary>
@@ -163,7 +229,7 @@ export default function TaskEditor() {
         {type !== 'negative' && <label className="editor-check"><input id="task-counter-enabled" type="checkbox" checked={type === 'counter' || counterEnabled} disabled={type === 'counter'} onChange={e => setCounterEnabled(e.target.checked)} /> Лічильник прогресу</label>}
         {type !== 'negative' && (type === 'counter' || counterEnabled) && <>
           <div className="editor-row"><label className="el" htmlFor="task-counter-step">Крок + / −<input id="task-counter-step" type="number" className="ei" min="1" value={counterStep} onChange={e => setCounterStep(Number(e.target.value))} /></label>
-            <label className="el" htmlFor="task-counter-unit">Одиниця<select id="task-counter-unit" aria-label="Одиниця лічильника" className="ei" value={counterUnit} onChange={e => setCounterUnit(e.target.value as Task['counterUnit'])}>{Object.entries(COUNTER_UNITS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+            <label className="el" htmlFor="task-counter-unit">Одиниця<select id="task-counter-unit" aria-label="Одиниця лічильника" className="ei" value={counterUnit} onChange={e => setCounterUnit(e.target.value as NonNullable<Task['counterUnit']>)}>{Object.entries(COUNTER_UNITS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
           <label className="el" htmlFor="task-counter-target">Ціль лічильника (0 — без цілі)<input id="task-counter-target" type="number" className="ei" min="0" value={cntTgt} onChange={e => setCntTgt(Number(e.target.value))} /></label>
           <p className="editor-hint">Наприклад, «Вода»: крок 250 мл; «Розтяжка»: 5 хв. Для щоденного обнулення вибери повторення «Щодня». Кількість таких задач не обмежена. Ціль обираєш сам; її досягнення не завершує задачу автоматично.</p>
         </>}
@@ -173,12 +239,12 @@ export default function TaskEditor() {
         {!isNew && <div className="ef"><span className="el">Зберегти зміни й перенести</span><div className="editor-actions">{[15, 60, 180].map(min => <button key={min} type="button" onClick={() => submit(min)}>+{min < 60 ? min + ' хв' : min / 60 + ' год'}</button>)}<button type="button" onClick={() => submit('tomorrow')}>На завтра</button></div></div>}
       </details>
       <div className="schedule-preview" aria-live="polite">
-        {date ? <>У плані: <strong>{dateLabel}{scheduled && time ? ', ' + time : ''}</strong>. </> : <>Без дати — доступна, коли підходять зона й умови задачі. </>}
-        {zoneId && <>У «Зараз» лише в зоні <strong>{zones.find(z => String(z.id) === zoneId)?.nm || 'яку видалено'}</strong>. </>}
-        {scheduled && date && <>У «Зараз» — після заданого часу. До нього — в Плані та всіх задачах. </>}
-        {type === 'simple' && <>Без сповіщення. Для сигналу на точний час вибери «Запланована». </>}
-        {(scheduled || type === 'alarm') && (reminder ? <>Нагадаю {scheduled ? time || 'після вибору часу' : alarmTime || 'після вибору часу'}{advance !== '0' && scheduled ? ' і за ' + advance + ' хв' : ''}. {zoneId && <>Сигнал іде за заданим часом; зона визначає показ у «Зараз». </>}</> : <>Без сповіщення. </>)}
-        {repeat !== 'none' && <>{REPEATS.find(r => r.value === repeat)?.label}.</>}
+        {scheduled ? <>{date ? <>Задача з’явиться в Плані на <strong>{dateLabel}</strong> і стане доступною після <strong>{time || 'вибору часу'}</strong> ({localTimeZone}). </> : <>Задача з’явиться в Плані після вибору дати й часу ({localTimeZone}). </>}</> : date ? <>Задача з’явиться в Плані на <strong>{dateLabel}</strong>. </> : <>Без дати: задача доступна у списку, коли виконуються вибрані умови. </>}
+        {zoneId && <>У «Зараз» вона доступна в зоні <strong>{zones.find(z => String(z.id) === zoneId)?.nm || 'яку видалено'}</strong>. </>}
+        {type === 'zonelinked' && !zoneId && <>Вибери наявну зону, щоб задача з’являлася саме там. </>}
+        {scheduled && reminder ? <>Сигнал: <strong>{time || 'після вибору часу'} ({localTimeZone})</strong>{advance !== '0' ? ` і за ${advance} хв` : ''}. </> : type === 'alarm' && reminder ? <>Будильник спрацює о <strong>{alarmTime || 'після вибору часу'}</strong> за {localTimeZone}. </> : (scheduled || type === 'alarm') ? <>Сигнал вимкнено. </> : <>Сигналу за точним часом немає. </>}
+        {type === 'timewin' && <>Часове вікно доступності: <strong>{winStart}–{winEnd}</strong>. </>}
+        {repeat !== 'none' && <>Повторення: <strong>{REPEATS.find(r => r.value === repeat)?.label}</strong>. </>}
       </div>
       {error && <div className="editor-error" role="alert"><p>{error}</p>{saveIsBlocked() && <button type="button" onClick={showRecoveryBanner}>Відкрити відновлення</button>}</div>}
       <button id="edit-save-fab" type="submit">{isNew ? 'Створити задачу' : 'Зберегти зміни'}</button>

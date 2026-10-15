@@ -13,7 +13,7 @@ async function openInbox(page: Page) {
 async function scheduled(page: Page, title: string, day: string, time: string) {
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?').fill(title);
-  await page.getByRole('button', { name: 'Запланована На точну дату й час' }).click();
+  await page.getByRole('button', { name: 'На дату й час План і сигнал за розкладом' }).click();
   await page.getByLabel('Дата *', { exact: true }).fill(day);
   await page.getByLabel('Час *', { exact: true }).fill(time);
 }
@@ -44,7 +44,7 @@ test('calendar creation keeps selected day and past time requires an explicit ch
   await page.getByRole('button', { name: '+ Задача', exact: true }).click();
   await expect(page.getByLabel('Дата', { exact: true })).toHaveValue('2026-10-08');
   await page.getByLabel('Що зробити?').fill('Ранкова справа');
-  await page.getByRole('button', { name: 'Запланована На точну дату й час' }).click();
+  await page.getByRole('button', { name: 'На дату й час План і сигнал за розкладом' }).click();
   await page.getByLabel('Час *', { exact: true }).fill('09:00');
   await page.locator('#edit-save-fab').click();
   await expect(page.getByRole('alert')).toContainText('Цей час уже минув');
@@ -107,7 +107,7 @@ test('inbox capture is available immediately and settings persist independently 
   await expect(page.locator('html')).toHaveAttribute('data-reduce-motion', 'true');
   await expect(page.locator('#xp-badge')).toHaveCount(0);
   await page.locator('#add-fab').click();
-  await page.getByRole('button', { name: 'Запланована На точну дату й час' }).click();
+  await page.getByRole('button', { name: 'На дату й час План і сигнал за розкладом' }).click();
   await page.screenshot({ path: info.outputPath('editor-light.png'), fullPage: true, animations: 'disabled' });
 });
 
@@ -147,7 +147,7 @@ test('Inbox retains its capture while it is available immediately; date edits an
   await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
   await openInbox(page);
   await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
-  await expect(page.locator('.schedule-preview')).toContainText('Без дати — доступна, коли підходять зона й умови задачі.');
+  await expect(page.locator('.schedule-preview')).toContainText('Без дати: задача доступна у списку, коли виконуються вибрані умови.');
   await page.getByRole('button', { name: 'Завтра', exact: true }).click();
   await page.locator('#edit-save-fab').click();
   await expect(page.locator('#inbox-sec .tc')).toHaveCount(0);
@@ -194,10 +194,10 @@ test('scheduled and simple tasks reject dates outside repeat days, repeat edits 
   await page.getByLabel('Повторення', { exact: true }).selectOption('weekdays');
   await page.locator('#edit-save-fab').click();
   await expect(page.getByRole('alert')).toContainText('Вибрана дата не входить у дні повторення');
-  await page.getByRole('button', { name: 'Проста Без обов’язкового часу' }).click();
+  await page.getByRole('button', { name: 'Без точного часу У списку задач, коли підходять умови' }).click();
   await page.locator('#edit-save-fab').click();
   await expect(page.getByRole('alert')).toContainText('Вибрана дата не входить у дні повторення');
-  await page.getByRole('button', { name: 'Запланована На точну дату й час' }).click();
+  await page.getByRole('button', { name: 'На дату й час План і сигнал за розкладом' }).click();
   await page.getByLabel('Дата *', { exact: true }).fill('2026-10-08');
   await page.locator('#edit-save-fab').click();
   await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();

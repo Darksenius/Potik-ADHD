@@ -1,4 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+async function selectTaskType(page: Page, type: string) {
+  const select = page.locator('#task-type');
+  if (!(await select.isVisible())) await page.locator('.editor-type-section summary').click();
+  await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
+}
 
 test('create a zoned checklist with steps and note, count a quest, then reload the real editor data', async ({ page }, info) => {
   await page.clock.install({ time: new Date('2026-10-14T18:30:00+03:00') });
@@ -9,7 +15,7 @@ test('create a zoned checklist with steps and note, count a quest, then reload t
   await page.locator('#task-note-section summary').click();
   await page.getByLabel('Нотатка до задачі', { exact: true }).fill('Почати з одного кута.');
   await page.getByText('Додаткові можливості', { exact: true }).click();
-  await page.getByLabel('Тип задачі', { exact: true }).selectOption('check');
+  await selectTaskType(page, 'check');
   await page.locator('#task-checklist').fill('Підмести\nВинести сміття');
   await page.locator('#edit-save-fab').click();
   await expect(page.getByRole('checkbox', { name: 'Підмести', exact: true })).toBeVisible();
@@ -17,7 +23,7 @@ test('create a zoned checklist with steps and note, count a quest, then reload t
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?', { exact: true }).fill('П’ять хвилин руху');
   await page.getByText('Додаткові можливості', { exact: true }).click();
-  await page.getByLabel('Тип задачі', { exact: true }).selectOption('counter');
+  await selectTaskType(page, 'counter');
   await page.getByLabel('Ціль лічильника (0 — без цілі)', { exact: true }).fill('2');
   await page.locator('#edit-save-fab').click();
   await page.getByRole('button', { name: 'Розгорнути: П’ять хвилин руху', exact: true }).click();

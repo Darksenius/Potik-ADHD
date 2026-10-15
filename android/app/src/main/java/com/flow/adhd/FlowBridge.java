@@ -284,6 +284,16 @@ public class FlowBridge {
         callStorage(() -> { dao.insertEvent(new PendingEvent(event)); return null; });
     }
 
+    /** Queues an event with the action timestamp carried by its payload. */
+    public void pushEventAt(String event, long createdAt) {
+        callStorage(() -> {
+            PendingEvent queued = new PendingEvent(event);
+            queued.createdAt = createdAt;
+            dao.insertEvent(queued);
+            return null;
+        });
+    }
+
     /**
      * Durably queues a quick task with a stable numeric ID that JS can later
      * materialize exactly once. The notification snapshot is never edited here.

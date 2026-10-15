@@ -8,6 +8,7 @@ import { taskPlanDate } from '../../utils/taskSchedule';
 import { questDeferralLabel } from '../../utils/questPolicy';
 import { fmtDate } from '../../utils/date';
 import { COUNTER_UNITS, hasTaskCounter, taskCounterTarget } from '../../utils/taskCounter';
+import type { TaskAvailabilityExplanation } from '../../utils/taskAvailabilityLabel';
 
 const TXP: Record<string, number> = {
   simple: 10, check: 10, counter: 2, note: 5, alarm: 10, sched: 10,
@@ -24,7 +25,7 @@ function repeatLabel(t: Task): string {
 }
 
 export default function TaskItem({
-  t, isPriority, visibleIds, allowMove = true, questCard = false, canDefer = false, allView = false, availabilityMessage, quickCounter = false,
+  t, isPriority, visibleIds, allowMove = true, questCard = false, canDefer = false, allView = false, availabilityMessage, availabilityExplanation, quickCounter = false,
 }: {
   t: Task;
   isPriority: boolean;
@@ -34,6 +35,7 @@ export default function TaskItem({
   canDefer?: boolean;
   allView?: boolean;
   availabilityMessage?: string;
+  availabilityExplanation?: TaskAvailabilityExplanation;
   quickCounter?: boolean;
 }) {
   const toggleTask = useStore((s) => s.toggleTask);
@@ -119,6 +121,12 @@ export default function TaskItem({
           </>}
         </div>
       </div>
+      {availabilityExplanation && <div className="task-availability-note" role="status" style={{ padding: '8px 10px', margin: '6px 0 0 28px', borderRadius: 8, background: 'var(--s1)', color: 'var(--t2)', fontSize: 12, lineHeight: 1.45 }}>
+        <span>{availabilityExplanation.message}</span>
+        {!!availabilityExplanation.actions?.length && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
+          {availabilityExplanation.actions.map(action => <button type="button" className="secondary-action" key={action.tab} onClick={() => useStore.getState().switchTab(action.tab)}>{action.label}</button>)}
+        </div>}
+      </div>}
       {quickCounter && hasTaskCounter(t) && !t.expanded && <div className="daily-counter-controls"><TaskCounterControls t={t} /></div>}
       {hasBody && (
         <div className={'tb-body' + (t.expanded ? ' open' : '')}>

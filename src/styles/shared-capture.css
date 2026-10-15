@@ -1,0 +1,16 @@
+.shared-capture-backdrop{position:fixed;inset:0;top:0;right:0;bottom:0;left:0;z-index:310;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:14px;box-sizing:border-box}
+.shared-capture-dialog{box-sizing:border-box;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;border:1px solid var(--b2);border-radius:15px;padding:16px;background:var(--s1);color:var(--t1)}
+.shared-capture-dialog header{display:flex;align-items:center;justify-content:space-between}
+.shared-capture-dialog h2{font-size:20px;margin:0 8px 0 0}
+.shared-capture-dialog p{font-size:13px;line-height:1.6;color:var(--t2);margin:12px 0}
+.shared-capture-dialog label{display:block;font-size:13px;margin:12px 0;color:var(--t2)}
+.shared-capture-dialog textarea,.shared-capture-dialog select{box-sizing:border-box;width:100%;min-height:46px;margin-top:7px;background:var(--s2);color:var(--t1);border:1px solid var(--b2);border-radius:9px;padding:10px;font:inherit;font-size:16px}
+.shared-capture-dialog button{min-height:44px;min-width:44px;padding:10px;border:1px solid var(--b2);border-radius:9px;background:var(--s2);color:var(--t1);font:inherit;font-size:13px}
+.shared-capture-dialog footer{display:flex;flex-wrap:wrap;margin:0 -4px}
+.shared-capture-dialog footer button{flex:1 1 150px;margin:4px}
+.shared-capture-dialog footer button:last-child{background:var(--z);color:#10151d}
+.shared-capture-dialog button:disabled{opacity:.5}
+.shared-capture-dialog [role=alert]{color:var(--neg)}
+.task-undo-notice{position:fixed;left:12px;right:12px;bottom:80px;z-index:410;max-width:490px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;padding:8px 10px;background:var(--s3);color:var(--t1);border:1px solid var(--b2);border-radius:12px;box-shadow:0 5px 20px rgba(0,0,0,.35);font-size:13px;line-height:1.5}
+.task-undo-notice span{min-width:0;overflow-wrap:break-word;margin-right:10px}
+.task-undo-notice button{flex-shrink:0;min-height:44px;padding:8px 12px;background:var(--s1);color:var(--z);border:1px solid var(--b2);border-radius:9px;font:inherit;font-weight:700}

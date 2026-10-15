@@ -40,6 +40,11 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     public static final String ACTION_SNOOZE      = "com.flow.adhd.SNOOZE_FIRE";
     // Точний будильник РІВНО на час найближчої задачі (а не 15-хв полінг)
     public static final String ACTION_TASK_DUE    = "com.flow.adhd.TASK_DUE";
+    public static final String ACTION_DIAGNOSTIC_REMINDER = "com.flow.adhd.DIAGNOSTIC_REMINDER";
+    private static final String ALARM_PREFS = "flow_alarm_schedule";
+    private static final String PREF_NEXT_TASK_DUE = "next_task_due_ms";
+    private static final String PREF_NEXT_TASK_DUE_EXACT = "next_task_due_exact";
+    public static final int DIAGNOSTIC_NOTIFICATION_ID = 9012;
     static final String EXTRA_SNOOZE_DUE_MS = "snooze_due_ms";
     public static final String CHANNEL_REMIND      = "flow_remind";
     public static final int REMIND_NOTIFICATION_ID = 5000;
@@ -94,7 +99,11 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             String id = intent.getStringExtra("snooze_id");
             String title = intent.getStringExtra("snooze_title");
             long due = intent.getLongExtra(EXTRA_SNOOZE_DUE_MS, 0L);
+            if (id != null) context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE).edit()
+                    .remove(snoozePrefKey(id)).apply();
             deliverSnoozeAt(context, bridge, id, title, due);
+        } else if (ACTION_DIAGNOSTIC_REMINDER.equals(action)) {
+            postDiagnosticReminder(context);
         }
     }
 
@@ -372,7 +381,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         catch (SecurityException denied) { return false; }
     }
 
-    private void createRemindChannel(Context context) {
+    private static void createRemindChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null || nm.getNotificationChannel(CHANNEL_REMIND) != null) return;
@@ -386,9 +395,9 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
 
     // ════════════════ ПЛАНУВАННЯ ════════════════
 
-    public static void schedule(Context ctx, String action, long triggerAtMs, int reqCode) {
+    public static boolean schedule(Context ctx, String action, long triggerAtMs, int reqCode) {
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-        if (am == null) return;
+        if (am == null) return false;
         Intent i = new Intent(ctx, FlowAlarmReceiver.class);
         i.setAction(action);
         int fImm = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
@@ -401,11 +410,13 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             } else {
                 am.setExact(AlarmManager.RTC_WAKEUP, triggerAtMs, pi);
             }
+            return true;
         } catch (SecurityException se) {
             // На API 31+ без дозволу SCHEDULE_EXACT_ALARM — fallback на неточний
-            try { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, pi); }
-            catch (Exception ignored) {}
+            try { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, pi); return true; }
+            catch (Exception ignored) { return false; }
         } catch (Exception ignored) {}
+        return false;
     }
 
     public static void scheduleDailyReset(Context ctx) {
@@ -445,8 +456,14 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                         ? nextOccurrenceAfter(s, now, TimeZone.getDefault()) : s.optLong("dueMs", 0);
                 if ((isCalendarRepeat(s) || !s.optBoolean("fired", false)) && due > now && due < next) next = due;
             }
-            if (next != Long.MAX_VALUE) schedule(ctx, ACTION_TASK_DUE, next, 3);
-            else cancelNextDue(ctx);
+            if (next != Long.MAX_VALUE && schedule(ctx, ACTION_TASK_DUE, next, 3)) {
+                boolean exact = Build.VERSION.SDK_INT < 31;
+                AlarmManager manager = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+                if (Build.VERSION.SDK_INT >= 31 && manager != null) exact = manager.canScheduleExactAlarms();
+                ctx.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE).edit()
+                        .putLong(PREF_NEXT_TASK_DUE, next)
+                        .putBoolean(PREF_NEXT_TASK_DUE_EXACT, exact).apply();
+            } else cancelNextDue(ctx);
         } catch (Exception ignored) { cancelNextDue(ctx); }
     }
 
@@ -585,6 +602,67 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             if (manager != null) manager.cancel(existing);
             existing.cancel();
         }
+        context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE).edit()
+                .remove(PREF_NEXT_TASK_DUE).remove(PREF_NEXT_TASK_DUE_EXACT).apply();
+    }
+
+    /** Actual task alarm time tracked when this receiver successfully schedules it. */
+    public static Long nextScheduledReminderAt(Context context) {
+        long now = System.currentTimeMillis();
+        long next = Long.MAX_VALUE;
+        long due = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE)
+                .getLong(PREF_NEXT_TASK_DUE, 0L);
+        android.content.SharedPreferences preferences = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE);
+        if (Build.VERSION.SDK_INT >= 31 && preferences.getBoolean(PREF_NEXT_TASK_DUE_EXACT, false)) {
+            AlarmManager alarms = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            if (alarms == null || !alarms.canScheduleExactAlarms()) return null;
+        }
+        int flags = (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0) | PendingIntent.FLAG_NO_CREATE;
+        if (due > now) {
+            Intent intent = new Intent(context, FlowAlarmReceiver.class);
+            intent.setAction(ACTION_TASK_DUE);
+            PendingIntent pending = PendingIntent.getBroadcast(context, 3, intent, flags);
+            if (pending != null) next = due;
+        }
+        for (java.util.Map.Entry<String, ?> entry : preferences.getAll().entrySet()) {
+            String key = entry.getKey();
+            if (!key.startsWith("snooze_due:")) continue;
+            String id = key.substring("snooze_due:".length());
+            if (!(entry.getValue() instanceof Long)) continue;
+            long snoozeAt = (Long) entry.getValue();
+            if (snoozeAt <= now) continue;
+            PendingIntent pending = PendingIntent.getBroadcast(context, snoozeRequestCode(id),
+                    createSnoozeIntent(context, id, "", snoozeAt), flags);
+            if (pending != null) next = Math.min(next, snoozeAt);
+        }
+        return next == Long.MAX_VALUE ? null : next;
+    }
+
+    private static String snoozePrefKey(String id) { return "snooze_due:" + id; }
+
+    private static int snoozeRequestCode(String id) {
+        return 7000 + (id != null ? (id.hashCode() & 0xfff) : 0);
+    }
+
+    /** Schedules a user-requested, visible reminder check without touching task alarms. */
+    public static long scheduleDiagnosticReminder(Context context) {
+        long at = System.currentTimeMillis() + 60_000L;
+        return schedule(context, ACTION_DIAGNOSTIC_REMINDER, at, DIAGNOSTIC_NOTIFICATION_ID) ? at : 0L;
+    }
+
+    private static void postDiagnosticReminder(Context context) {
+        createRemindChannel(context);
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null || !NotificationManagerCompat.from(context).areNotificationsEnabled()) return;
+        NotificationCompat.Builder notification = new NotificationCompat.Builder(context, CHANNEL_REMIND)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Перевірка нагадувань")
+                .setContentText("Тестове нагадування Потоку спрацювало")
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setAutoCancel(true)
+                .setContentIntent(FlowNotifService.openTaskPendingIntent(context, ""));
+        try { manager.notify(DIAGNOSTIC_NOTIFICATION_ID, notification.build()); }
+        catch (SecurityException ignored) { /* Permission may change after scheduling. */ }
     }
 
     /** Cancel the old hourly water alarm and notification left by earlier versions. */
@@ -632,13 +710,19 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         long at = roundUpToMinute(System.currentTimeMillis() + Math.max(0L, delayMs));
         Intent i = createSnoozeIntent(ctx, id, title, at);
         int fImm = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
-        int rc = 7000 + (id != null ? (id.hashCode() & 0xfff) : 0);
+        int rc = snoozeRequestCode(id);
         PendingIntent pi = PendingIntent.getBroadcast(ctx, rc, i, fImm | PendingIntent.FLAG_UPDATE_CURRENT);
         try {
             if (Build.VERSION.SDK_INT >= 23) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
             else am.setExact(AlarmManager.RTC_WAKEUP, at, pi);
+            ctx.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE).edit()
+                    .putLong(snoozePrefKey(id), at).apply();
         } catch (SecurityException se) {
-            try { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi); } catch (Exception ignored) {}
+            try {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+                ctx.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE).edit()
+                        .putLong(snoozePrefKey(id), at).apply();
+            } catch (Exception ignored) {}
         } catch (Exception ignored) {}
     }
 }

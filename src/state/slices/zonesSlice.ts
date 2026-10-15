@@ -251,6 +251,7 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
     Object.values(state.planDayOff || {}).forEach(ids => ids.forEach(retainId));
     state.dayTemplates.forEach(template => {
       (template.blocks || []).forEach(block => retainId(block?.zoneId));
+      (template.tasks || []).forEach(entry => retainId(entry?.task?.zoneId));
     });
     retainId(state.lastZoneId);
 

@@ -5,6 +5,7 @@ import { saveState, saveIsBlocked } from '../services/persistence';
 import { fmtDate } from '../utils/date';
 import { nextTaskReminderAt, taskPreReminderAt } from '../utils/taskSchedule';
 import { buildQuestTimeline, isValidQuestDeferral } from '../utils/questPolicy';
+import { applyNativeTaskUndo, clearTaskUndo } from '../services/taskUndo';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -53,6 +54,22 @@ export interface FlowNotifPlugin {
   notificationPermission?: () => Promise<{ state: string }>;
   requestNotificationPermission?: () => Promise<{ state: string }>;
   openNotificationSettings?: () => Promise<void>;
+  notificationDiagnostics?: () => Promise<NotificationDiagnostics>;
+  openExactAlarmSettings?: () => Promise<void>;
+  openBatterySettings?: () => Promise<void>;
+  scheduleDiagnosticReminder?: () => Promise<{ scheduled: boolean; firesAt: number | null }>;
+}
+
+export interface NotificationDiagnostics {
+  notificationsEnabled: boolean;
+  exactAlarmsAllowed: boolean;
+  batteryOptimizationExempt: boolean;
+  nextReminderAt: number | null;
+  lastSaveError: string;
+  androidVersion: number;
+  reminderChannelEnabled?: boolean | null;
+  panelChannelEnabled?: boolean | null;
+  quickActionsChannelEnabled?: boolean | null;
 }
 
 declare global {
@@ -188,7 +205,9 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
 
   // Only explicit task IDs may complete tasks. The obsolete done_first event
   // cannot safely identify which row the user saw and is deliberately ignored.
-  if (event.indexOf('task_done:') === 0) {
+  if (event.indexOf('task_undo:') === 0) {
+    changed = applyNativeTaskUndo(event.slice('task_undo:'.length));
+  } else if (event.indexOf('task_done:') === 0) {
     const tid = event.slice(10);
     const pt = store.tasks.find((t) => String(t.id) === tid);
     if (pt && belongsToTask(pt) && !pt.done && !pt.trashed && pt.type !== 'negative') {
@@ -285,6 +304,15 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
     if (!title) return false;
     store.addQuickTaskFromShade(title);
     changed = true;
+  } else if (event.indexOf('share_text:') === 0) {
+    const txt = event.slice('share_text:'.length).trim().slice(0, 12000);
+    if (!txt) return false;
+    const folder = store.folders.some(f => f.id === 'thought') ? 'thought' : store.folders[0]?.id || '';
+    const note = store.addQuickNote(txt, folder);
+    store.enqueueSharedNote(note.id);
+    store.showPage('main');
+    store.switchTab('notes');
+    changed = true;
   } else if (event.indexOf('capture_note:') === 0) {
     const txt = event.slice('capture_note:'.length).trim();
     if (!txt) return false;
@@ -339,11 +367,13 @@ export function drainNativeEvents(onChanged: () => void): void {
         useStore.getState().resetRepeatingTasksFor(new Date());
         useStore.getState().checkZoneRepeats(new Date());
         if (!saveState(events.map(e => e.id))) {
+          clearTaskUndo();
           useStore.setState(before);
           useStore.getState().showToast('Дію зі сповіщення ще не збережено. Вона лишилася в черзі для повторної спроби.');
           return;
         }
       } catch {
+        clearTaskUndo();
         useStore.setState(before);
         useStore.getState().showToast('Не вдалося застосувати дію зі сповіщення. Команду збережено в черзі.');
         return;
@@ -425,6 +455,27 @@ export async function requestNativeNotificationPermission(): Promise<string> {
 }
 export async function openNativeNotificationSettings(): Promise<void> {
   try { await flowNotif()?.openNotificationSettings?.(); } catch { useStore.getState().showToast('Відкрий дозволи Потоку в налаштуваннях Android.'); }
+}
+
+export async function getNotificationDiagnostics(): Promise<NotificationDiagnostics | null> {
+  const plugin = flowNotif();
+  if (!plugin?.notificationDiagnostics) return null;
+  return plugin.notificationDiagnostics();
+}
+export async function openExactAlarmSettings(): Promise<void> {
+  const plugin = flowNotif();
+  if (!plugin?.openExactAlarmSettings) throw new Error('Налаштування доступне лише в Android-застосунку.');
+  await plugin.openExactAlarmSettings();
+}
+export async function openBatterySettings(): Promise<void> {
+  const plugin = flowNotif();
+  if (!plugin?.openBatterySettings) throw new Error('Налаштування доступне лише в Android-застосунку.');
+  await plugin.openBatterySettings();
+}
+export async function scheduleDiagnosticReminder(): Promise<{ scheduled: boolean; firesAt: number | null }> {
+  const plugin = flowNotif();
+  if (!plugin?.scheduleDiagnosticReminder) throw new Error('Пробний сигнал доступний в Android-застосунку.');
+  return plugin.scheduleDiagnosticReminder();
 }
 
 /**

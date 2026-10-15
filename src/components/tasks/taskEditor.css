@@ -1,0 +1,6 @@
+.editor-kinds{grid-template-columns:repeat(3,minmax(0,1fr))}
+.editor-kinds button{min-width:0}
+.editor-draft-status{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;margin:8px 0 14px;border:1px solid var(--b2);border-radius:10px;background:var(--s1);color:var(--t2);font-size:12px}
+.editor-draft-status button,.editor-warning button{flex:0 0 auto;border:0;background:transparent;color:var(--z);font:inherit;font-weight:700;text-decoration:underline}
+.editor-type-section{margin:4px 0 12px}
+@media(max-width:520px){.editor-kinds{grid-template-columns:1fr}.editor-kinds button{text-align:left}.editor-draft-status{align-items:flex-start;flex-direction:column}}

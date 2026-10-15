@@ -6,6 +6,7 @@ import { historyEvent, nextHistorySequence, seedKnownCompletions, taskOccurrence
 import { fmtDate, nowHM, normalizeTime, hmToString } from '../../utils/date';
 import { hasTaskCounter, resetTaskProgress, taskCounterStep, taskCounterTarget } from '../../utils/taskCounter';
 import { buildQuestTimeline, createQuestDeferral, isValidQuestDeferral } from '../../utils/questPolicy';
+import { captureTaskUndo, offerTaskUndo } from '../../services/taskUndo';
 
 /** TXP — рядок 1239: базова нагорода XP за тип задачі при виконанні. */
 const TASK_XP = Object.keys(taskTypeCatalog).reduce((xp, type) => {
@@ -21,6 +22,8 @@ export interface TasksSlice {
   taskHistory: TaskHistoryEvent[];
   /** Наступний вільний id (було S.nid) */
   nid: number;
+  taskEditorDraft: string;
+  setTaskEditorDraft: (draft: string) => void;
 
   createTask: (title: string, type: TaskType, zoneId?: number | null, alarmTime?: string) => Task;
   toggleTask: (id: number) => void;
@@ -64,6 +67,8 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   tasks: [],
   taskHistory: [],
   nid: 300,
+  taskEditorDraft: '',
+  setTaskEditorDraft: (draft) => set({ taskEditorDraft: draft }),
 
   createTask: (title, type, zoneId, alarmTime) => {
     const nid = get().nid;
@@ -92,6 +97,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   setTaskDone: (id, done, completedAt) => {
     const t = get().tasks.find((x) => x.id === id);
     if (!t || t.trashed || t.type === 'negative' || t.done === done) return;
+    const undoBefore = done ? captureTaskUndo(id) : undefined;
     const shouldCredit = done && !t.completionCredited;
     const now = new Date(Number.isFinite(completedAt) ? completedAt! : Date.now());
     const completionCredited = done ? true : (t.completionCredited ?? t.done);
@@ -138,6 +144,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       get().incrementDoneCount();
       get().award(TASK_XP[t.type] ?? 10);
     }
+    if (done) offerTaskUndo(undoBefore, 'done', now.getTime());
   },
 
   /** A durable tap from yesterday records that occurrence, never today's progress. */
@@ -523,6 +530,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   deferTask: (id, kind, requestedAt, explicitDeferral) => {
     const task = get().tasks.find(candidate => candidate.id === id);
     if (!task || task.trashed || task.done || task.someday) return;
+    const undoBefore = captureTaskUndo(id);
     const baseAt = Number.isFinite(requestedAt) ? requestedAt! :
       (explicitDeferral && Number.isFinite(explicitDeferral.requestedAt) ? explicitDeferral.requestedAt : Date.now());
     let deferral: QuestDeferral;
@@ -548,6 +556,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       xpPopup: { text: deferral.kind === 'next-zone' ? '⏳ До наступної зони' : '⏳ Не сьогодні', tone: 'muted' },
     }));
     get().showToast(deferral.kind === 'next-zone' ? 'Повернеться у наступній зоні' : 'Повернеться пізніше');
+    offerTaskUndo(undoBefore, 'defer', baseAt);
   },
 
   updateNote: (id, text) => {

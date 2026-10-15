@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../../state/store';
 import OssPage, { useAppVersion } from '../oss/OssPage';
 import ExportImportSection from '../notes/ExportImportSection';
+import NotificationDiagnostics from './NotificationDiagnostics';
 import { requestAndShowNotification } from '../../services/webNotifications';
 import { listRecoveryArchives, saveIsBlocked, showRecoveryBanner } from '../../services/persistence';
 import type { RecoveryArchive } from '../../services/persistence';
@@ -66,6 +67,7 @@ export default function SettingsPage() {
           <button type="button" onClick={() => { void requestNativeNotificationPermission().then(state => { setPermission(state); if (state === 'granted') updateForegroundService(); }); }}>Дозволити сповіщення</button>
           <button type="button" onClick={openNativeNotificationSettings}>Відкрити налаштування Android</button>
         </>}
+        <NotificationDiagnostics />
       </div>
     </details>
 

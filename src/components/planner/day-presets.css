@@ -24,21 +24,23 @@
 }
 
 .day-presets-source,
-.day-presets-save {
+.day-presets-editor {
   display: grid;
   gap: 8px;
   margin-top: 18px;
 }
 
 .day-presets-source label,
-.day-presets-save label {
+.day-presets-editor label {
   color: var(--t2);
   font-size: 13px;
   font-weight: 700;
 }
 
 .day-presets-source input,
-.day-presets-save input {
+.day-presets-editor input,
+.day-presets-editor select,
+.day-presets-editor textarea {
   box-sizing: border-box;
   width: 100%;
   min-height: 44px;
@@ -49,6 +51,57 @@
   color: var(--t1);
   font: inherit;
 }
+
+.day-presets-editor textarea { resize: vertical; }
+
+.day-presets-source-row,
+.day-presets-editor-head,
+.day-presets-section-head,
+.day-presets-task-head,
+.day-presets-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-presets-source-row input { flex: 1; min-width: 160px; }
+
+.day-presets-control,
+.day-presets-edit,
+.day-presets-remove {
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid var(--b2);
+  border-radius: 8px;
+  background: var(--s3);
+  color: var(--t1);
+  font: inherit;
+  cursor: pointer;
+}
+
+.day-presets-control:disabled { opacity: .5; cursor: default; }
+
+.day-presets-editor { margin-top: 20px; padding: 14px; border: 1px solid var(--b2); border-radius: 12px; background: var(--s2); }
+.day-presets-editor-head { justify-content: space-between; }
+.day-presets-editor-head h2,
+.day-presets-section-head h3 { margin: 0; font-size: 15px; }
+.day-presets-editor > label { margin-top: 4px; }
+.day-presets-editor-section { display: grid; gap: 9px; margin-top: 10px; }
+.day-presets-section-head { justify-content: space-between; }
+.day-presets-block-wrap { display: grid; gap: 4px; }
+.day-presets-block-row { display: grid; grid-template-columns: minmax(150px, 1.4fr) minmax(95px, .75fr) minmax(145px, 1fr) auto; gap: 7px; align-items: end; padding: 9px; border: 1px solid var(--b2); border-radius: 9px; background: var(--s3); }
+.day-presets-block-row label,
+.day-presets-task-grid label { display: grid; gap: 4px; }
+.day-presets-block-row label span,
+.day-presets-task-grid label span { font-size: 11px; }
+.day-presets-task { display: grid; gap: 9px; padding: 10px; border: 1px solid var(--b2); border-radius: 9px; background: var(--s3); }
+.day-presets-task-head { justify-content: space-between; }
+.day-presets-task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.day-presets-wide { grid-column: 1 / -1; }
+.day-presets-remove { min-height: 38px; }
+.day-presets-save-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+.day-presets-save-row button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--b2); border-radius: 8px; background: var(--s3); color: var(--t1); font: inherit; cursor: pointer; }
+.day-presets-save-row button:disabled { opacity: .5; cursor: default; }
 
 .day-presets-preview,
 .day-presets-item {
@@ -91,17 +144,6 @@
   white-space: nowrap;
 }
 
-.day-presets-save-row {
-  display: flex;
-  gap: 8px;
-}
-
-.day-presets-save-row input {
-  flex: 1;
-  min-width: 0;
-}
-
-.day-presets-save-row button,
 .day-presets-delete {
   min-height: 44px;
   padding: 8px 12px;
@@ -113,17 +155,14 @@
   cursor: pointer;
 }
 
-.day-presets-save-row button:disabled {
-  opacity: .5;
-  cursor: default;
-}
-
 .day-presets-status {
   min-height: 1em;
   margin: 0;
   color: var(--t2);
   font-size: 12px;
 }
+
+.day-presets-error { margin: 0; color: var(--neg); font-size: 12px; }
 
 .day-presets-list {
   margin-top: 24px;
@@ -142,6 +181,8 @@
 }
 
 .day-presets-item-main { min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+.day-presets-item-main p { margin: 0 0 7px; color: var(--t3); font-size: 12px; }
+.day-presets-item-actions { flex: 0 0 auto; align-items: stretch; flex-direction: column; }
 
 .day-presets-item li {
   color: var(--t3);
@@ -167,8 +208,14 @@
 
 @media (max-width: 560px) {
   .day-presets { padding: 12px; }
-  .day-presets-save-row { flex-direction: column; }
-  .day-presets-save-row button { width: 100%; }
+  .day-presets-source-row { align-items: stretch; flex-direction: column; }
+  .day-presets-source-row input { width: 100%; }
+  .day-presets-block-row { grid-template-columns: 1fr 1fr; }
+  .day-presets-block-row label:first-child { grid-column: 1 / -1; }
+  .day-presets-block-row .day-presets-remove { grid-column: 1 / -1; }
+  .day-presets-task-grid { grid-template-columns: 1fr; }
+  .day-presets-wide { grid-column: auto; }
   .day-presets-item { flex-direction: column; }
   .day-presets-delete { width: 100%; }
+  .day-presets-item-actions { width: 100%; }
 }

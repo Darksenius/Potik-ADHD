@@ -1,0 +1,10 @@
+.notification-diagnostics{margin:14px 0 0;border:1px solid var(--b2);border-radius:10px;background:var(--s2)}
+.notification-diagnostics>summary{padding:12px;min-height:44px;box-sizing:border-box;font-size:14px;font-weight:700;cursor:pointer}
+.notification-diagnostics-body{padding:0 12px 12px}
+.notification-diagnostics dl{margin:0 0 12px;font-size:12px;line-height:1.5}
+.notification-diagnostics dl>div{padding:9px 0;border-bottom:1px solid var(--b1)}
+.notification-diagnostics dt{color:var(--t2)}
+.notification-diagnostics dd{margin:4px 0 0;color:var(--t1);word-break:break-word}
+.diagnostic-actions{display:flex;flex-wrap:wrap}
+.notification-diagnostics .diagnostic-actions>button{flex:1 1 145px;margin:4px;min-height:44px;font-size:12px}
+.notification-diagnostics [role=alert]{color:var(--neg)}

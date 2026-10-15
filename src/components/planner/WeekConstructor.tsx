@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../../state/store';
 import type { WeekTemplate } from '../../types';
-import { WD, fmtDate, fmtHuman, addDaysDs } from '../../utils/date';
+import { WD, fmtDate, fmtHuman, addDaysDs, isDateKey } from '../../utils/date';
 import { WKC_SPANS } from '../../constants';
 import Icon from '../common/Icon';
 
@@ -17,6 +17,7 @@ export default function WeekConstructor({ mode = 'apply' }: { mode?: 'apply' | '
   const [applyId, setApplyId] = useState<string | null>(null);
   const [applyStart, setApplyStart] = useState(fmtDate(new Date()));
   const [applySpan, setApplySpan] = useState(WKC_SPANS[1][0]);
+  const [applyError, setApplyError] = useState('');
 
   const weekTemplates = useStore((s) => s.weekTemplates);
   const dayTemplates = useStore((s) => s.dayTemplates);
@@ -61,7 +62,11 @@ export default function WeekConstructor({ mode = 'apply' }: { mode?: 'apply' | '
     if (!applyId) return;
     const tp = weekTemplates.find((x) => x.id === applyId);
     if (!tp) return;
+    if (!isDateKey(applyStart)) { setApplyError('Вибери коректну дату початку.'); return; }
+    if (!Number.isSafeInteger(applySpan) || applySpan < 1 || applySpan > 3660) { setApplyError('Вкажи період від 1 до 3660 днів.'); return; }
     const endDs = addDaysDs(applyStart, applySpan - 1);
+    if (!isDateKey(endDs)) { setApplyError('Дата завершення виходить за межі календаря.'); return; }
+    setApplyError('');
     let manual = 0;
     for (let i = 0; i < applySpan; i++) {
       const ds = addDaysDs(applyStart, i);
@@ -163,17 +168,18 @@ export default function WeekConstructor({ mode = 'apply' }: { mode?: 'apply' | '
                   <input
                     type="date"
                     value={applyStart}
-                    onChange={(e) => setApplyStart(e.target.value)}
+                    onChange={(e) => { setApplyStart(e.target.value); setApplyError(''); }}
                     style={{ background: 'var(--s3)', border: '1px solid var(--b2)', borderRadius: 6, color: 'var(--t1)', fontSize: 11, padding: '4px 5px' }}
                   />
                   <span style={{ fontSize: 11, color: 'var(--t2)' }}>на</span>
-                  <select className="wkc-sel" style={{ flex: 'none' }} value={applySpan} onChange={(e) => setApplySpan(Number(e.target.value))}>
+                  <select className="wkc-sel" style={{ flex: 'none' }} value={applySpan} onChange={(e) => { setApplySpan(Number(e.target.value)); setApplyError(''); }}>
                     {WKC_SPANS.map(([days, label]) => (
                       <option value={days} key={days}>{label}</option>
                     ))}
                   </select>
                   <button className="wkc-btn go" onClick={handleApply}>Застосувати</button>
                 </div>
+                {applyError && <div role="alert" style={{ color: 'var(--neg)', fontSize: 11, marginTop: 5 }}>{applyError}</div>}
                 {tp.days.length === 7 && (
                   <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 5 }}>
                     Графік на 7 днів — кожен день стане на свій Пн–Нд автоматично.

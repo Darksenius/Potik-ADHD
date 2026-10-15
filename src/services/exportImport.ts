@@ -205,6 +205,7 @@ export function mergeState(raw: unknown): number {
   const zoneMap: Record<number, number> = {};
   const taskMap: Record<number, number> = {};
   const tplMap: Record<string, string> = {};
+  const tid = (old: string | undefined): string | undefined => (old !== undefined && tplMap[old] !== undefined ? tplMap[old] : old);
   const retainedZoneIds = new Set<number>();
   const retainZoneId = (value: unknown) => {
     if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) retainedZoneIds.add(value);
@@ -221,7 +222,10 @@ export function mergeState(raw: unknown): number {
   d.taskHistory.forEach(event => retainZoneId(event.zoneId));
   Object.values(s.planDayZones || {}).forEach(blocks => blocks.forEach(block => retainZoneId(block.zoneId)));
   Object.values(s.planDayOff || {}).forEach(ids => ids.forEach(retainZoneId));
-  s.dayTemplates.forEach(template => template.blocks.forEach(block => retainZoneId(block.zoneId)));
+  s.dayTemplates.forEach(template => {
+    template.blocks.forEach(block => retainZoneId(block.zoneId));
+    (template.tasks || []).forEach(entry => retainZoneId(entry.task.zoneId));
+  });
   retainZoneId(s.lastZoneId);
   d.zones?.forEach(zone => retainZoneId(zone.id));
   d.tasks?.forEach(task => {
@@ -233,7 +237,10 @@ export function mergeState(raw: unknown): number {
   });
   Object.values(d.planDayZones || {}).forEach(blocks => blocks.forEach(block => retainZoneId(block.zoneId)));
   Object.values(d.planDayOff || {}).forEach(ids => ids.forEach(retainZoneId));
-  d.dayTemplates?.forEach(template => template.blocks.forEach(block => retainZoneId(block.zoneId)));
+  d.dayTemplates?.forEach(template => {
+    template.blocks.forEach(block => retainZoneId(block.zoneId));
+    (template.tasks || []).forEach(entry => retainZoneId(entry.task.zoneId));
+  });
   const allocateZoneId = () => {
     let id = 1;
     while (retainedZoneIds.has(id)) id++;
@@ -258,6 +265,33 @@ export function mergeState(raw: unknown): number {
     });
   }
   const zid = (old: number | null | undefined): number | null | undefined => (old != null && zoneMap[old] !== undefined ? zoneMap[old] : old);
+  const templateIds = new Set(s.dayTemplates.map((template) => template.id));
+  const templateIdsByName = new Map<string, string>();
+  s.dayTemplates.forEach((template) => {
+    if (!templateIdsByName.has(template.name)) templateIdsByName.set(template.name, template.id);
+  });
+  const allocateTemplateId = () => {
+    const base = `tpl${Date.now()}${Math.floor(Math.random() * 1e4)}`;
+    let candidate = base;
+    let suffix = 1;
+    while (templateIds.has(candidate)) candidate = `${base}-${suffix++}`;
+    templateIds.add(candidate);
+    return candidate;
+  };
+  (d.dayTemplates || []).forEach((template) => {
+    if (!template?.id || !template.name) return;
+    const existingId = templateIdsByName.get(template.name);
+    const targetId = existingId || allocateTemplateId();
+    if (!existingId) templateIdsByName.set(template.name, targetId);
+    tplMap[template.id] = targetId;
+  });
+  const remapDayPresetKey = (value: string | undefined): string | undefined => {
+    if (!value) return value;
+    const separator = value.indexOf(':');
+    if (separator < 0) return value;
+    const sourceTemplateId = value.slice(0, separator);
+    return `${tid(sourceTemplateId) || sourceTemplateId}${value.slice(separator)}`;
+  };
   const remapDeferral = (value: Task['questDeferral']) => value ? {
     ...value,
     sourceZoneId: zid(value.sourceZoneId) ?? value.sourceZoneId,
@@ -270,6 +304,7 @@ export function mergeState(raw: unknown): number {
   const remapTaskZones = (task: Task): Task => ({
     ...task,
     zoneId: task.zoneId == null ? task.zoneId : (zid(task.zoneId) ?? task.zoneId),
+    dayPresetKey: remapDayPresetKey(task.dayPresetKey),
     questDeferral: remapDeferral(task.questDeferral),
     completionDeferral: remapDeferral(task.completionDeferral),
     zoneOccurrenceKey: remapOccurrenceZones(task.zoneOccurrenceKey),
@@ -371,26 +406,35 @@ export function mergeState(raw: unknown): number {
     });
   }
 
-  const dayTemplates: DayTemplate[] = s.dayTemplates.slice();
+  const dayTemplates: DayTemplate[] = s.dayTemplates.map((template) => JSON.parse(JSON.stringify(template)));
   if (Array.isArray(d.dayTemplates)) {
     d.dayTemplates.forEach((tpl) => {
       if (!tpl || !tpl.name) return;
       const ex = dayTemplates.find((x) => x.name === tpl.name);
       if (ex) {
-        if (tpl.id) tplMap[tpl.id] = ex.id;
+        const knownEntryIds = new Set((ex.tasks || []).map((entry) => entry.id));
+        const additions = (tpl.tasks || []).filter((entry) => entry?.id && entry.task?.title && !knownEntryIds.has(entry.id)).map((entry) => ({
+          ...JSON.parse(JSON.stringify(entry)),
+          task: { ...entry.task, zoneId: entry.task.zoneId == null ? entry.task.zoneId : (zid(entry.task.zoneId) ?? entry.task.zoneId) },
+        }));
+        if (additions.length) {
+          ex.tasks = [...(ex.tasks || []), ...additions];
+          added++;
+        }
         return;
       }
       const nt: DayTemplate = JSON.parse(JSON.stringify(tpl));
-      nt.id = 'tpl' + Date.now() + Math.floor(Math.random() * 1e4);
-      if (tpl.id) tplMap[tpl.id] = nt.id;
+      nt.id = tid(tpl.id) || allocateTemplateId();
       (nt.blocks || []).forEach((b) => {
         b.zoneId = zid(b.zoneId) ?? b.zoneId;
+      });
+      (nt.tasks || []).forEach((entry) => {
+        entry.task.zoneId = entry.task.zoneId == null ? entry.task.zoneId : (zid(entry.task.zoneId) ?? entry.task.zoneId);
       });
       dayTemplates.push(nt);
       added++;
     });
   }
-  const tid = (old: string | undefined): string | undefined => (old !== undefined && tplMap[old] !== undefined ? tplMap[old] : old);
 
   const weekTemplates: WeekTemplate[] = s.weekTemplates.slice();
   if (Array.isArray(d.weekTemplates)) {

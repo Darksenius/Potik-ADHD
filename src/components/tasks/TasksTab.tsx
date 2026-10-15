@@ -4,6 +4,7 @@ import { useClock } from '../../hooks/useClock';
 import { fmtDate } from '../../utils/date';
 import { getQuestTaskAvailability, buildQuestTimeline, selectQuestTasks } from '../../utils/questPolicy';
 import { taskDisplayPlanDate } from '../../utils/taskSchedule';
+import { describeTaskAvailability } from '../../utils/taskAvailabilityLabel';
 import TaskItem from './TaskItem';
 import TrashSection from './TrashSection';
 
@@ -68,7 +69,9 @@ export default function TasksTab({ all = false }: { all?: boolean }) {
     const ar = priorityIds.indexOf(a.id), br = priorityIds.indexOf(b.id);
     return (ar < 0 ? Number.MAX_SAFE_INTEGER : ar) - (br < 0 ? Number.MAX_SAFE_INTEGER : br);
   });
-  const eligibleTasks = (all ? filtered : questCandidates).filter(t => getQuestTaskAvailability(t, questContext).eligible);
+  const availabilityTasks = all ? filtered : questCandidates;
+  const availabilityById = new Map(availabilityTasks.map(task => [task.id, getQuestTaskAvailability(task, questContext)]));
+  const eligibleTasks = availabilityTasks.filter(task => availabilityById.get(task.id)?.eligible);
   const eligibleIds = new Set(eligibleTasks.map(t => t.id));
   const doneCount = filtered.filter(t => t.done && t.doneDate === today).length;
   const currentZoneId = currentQuests[0]
@@ -95,7 +98,8 @@ export default function TasksTab({ all = false }: { all?: boolean }) {
       questCard={!all && !t.done}
       canDefer={!t.done && eligibleIds.has(t.id)}
       allView={all}
-      availabilityMessage={all && getQuestTaskAvailability(t, questContext).reason === 'wrong-zone' ? 'Не доступно в поточній зоні' : undefined}
+      availabilityMessage={all && availabilityById.get(t.id)?.reason === 'wrong-zone' ? 'Не доступно в поточній зоні' : undefined}
+      availabilityExplanation={describeTaskAvailability(t, availabilityById.get(t.id) || getQuestTaskAvailability(t, questContext), questContext)}
       />) : <p className="empty">{all && (search || taskFilter !== 'all') ? 'За цими умовами задач немає' : all ? 'Задач немає' : 'Зараз немає доречних квестів. Невиконані задачі залишаються в «Усі задачі» та Плані.'}</p>}</div>
     {!all && eligibleTasks.length > currentQuests.length && <button className="secondary-action quest-more" onClick={() => useStore.getState().switchTab('alltasks')}>Інші доречні задачі · {eligibleTasks.length - currentQuests.length}</button>}
     <TrashSection />

@@ -89,6 +89,8 @@ export interface QuestTimelineSegment {
  * проста модель підтримуваних типів; сумісність старих даних не вимагається.
  */
 export interface Task {
+  /** Stable per-day template entry identity; reapplying a preset is idempotent. */
+  dayPresetKey?: string;
   id: number;
   /** Links a task materialized from the legacy routine collection. */
   legacyRoutineId?: string;
@@ -312,6 +314,12 @@ export interface DayTemplate {
   id: string;
   name: string;
   blocks: DayTemplateBlock[];
+  tasks?: DayTemplateTask[];
+}
+
+export interface DayTemplateTask {
+  id: string;
+  task: Partial<Task> & Pick<Task, 'title' | 'type'>;
 }
 
 /** Cyclic week template, validated together with its referenced day templates. */
@@ -487,6 +495,7 @@ export interface AppState extends PlannerState {
 
   notepad: string;
   notepadFolder?: string;
+  taskEditorDraft?: string;
   theme: 'light' | 'dark';
   preferences?: Preferences;
 

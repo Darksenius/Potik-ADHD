@@ -11,6 +11,12 @@ async function boot(page: Page, data: object = {}) {
   await expect(page.locator('#add-fab')).toBeVisible();
 }
 
+async function selectTaskType(page: Page, type: string) {
+  const select = page.locator('#task-type');
+  if (!(await select.isVisible())) await page.locator('.editor-type-section summary').click();
+  await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
+}
+
 const task = (id: number, title: string, extra = {}) => ({
   id, title, type: 'simple', done: false, someday: false, repeat: 'none',
   repeatDays: [false, false, false, false, false, false, false], tags: [],
@@ -83,7 +89,7 @@ test('all 10 supported task types can be created in separate editor sessions', a
     await expect(page.locator('#edit-body input').first()).toHaveValue('');
     await page.locator('#edit-body input').first().fill('Тест ' + type);
     await page.getByText('Додаткові можливості', { exact: true }).click();
-    await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
+    await selectTaskType(page, type);
     if (type === 'sched') await page.getByLabel('Час *', { exact: true }).fill('15:30');
     if (type === 'alarm') await page.getByLabel('Час будильника', { exact: true }).fill('16:00');
     if (type === 'zonelinked') await page.getByLabel('У якій зоні?', { exact: true }).selectOption('3');
