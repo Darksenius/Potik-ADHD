@@ -1,4 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+type ReleaseCheck = { title: string; steps: string[]; expected: string };
+type ReleaseNote = { version: string; title: string; message: string; checks: ReleaseCheck[] };
+const releaseNotes = JSON.parse(readFileSync(new URL('../src/content/release-notes.json', import.meta.url), 'utf8')) as ReleaseNote[];
+const packageVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version.replace('-r', '.r');
+const latestRelease = releaseNotes[0];
 
 const seed = {
   saveDate: new Date().toDateString(),
@@ -40,34 +47,39 @@ test('release notes are newest first, the current note is expanded, and the prev
 
   const pageRoot = page.locator('#whats-new-page');
   const notes = pageRoot.locator('details.release-note');
-  await expect(notes).toHaveCount(2);
-  await expect(notes.nth(0)).toHaveAttribute('data-version', '1.7.6.r9');
-  await expect(notes.nth(0).locator('summary')).toContainText('1.7.6.r9');
-  await expect(notes.nth(0).locator('summary')).toContainText('Пояснення змін тепер у самій апці');
+  expect(latestRelease.version).toBe(packageVersion);
+  await expect(notes).toHaveCount(releaseNotes.length);
+  for (let i = 0; i < releaseNotes.length; i++) {
+    await expect(notes.nth(i)).toHaveAttribute('data-version', releaseNotes[i].version);
+    await expect(notes.nth(i).locator('summary')).toContainText(releaseNotes[i].version);
+    await expect(notes.nth(i).locator('summary')).toContainText(releaseNotes[i].title);
+    if (i === 0) await expect(notes.nth(i)).toHaveAttribute('open', '');
+    else await expect(notes.nth(i)).not.toHaveAttribute('open', '');
+  }
   await expect(notes.nth(0)).toHaveAttribute('open', '');
-  await expect(notes.nth(1)).toHaveAttribute('data-version', '1.7.6.r8');
-  await expect(notes.nth(1).locator('summary')).toContainText('1.7.6.r8');
-  await expect(notes.nth(1)).not.toHaveAttribute('open', '');
 
   const current = notes.nth(0);
-  await expect(current.getByText('Пишу це для тебе: що я змінила, як це має працювати й що варто перевірити на твоєму телефоні.', { exact: true })).toBeVisible();
+  await expect(current.getByText(latestRelease.message, { exact: true })).toBeVisible();
   await expect(current.getByRole('heading', { name: 'Що я змінила', exact: true })).toBeVisible();
   await expect(current.getByRole('heading', { name: 'Що тобі перевірити', exact: true })).toBeVisible();
   const checks = current.locator('.release-check');
-  await expect(checks).toHaveCount(3);
-  await expect(checks.nth(0).locator('h3')).toHaveText('Відкрити й повернутися');
-  await expect(checks.nth(1).locator('h3')).toHaveText('Прочитати без інтернету');
-  await expect(checks.nth(2).locator('h3')).toHaveText('Переглянути попередні зміни');
-  for (let i = 0; i < 3; i++) {
-    await expect(checks.nth(i).locator('ol li').first()).toBeVisible();
-    await expect(checks.nth(i).locator('p.release-check-expected')).toContainText('Має бути:');
+  await expect(checks).toHaveCount(latestRelease.checks.length);
+  for (let i = 0; i < latestRelease.checks.length; i++) {
+    await expect(checks.nth(i).locator('h3')).toHaveText(latestRelease.checks[i].title);
+    await expect(checks.nth(i).locator('ol li')).toHaveCount(latestRelease.checks[i].steps.length);
+    for (let j = 0; j < latestRelease.checks[i].steps.length; j++) {
+      await expect(checks.nth(i).locator('ol li').nth(j)).toHaveText(latestRelease.checks[i].steps[j]);
+    }
+    await expect(checks.nth(i).locator('p.release-check-expected')).toContainText(latestRelease.checks[i].expected);
   }
   const before = await dataSnapshot(page);
   await page.screenshot({ path: info.outputPath('whats-new-dark-narrow.png'), fullPage: true });
 
-  await notes.nth(1).locator('summary').click();
-  await expect(notes.nth(1)).toHaveAttribute('open', '');
-  await expect(notes.nth(1).getByRole('heading', { name: 'Що я змінила', exact: true })).toBeVisible();
+  if (releaseNotes.length > 1) {
+    await notes.nth(1).locator('summary').click();
+    await expect(notes.nth(1)).toHaveAttribute('open', '');
+    await expect(notes.nth(1).locator('.release-personal')).toHaveText(releaseNotes[1].message);
+  }
   await expect(page.getByRole('button', { name: 'Назад до налаштувань', exact: true })).toBeVisible();
   expect(await dataSnapshot(page)).toEqual(before);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -77,7 +89,7 @@ test('release notes are newest first, the current note is expanded, and the prev
   expect(await dataSnapshot(page)).toEqual(before);
 });
 
-test('in-app notes remain readable offline and survive a reload without changing tasks or notes', async ({ page, context }, info) => {
+test('a running app opens bundled notes offline, then an online reload preserves tasks and notes', async ({ page, context }, info) => {
   await boot(page, 'light');
   const before = await dataSnapshot(page);
   await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
@@ -86,8 +98,8 @@ test('in-app notes remain readable offline and survive a reload without changing
   await page.getByRole('button', { name: 'Що нового', exact: true }).click();
   const pageRoot = page.locator('#whats-new-page');
   await expect(pageRoot).toBeVisible();
-  await expect(pageRoot.locator('details.release-note').first().locator('summary')).toContainText('1.7.6.r9');
-  await expect(pageRoot.locator('.release-check').filter({ has: page.getByRole('heading', { name: 'Прочитати без інтернету', exact: true }) })).toBeVisible();
+  await expect(pageRoot.locator('details.release-note').first().locator('summary')).toContainText(latestRelease.version);
+  await expect(pageRoot.locator('details.release-note').first().locator('.release-personal')).toHaveText(latestRelease.message);
   await expect(page.getByRole('button', { name: 'Назад до налаштувань', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   expect(await dataSnapshot(page)).toEqual(before);
@@ -97,7 +109,7 @@ test('in-app notes remain readable offline and survive a reload without changing
   await page.reload();
   await expect(page.locator('#add-fab')).toBeVisible();
   await openWhatsNew(page);
-  await expect(page.locator('#whats-new-page').locator('details.release-note').first().locator('summary')).toContainText('1.7.6.r9');
+  await expect(page.locator('#whats-new-page').locator('details.release-note').first().locator('summary')).toContainText(latestRelease.version);
   expect(await dataSnapshot(page)).toEqual(before);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });

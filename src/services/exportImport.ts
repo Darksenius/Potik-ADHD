@@ -4,6 +4,8 @@ import { validateBackup, sameBackupValue } from './backupValidation';
 import { flowBridge } from '../bridge/nativeBridge';
 import { fmtDate } from '../utils/date';
 import { ULBL } from '../state/slices/routineSlice';
+import { normalizePlannerTasks } from './plannerMigration';
+import { remapHistoryIdentity, seedKnownCompletions } from '../utils/taskHistory';
 import type { Task, Zone, Folder, QuickNote, RecurItem, RareEvent, DayTemplate, WeekTemplate, PlanRule, PlanItem, PlanDayZoneOverride } from '../types';
 
 /** exportBackup() — рядки 2593-2605. ПОВНА копія (те, що читає імпорт). */
@@ -191,7 +193,10 @@ export function buildAiPromptText(): string {
  * (не є дією одного slice — торкається майже всіх доменів одразу).
  */
 export function mergeState(raw: unknown): number {
-  const d = validateBackup(raw);
+  const parsed = validateBackup(raw);
+  const normalized = normalizePlannerTasks(parsed.tasks || [], parsed.nid || 1, parsed.planItems || {});
+  const d = { ...parsed, ...normalized,
+    taskHistory: seedKnownCompletions(parsed.taskHistory || [], normalized.tasks) };
   const s = useStore.getState();
   let added = 0;
 
@@ -210,6 +215,8 @@ export function mergeState(raw: unknown): number {
     retainZoneId(task.completionDeferral?.sourceZoneId);
     retainZoneId(task.completionDeferral?.targetZoneId);
   });
+  s.taskHistory.forEach(event => retainZoneId(event.zoneId));
+  d.taskHistory.forEach(event => retainZoneId(event.zoneId));
   Object.values(s.planDayZones || {}).forEach(blocks => blocks.forEach(block => retainZoneId(block.zoneId)));
   Object.values(s.planDayOff || {}).forEach(ids => ids.forEach(retainZoneId));
   s.dayTemplates.forEach(template => template.blocks.forEach(block => retainZoneId(block.zoneId)));
@@ -254,11 +261,17 @@ export function mergeState(raw: unknown): number {
     sourceZoneId: zid(value.sourceZoneId) ?? value.sourceZoneId,
     targetZoneId: zid(value.targetZoneId) ?? value.targetZoneId,
   } : undefined;
+  const remapOccurrenceZones = (value: string | undefined) => value?.replace(
+    /(^|\|zone:)(\d{4}-\d{2}-\d{2}:)(\d+)(:)/,
+    (_match, prefix: string, day: string, zone: string, separator: string) =>
+      prefix + day + (zid(Number(zone)) ?? zone) + separator);
   const remapTaskZones = (task: Task): Task => ({
     ...task,
     zoneId: task.zoneId == null ? task.zoneId : (zid(task.zoneId) ?? task.zoneId),
     questDeferral: remapDeferral(task.questDeferral),
     completionDeferral: remapDeferral(task.completionDeferral),
+    zoneOccurrenceKey: remapOccurrenceZones(task.zoneOccurrenceKey),
+    occurrenceId: remapOccurrenceZones(task.occurrenceId),
   });
 
   const folders: Folder[] = s.folders.slice();
@@ -271,13 +284,19 @@ export function mergeState(raw: unknown): number {
     });
   }
 
-  let nid = s.nid;
+  let nid = Math.max(s.nid, 1, ...s.tasks.map(task => task.id + 1));
   const tasks: Task[] = s.tasks.slice();
+  const comparableTask = (task: Task) => {
+    const { id: _id, occurrenceId, ...body } = task;
+    return { ...body, ...(occurrenceId ? {
+      occurrenceId: remapHistoryIdentity(occurrenceId, task.id, task.created, 0),
+    } : {}) };
+  };
   if (Array.isArray(d.tasks)) {
     d.tasks.forEach((t) => {
       if (!t || !t.title) return;
       const remapped = remapTaskZones(t);
-      const ex = tasks.find(x => { const { id: _oldId, ...a } = x; const { id: _newId, ...b } = remapped; return sameBackupValue(a, b); });
+      const ex = tasks.find(x => sameBackupValue(comparableTask(x), comparableTask(remapped)));
       if (ex) {
         if (t.id !== undefined) taskMap[t.id] = ex.id;
         return;
@@ -285,10 +304,23 @@ export function mergeState(raw: unknown): number {
       const nt: Task = JSON.parse(JSON.stringify(remapped));
       if (t.id !== undefined) taskMap[t.id] = nid;
       nt.id = nid++;
+      if (nt.occurrenceId) nt.occurrenceId = remapHistoryIdentity(nt.occurrenceId, t.id, t.created, nt.id);
       // Preserve trash and completion status from the validated file.
       tasks.push(nt);
       added++;
     });
+  }
+
+  const taskHistory = seedKnownCompletions(s.taskHistory, s.tasks);
+  for (const event of d.taskHistory) {
+    const taskId = taskMap[event.taskId] ?? event.taskId;
+    const remapId = (value: string) => remapOccurrenceZones(
+      remapHistoryIdentity(value, event.taskId, event.taskCreated, taskId))!;
+    const mapped = { ...event, taskId, id: remapId(event.id), occurrenceId: remapId(event.occurrenceId),
+      zoneId: event.zoneId == null ? event.zoneId : zid(event.zoneId) };
+    const existing = taskHistory.find(item => item.id === mapped.id);
+    if (existing && !sameBackupValue(existing, mapped)) throw new Error('Історія містить конфлікт однакового запису. Поточні дані не змінено.');
+    if (!existing) { taskHistory.push(mapped); added++; }
   }
 
   const priorities = s.priorities.slice();
@@ -447,7 +479,7 @@ export function mergeState(raw: unknown): number {
   }
 
   useStore.setState({
-    zones, folders, tasks, nid, priorities, qnotes, qnid, recur, rareEvents, focusChips,
+    zones, folders, tasks, taskHistory, nid, priorities, qnotes, qnid, recur, rareEvents, focusChips,
     dayTemplates, weekTemplates, planRules, planItems, planDayZones, planDayOff,
   });
   useStore.getState().recalculateZoneUsage();

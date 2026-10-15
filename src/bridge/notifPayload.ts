@@ -125,6 +125,16 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
 
   const focus = s.currentFocus && s.currentFocus !== pz.nm ? s.currentFocus : '';
   const desc = pz.desc || focus;
+  const questWallDays = buildQuestWallDays({ zones: s.zones, planDayOff: s.planDayOff,
+    dayBlocks: day => s.dayBlocks(day), now: new Date(addDaysDs(todayStr, -2) + 'T12:00:00'), days: 39 });
+  const questZoneOccurrences = questWallDays.reduce<import('../types').NotifZoneOccurrence[]>((result, wallDay) => {
+    const date = new Date(wallDay.date + 'T00:00:00');
+    const instant = (minute: number) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(minute / 60), minute % 60).getTime();
+    wallDay.assignedOccurrences.filter(range => instant(range.endMinute) > instant(range.startMinute)).forEach(range => result.push({ zoneId: range.zoneId,
+      startAt: instant(range.startMinute), endAt: instant(range.endMinute),
+      key: `${wallDay.date}:${range.zoneId}:${String(Math.floor(range.startMinute / 60)).padStart(2, '0')}:${String(range.startMinute % 60).padStart(2, '0')}` }));
+    return result;
+  }, []);
 
   return {
     zone: pz.nm,
@@ -141,8 +151,8 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
     taskList,
     questTasks,
     questTimeline,
-    questWallDays: buildQuestWallDays({ zones: s.zones, planDayOff: s.planDayOff,
-      dayBlocks: day => s.dayBlocks(day), now: new Date(addDaysDs(todayStr, -2) + 'T12:00:00'), days: 39 }),
+    questWallDays,
+    questZoneOccurrences,
     questTimelineUntil: questTimeline[questTimeline.length - 1]?.endAt || now.getTime(),
     questZones: s.zones.map(z => ({ id: z.id, nm: z.nm, desc: z.desc || '', color: z.color || '#4f8ef7' })),
     routine,

@@ -9,9 +9,8 @@ import { nowHM } from '../utils/date';
  * хук потрібен лише щоб перемальовка ставалась і КОЛИ store не змінювався,
  * а просто минула хвилина (наприклад — зайшли в нову зону).
  *
- * TODO: S.liveMode/S.debugTime (debug-бар, рядки 219–224 CSS) — режим
- * "заморозити час на значенні" для розробки, ще не перенесено. Зараз
- * завжди використовується реальний час.
+ * The former in-app debug clock was deliberately retired. Runtime uses real
+ * time; browser scenarios control their own clock through Playwright.
  */
 export function useClock() {
   const [hm, setHm] = useState(nowHM());

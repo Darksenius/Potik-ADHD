@@ -3,6 +3,8 @@ import { useStore } from '../state/store';
 import type { AppState } from '../types';
 import { flowBridge } from '../bridge/nativeBridge';
 import { buildForegroundNotifPayload } from '../bridge/notifPayload';
+import { seedKnownCompletions } from '../utils/taskHistory';
+import { normalizePlannerTasks } from './plannerMigration';
 
 /** LS_KEY — рядок 1223. НЕ змінювати: інакше старі бекапи в localStorage «загубляться». */
 export const LS_KEY = 'flow_v2';
@@ -15,7 +17,9 @@ export const LS_KEY = 'flow_v2';
 export function collectState(): AppState {
   const s = useStore.getState();
   return {
+    formatVersion: 2,
     tasks: s.tasks,
+    taskHistory: seedKnownCompletions(s.taskHistory, s.tasks),
     recur: s.recur,
     zones: s.zones,
     folders: s.folders,
@@ -74,7 +78,11 @@ export function applyState(raw: unknown, replace = false): boolean {
     Object.assign(patch, parsed);
     delete patch.saveDate;
     const current = useStore.getState();
-    const tasks = patch.tasks || current.tasks;
+    const normalized = normalizePlannerTasks(patch.tasks || current.tasks, patch.nid || current.nid,
+      patch.planItems || current.planItems);
+    Object.assign(patch, normalized);
+    const tasks = normalized.tasks;
+    patch.taskHistory = seedKnownCompletions(patch.taskHistory || current.taskHistory, tasks);
     const qnotes = patch.qnotes || current.qnotes;
     const nid = Math.max(patch.nid || current.nid, 1, ...tasks.map(t => t.id + 1));
     const qnid = Math.max(100, ...qnotes.map(n => n.id + 1));

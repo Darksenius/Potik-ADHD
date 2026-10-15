@@ -8,6 +8,7 @@ import DayTemplates from './DayTemplates';
 import { canTogglePlannedTask, isCalendarRepeat, isDeferredOccurrenceOn, taskDeferredOccurrenceAt, taskDoneOn, taskOccursOn } from '../../utils/taskSchedule';
 import { useTaskProjection } from '../../hooks/useTaskProjection';
 import { questDeferralLabel } from '../../utils/questPolicy';
+import { completedTaskOccurrences } from '../../utils/taskHistory';
 import Icon from '../common/Icon';
 
 export default function DayDetail({ ds }: { ds: DateKey }) {
@@ -18,6 +19,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
   const setDayNote = useStore((s) => s.setDayNote);
   const toggleRestDay = useStore((s) => s.toggleRestDay);
   const tasks = useStore((s) => s.tasks);
+  const taskHistory = useStore((s) => s.taskHistory);
   const toggleTask = useStore((s) => s.toggleTask);
   const deleteTask = useStore((s) => s.deleteTask);
   const planItems = useStore((s) => s.planItems);
@@ -45,6 +47,11 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
       : new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   };
   const dayTasks = tasks.filter(t => taskOccursOn(t, ds, projection)).sort((a, b) => displayTime(a).localeCompare(displayTime(b)));
+  const historicalRows = isPast
+    ? completedTaskOccurrences(taskHistory, tasks).filter(event => event.date === ds)
+    : [];
+  const completedTaskIdentities = new Set(historicalRows.map(event => JSON.stringify([event.taskId, event.taskCreated])));
+  const visibleDayTasks = dayTasks.filter(task => !isPast || !completedTaskIdentities.has(JSON.stringify([task.id, task.created])));
 
   return (
     <div className="plan-detail open">
@@ -74,29 +81,50 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
         </div>
       </div>
 
-      {dayTasks.map((t) => (
-        <div className="plan-task-row" key={t.id}>
-          <button disabled={!canTogglePlannedTask(t, ds, projection.now)} title={!canTogglePlannedTask(t, ds, projection.now) ? 'Це майбутнє виконання повтору' : undefined} aria-label={(t.type === 'negative' ? 'Зафіксувати: ' : taskDoneOn(t, ds) ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (taskDoneOn(t, ds) ? ' on' : '')} onClick={() => { useStore.getState().resetRepeatingTasksFor(new Date()); toggleTask(t.id); }}>{taskDoneOn(t, ds) ? '✓' : ''}</button>
-          <button onClick={() => editTask(t.id)} className="plan-task-nm" style={taskDoneOn(t, ds) ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}{isCalendarRepeat(t) ? ' ↺' : ''}</button>
-          {isDeferredOccurrenceOn(t, ds, projection)
-            ? <span className="plan-task-deferral" title={questDeferralLabel(t, zones)}>Перенесено</span>
-            : t.type === 'sched' && t.schedTime && <span style={{ fontSize: 10, color: 'var(--z)', fontFamily: 'monospace' }}>{t.schedTime}</span>}
-          <button aria-label={'У кошик: ' + t.title} className="plan-rm" onClick={() => deleteTask(t.id)}>✕</button>
+      {visibleDayTasks.map((t) => {
+        const done = taskDoneOn(t, ds, taskHistory);
+        const canToggle = !isPast && canTogglePlannedTask(t, ds, projection.now);
+        return (
+          <div className="plan-task-row" key={t.id}>
+            <button disabled={!canToggle} title={isPast ? 'Історичне виконання не змінює поточну задачу' : !canToggle ? 'Це майбутнє виконання повтору' : undefined} aria-label={(t.type === 'negative' ? 'Зафіксувати: ' : done ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (done ? ' on' : '')} onClick={() => { useStore.getState().resetRepeatingTasksFor(new Date()); toggleTask(t.id); }}>{done ? '✓' : ''}</button>
+            <button onClick={() => editTask(t.id)} className="plan-task-nm" style={done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}{isCalendarRepeat(t) ? ' ↺' : ''}</button>
+            {isDeferredOccurrenceOn(t, ds, projection)
+              ? <span className="plan-task-deferral" title={questDeferralLabel(t, zones)}>Перенесено</span>
+              : t.type === 'sched' && t.schedTime && <span style={{ fontSize: 10, color: 'var(--z)', fontFamily: 'monospace' }}>{t.schedTime}</span>}
+            <button aria-label={'У кошик: ' + t.title} className="plan-rm" onClick={() => deleteTask(t.id)}>✕</button>
+          </div>
+        );
+      })}
+
+      {historicalRows.map((event) => (
+        <div className="plan-task-row" key={'history:' + event.id} aria-label={'Історичне виконання: ' + event.title}>
+          <button type="button" disabled title="Збережене історичне виконання" aria-label={'Виконано: ' + event.title} className="plan-ck on">✓</button>
+          <span className="plan-task-nm" style={{ textDecoration: 'line-through', opacity: 0.5 }}>{event.title}</span>
+          {event.time && <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{event.time}</span>}
+          <span style={{ fontSize: 9, color: 'var(--t3)' }}>Історія</span>
         </div>
       ))}
 
       {items.map((it, i) => (
-        <div className={'plan-task-row' + (it.isEvent ? ' plan-event' : '')} key={i}>
-          <button className={'plan-ck' + (it.done ? ' on' : '')} onClick={() => togglePlanItem(ds, i)}>
-            {it.done ? <Icon name="check" /> : it.isEvent ? <Icon name="idea" /> : ''}
-          </button>
-          <span className="plan-task-nm" style={it.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{it.title || ''}</span>
-          {it.time && <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{it.time}</span>}
-          <button className="plan-rm" onClick={() => removePlanItem(ds, i)}>✕</button>
-        </div>
+        it.isPrompt ? (
+          <div className="plan-task-row plan-event" key={i}>
+            <Icon name="calendar" />
+            <span className="plan-task-nm" style={{ color: 'var(--t3)', fontStyle: 'italic' }}>{it.title || ''}</span>
+            <button aria-label="Прибрати нагадування" className="plan-rm" onClick={() => removePlanItem(ds, i)}>✕</button>
+          </div>
+        ) : (
+          <div className={'plan-task-row' + (it.isEvent ? ' plan-event' : '')} key={i}>
+            <button className={'plan-ck' + (it.done ? ' on' : '')} onClick={() => togglePlanItem(ds, i)}>
+              {it.done ? <Icon name="check" /> : it.isEvent ? <Icon name="idea" /> : ''}
+            </button>
+            <span className="plan-task-nm" style={it.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{it.title || ''}</span>
+            {it.time && <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{it.time}</span>}
+            <button className="plan-rm" onClick={() => removePlanItem(ds, i)}>✕</button>
+          </div>
+        )
       ))}
 
-      {!dayTasks.length && !items.length && <div className="plan-empty">Порожньо — додай задачу, зону або подію</div>}
+      {!visibleDayTasks.length && !historicalRows.length && !items.length && <div className="plan-empty">Порожньо — додай задачу, зону або подію</div>}
 
       <DayAnalysis ds={ds} isFuture={isFuture} />
       <DayJournal ds={ds} />

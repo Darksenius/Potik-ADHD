@@ -3,19 +3,12 @@ import { useStore } from '../../state/store';
 import OssPage, { useAppVersion } from './OssPage';
 import Icon from '../common/Icon';
 import type { IconName } from '../common/Icon';
+import type { TaskType } from '../../types';
+import taskTypeData from '../../content/task-types.json' with { type: 'json' };
 
-const TYPES: { title: string; icon: IconName; description: string; example: string }[] = [
-  { title: 'Проста', icon: 'quest', description: 'Одна дія, без обов’язкового часу. Дату й зону можна додати.', example: 'Забрати посилку → будь-яка зона або обраний день.' },
-  { title: 'Запланована', icon: 'calendar', description: 'Точна дата й час. До цього моменту — в Плані; сигнал можна вимкнути.', example: 'Зателефонувати завтра о 15:00.' },
-  { title: 'Чекліст', icon: 'check', description: 'Кроки однієї справи. Галочки зберігають поступ, а вся справа завершується окремо.', example: 'Перед виходом: документи, ключі, навушники.' },
-  { title: 'Лічильник', icon: 'counter', description: 'Крок, одиниця й необов’язкова ціль. Лічильник можна додати й до іншого типу.', example: 'Розібрати 5 листів → +1 за кожен лист.' },
-  { title: 'З нотаткою', icon: 'note', description: 'Задача з деталями. Нотатка доступна й в інших типах; вільні думки — у Блокноті.', example: 'Забрати посилку → адреса та номер у нотатці.' },
-  { title: 'Будильник', icon: 'clock', description: 'Сигнал у заданий час. Щоденний сигнал потребує повторення «Щодня».', example: 'О 22:00 підготуватися до сну.' },
-  { title: 'Вікно часу', icon: 'clock', description: 'Показ лише в обраному проміжку. Прив’язка до зони додатково обмежує показ.', example: 'Провітрити між 07:00 і 09:00.' },
-  { title: 'З мітками', icon: 'folder', description: 'Ручні позначки справи. Вони не визначають місце автоматично; напрямок задає зона.', example: 'Розібрати фото → мітка «Вдома» й зона «Вечір».' },
-  { title: 'До зони', icon: 'zones', description: 'Дія для конкретної зони. «Кожна зона» дає нове виконання при наступному входженні.', example: 'Підмести підлогу → Вечір; удень вона не заважає.' },
-  { title: 'Журнал подій', icon: 'chart', description: 'Фіксація події з лічильником і налаштованим мінусом досвіду. Це не квест із «Виконано».', example: 'Зафіксувати небажаний перекур → запис у журналі.' },
-];
+type TaskTypeInfo = { label: string; icon: IconName; xp: number; hint: string; description: string; example: string };
+const TYPE_CATALOG = taskTypeData as Record<TaskType, TaskTypeInfo>;
+const TYPES = (Object.keys(TYPE_CATALOG) as TaskType[]).map(type => ({ type, ...TYPE_CATALOG[type] }));
 
 export default function ReadmePage() {
   const showPage = useStore(s => s.showPage);
@@ -39,7 +32,7 @@ export default function ReadmePage() {
         <p>Перенесення зберігає кроки й лічильник одного виконання та не змінює постійну зону або повторення. Для задач із сигналом воно переносить один сигнал у новий момент; попереднє нагадування заздалегідь скасовується.</p>
       </section>
       <details className="rm-s help-types"><summary><Icon name="counter" /> Типи задач і приклади</summary>
-        {TYPES.map(type => <article className="help-type" key={type.title}><h4><Icon name={type.icon} /> {type.title}</h4><p>{type.description}</p><p className="help-example">{type.example}</p></article>)}
+        {TYPES.map(type => <article className="help-type" key={type.type}><h4><Icon name={type.icon} /> {type.label}</h4><p>{type.description}</p><p className="help-example">{type.example}</p></article>)}
         <p>Повторення — спільна властивість. Завершення разової справи зберігається; повторювана отримує нове виконання за своїм правилом. Окремої автоматичної задачі води немає.</p>
       </details>
       <details className="rm-s help-types"><summary><Icon name="calendar" /> План, розклад і дані</summary>

@@ -1,11 +1,6 @@
-/**
- * Типи домену «Потік».
- *
- * Джерело істини — не абстрактна модель, а РЕАЛЬНІ форми даних з оригінального
- * www/index.html (mkTask(), mkNote(), collectState()/applyState(), planItems/…).
- * Кожен тип нижче містить посилання на рядки оригіналу, з яких він виведений,
- * щоб на наступних кроках рефакторингу можна було звірити 1:1.
- */
+/** Current domain and persisted contracts. Historical source-line comments are
+ * reference material, not a requirement to preserve the former HTML schema. */
+import type taskTypeCatalog from '../content/task-types.json';
 
 // ─────────────────────────────────────────────────────────────────────────
 // ЗОНИ  (оригінал: рядки 1185–1191, 1309–1517)
@@ -40,17 +35,25 @@ export interface Zone {
 // ЗАДАЧІ  (оригінал: mkTask() рядки 1827–1845, TL/TXP рядки 1238–1239)
 // ─────────────────────────────────────────────────────────────────────────
 
-export type TaskType =
-  | 'simple'      // Проста
-  | 'check'       // Чекліст
-  | 'counter'     // Лічильник
-  | 'note'        // Нотатка (задача з довільним текстом)
-  | 'alarm'       // Будильник (щоденний час)
-  | 'sched'       // Заплановано (конкретні дата+час)
-  | 'timewin'     // Вікно часу
-  | 'ctx'         // Контекст
-  | 'negative'    // Шкідлива звичка (віднімає XP)
-  | 'zonelinked'; // Прив'язана до зони
+export type TaskType = keyof typeof taskTypeCatalog;
+
+/** Append-only facts. A task's next repeat never overwrites a past occurrence. */
+export interface TaskHistoryEvent {
+  id: string;
+  occurrenceId: string;
+  taskId: number;
+  taskCreated: string;
+  title: string;
+  type: TaskType;
+  kind: 'completed' | 'reopened';
+  sequence?: number;
+  at: number;
+  date: string;
+  time: string;
+  zoneId?: number | null;
+  counter?: number;
+  items?: ChecklistItem[];
+}
 
 export interface ChecklistItem {
   text: string;
@@ -105,6 +108,8 @@ export interface Task {
   doneAt?: string;     // "HH:MM"
   completionCredited?: boolean; // XP and cumulative completion already credited for this occurrence
   completionCreditDate?: string; // Date key for the occurrence that earned XP and cumulative completion
+  /** Identity of the current materialized occurrence; preserved through Undo/deferral. */
+  occurrenceId?: string;
   snoozeUntil?: number; // epoch ms, task_skip / відкладання
 
   // type === 'check'
@@ -259,6 +264,7 @@ export interface PlanItem {
   title: string;
   done: boolean;
   isEvent?: boolean;
+  isPrompt?: boolean;
   time?: string;
 }
 
@@ -370,6 +376,14 @@ export type NotifQuestTimelineItem = QuestTimelineSegment;
 export interface NotifQuestWallDay {
   date: DateKey;
   segments: { zoneId: number; startMinute: number; endMinute: number }[];
+  assignedOccurrences: { zoneId: number; startMinute: number; endMinute: number }[];
+}
+
+export interface NotifZoneOccurrence {
+  zoneId: number;
+  startAt: number;
+  endAt: number;
+  key: string;
 }
 
 export interface NotifRoutineListItem {
@@ -421,6 +435,7 @@ export interface ForegroundNotifPayload {
   questTasks: NotifQuestTask[];
   questTimeline: NotifQuestTimelineItem[];
   questWallDays: NotifQuestWallDay[];
+  questZoneOccurrences: NotifZoneOccurrence[];
   questTimelineUntil: number;
   questZones: { id: number; nm: string; desc: string; color: string }[];
   routine: string;
@@ -443,7 +458,9 @@ export interface Preferences {
 }
 
 export interface AppState extends PlannerState {
+  formatVersion?: 2;
   tasks: Task[];
+  taskHistory: TaskHistoryEvent[];
   recur: RecurItem[];
   zones: Zone[];
   folders: Folder[];

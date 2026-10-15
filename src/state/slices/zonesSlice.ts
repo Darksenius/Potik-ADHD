@@ -1,7 +1,7 @@
 import type { AppSlice } from '../store';
 import type { Zone } from '../../types';
 import { fmtDate, toMinutes, normalizeDayRange } from '../../utils/date';
-import { getQuestDayRanges, type QuestZoneRange } from '../../utils/questPolicy';
+import { getQuestDayRanges, getAssignedZoneOccurrences, type QuestZoneRange } from '../../utils/questPolicy';
 import { ruleIdx, addDaysDs } from './plannerHelpers';
 
 /** Перенесено 1:1 з www/index.html, рядки 1185–1191 (сідові дані). */
@@ -183,26 +183,12 @@ export const createZonesSlice: AppSlice<ZonesSlice> = (set, get) => ({
   },
 
   getZoneOccurrenceKey: (zoneId, date) => {
-    const hm = { h: date.getHours(), m: date.getMinutes() };
-    const active = get().getActiveZones(hm, date).find(zone => zone.id === zoneId);
-    if (!active) return undefined;
     const day = fmtDate(date);
-    const minute = hm.h * 60 + hm.m;
-    const slots = active.planDay
-      ? get().dayBlocks(day).filter(block => block.zoneId === zoneId)
-      : active.slots;
-    const ranges: { start: number; end: number; label: string }[] = [];
-    slots.slice().sort((a, b) => toMinutes(a.s) - toMinutes(b.s)).forEach(slot => {
-      const start = toMinutes(slot.s);
-      const end = toMinutes(slot.e) || 1440;
-      const previous = ranges[ranges.length - 1];
-      // An overlap/adjacent slot does not leave the assigned zone and must
-      // not create an extra occurrence when the earlier slot ends.
-      if (previous && start <= previous.end) previous.end = Math.max(previous.end, end);
-      else ranges.push({ start, end, label: slot.s });
-    });
-    const range = ranges.find(slot => minute >= slot.start && minute < slot.end);
-    return range ? day + ':' + zoneId + ':' + range.label : undefined;
+    const minute = date.getHours() * 60 + date.getMinutes();
+    const range = getAssignedZoneOccurrences({ zones: get().zones, planDayOff: get().planDayOff,
+      dayBlocks: get().dayBlocks }, day).find(slot => slot.zoneId === zoneId
+        && minute >= slot.startMinute && minute < slot.endMinute);
+    return range ? `${day}:${zoneId}:${String(Math.floor(range.startMinute / 60)).padStart(2, '0')}:${String(range.startMinute % 60).padStart(2, '0')}` : undefined;
   },
 
   toggleZoneOff: (id) => {

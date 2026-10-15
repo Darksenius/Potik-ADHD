@@ -1,5 +1,6 @@
-import type { QuestTimelineSegment, Task } from '../types';
+import type { QuestTimelineSegment, Task, TaskHistoryEvent } from '../types';
 import { fmtDate, isDateKey, localDateTimeMs, normalizeTime, toMinutes } from './date';
+import { completedTaskOccurrences } from './taskHistory';
 
 /** A scheduled task has one day for both its calendar entry and its reminder. */
 export function taskPlanDate(task: Task): string | undefined {
@@ -60,7 +61,15 @@ export function isCalendarRepeat(task: Task): boolean {
 }
 
 /** Projection in the planner does not mark future occurrences as completed. */
-export function taskDoneOn(task: Task, day: string): boolean {
+export function taskDoneOn(task: Task, day: string, history?: readonly TaskHistoryEvent[]): boolean {
+  // A past date is a historical projection, not the task's current done flag.
+  // Today must continue to reflect the live occurrence: a completed earlier
+  // every-zone/interval occurrence cannot check off the new one after reset.
+  if (history && day < fmtDate(new Date())) {
+    const matches = (event: TaskHistoryEvent) => event.taskId === task.id && event.taskCreated === task.created && event.date === day;
+    if (completedTaskOccurrences(history).some(matches)) return true;
+    return !!task.done && task.doneDate === day && completedTaskOccurrences(history, [task]).some(matches);
+  }
   if (task.repeat === 'interval' && task.nextRepeatAt && fmtDate(new Date(task.nextRepeatAt)) === day) return false;
   return task.done && (!isCalendarRepeat(task) || task.doneDate === day);
 }

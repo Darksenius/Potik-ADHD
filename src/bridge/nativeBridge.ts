@@ -70,7 +70,7 @@ declare global {
     /** MainActivity's existing notification navigation callback. */
     swTab?: (tab: string, element?: unknown) => void;
     /** Вшивається scripts/embed-oss.js у ЗІБРАНИЙ www/index.html (AGPL), рядок 4500 */
-    __OSS__?: { github: string; license: string; source: string } | null;
+    __OSS__?: { github: string; license: string; source: string; revision?: string; sourceArchive?: string | null } | null;
   }
 }
 
@@ -320,6 +320,10 @@ export function drainNativeEvents(onChanged: () => void): void {
           const resetsByDay = !task || !!task.repeat && !['none', 'interval'].includes(task.repeat) || task.type === 'timewin';
           const carriedOccurrence = task?.questDeferral && e.createdAt >= task.questDeferral.requestedAt;
           if (staleDay && (/^rc_/.test(e.event) || resetsByDay && !carriedOccurrence && /^(task_done:|task_inc:|task_dec:)/.test(e.event))) {
+            if (task && /^task_done:\d+$/.test(e.event) && task.type !== 'negative') {
+              useStore.getState().recordPastTaskDone(task.id, e.createdAt);
+              continue;
+            }
             // A stale toggle must never silently change today's reset routine.
             useStore.getState().addQuickNote('Дія зі сповіщення ' + new Date(e.createdAt).toLocaleString('uk') + ': ' + e.event + (task ? ' · ' + task.title : '') + '. Перевір і застосуй вручну: день уже змінився.', 'impulse');
           } else handleNativeEvent(e.event, e.createdAt);

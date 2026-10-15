@@ -2,6 +2,7 @@ import { useStore } from '../../state/store';
 import { getWeekStart } from '../../state/slices/plannerSlice';
 import { fmtDate, WD } from '../../utils/date';
 import { taskOccursOn } from '../../utils/taskSchedule';
+import { completedTaskOccurrences } from '../../utils/taskHistory';
 import Icon from '../common/Icon';
 import { useTaskProjection } from '../../hooks/useTaskProjection';
 
@@ -12,6 +13,7 @@ export default function WeekGrid() {
   const switchDay = useStore((s) => s.setPlanSelectedDay);
   const planItems = useStore((s) => s.planItems);
   const tasks = useStore(s => s.tasks);
+  const taskHistory = useStore(s => s.taskHistory);
   const planSchedules = useStore((s) => s.planSchedules);
   const zones = useStore((s) => s.zones);
   // Підписки нижче — щоб перемалювати grid одразу при зміні розмітки зон дня
@@ -31,6 +33,7 @@ export default function WeekGrid() {
     const ds = fmtDate(d);
     return { i, d, ds };
   });
+  const completedOccurrences = completedTaskOccurrences(taskHistory, tasks);
 
   return (
     <div className="plan-week">
@@ -40,7 +43,8 @@ export default function WeekGrid() {
         const isRest = dayIsRest(ds);
         const items = planItems[ds] || [];
         const hasEvents = items.some((it) => it.isEvent);
-        const hasTasks = items.some((it) => !it.isEvent) || tasks.some(t => taskOccursOn(t, ds, projection));
+        const completedCount = completedOccurrences.filter(event => event.date === ds).length;
+        const hasTasks = items.some((it) => !it.isEvent && !it.isPrompt) || tasks.some(t => taskOccursOn(t, ds, projection)) || completedCount > 0;
         const sched = planSchedules[ds] || '';
         const zc: string[] = [];
         dayBlocks(ds).forEach((b) => {
@@ -52,7 +56,7 @@ export default function WeekGrid() {
           <button
             key={ds}
             type="button"
-            aria-label={d.toLocaleDateString('uk', { day: 'numeric', month: 'long', year: 'numeric' }) + (hasTasks ? ', є задачі' : '')}
+            aria-label={d.toLocaleDateString('uk', { day: 'numeric', month: 'long', year: 'numeric' }) + (hasTasks ? ', є задачі' : '') + (completedCount ? `, виконано ${completedCount}` : '')}
             aria-pressed={selectedDay === ds}
             className={'plan-day' + (isToday ? ' today' : '') + (isWE && !isRest ? ' weekend-day' : '') + (isRest ? ' rest-day' : '') + (selectedDay === ds ? ' sel' : '')}
             onClick={() => switchDay(ds)}
@@ -67,7 +71,9 @@ export default function WeekGrid() {
                 {sched && <div style={{ fontSize: 7, color: 'var(--z)', marginTop: 1 }}>{sched}</div>}
               </>
             )}
-            <div className={'pd-dot' + (hasTasks ? ' has' : '')} />
+            <div className={'pd-dot' + (hasTasks ? ' has' : '')} style={completedCount ? { width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 1, background: 'var(--z)', color: '#fff' } : undefined}>
+              {completedCount > 0 && <Icon name="check" size={8} />}
+            </div>
             {!!zc.length && (
               <div className="pd-zstrip">
                 {zc.slice(0, 4).map((c, idx) => (

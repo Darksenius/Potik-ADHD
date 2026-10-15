@@ -12,6 +12,7 @@ import type {
 import { fmtDate, addDaysDs } from '../../utils/date';
 import { ruleFor, dayBlocksFor, dayIsRestFor } from './plannerHelpers';
 import { ULBL } from './routineSlice';
+import { completedTaskOccurrences } from '../../utils/taskHistory';
 
 /** getWeekStart() — рядки 3316–3319. Понеділок тижня зі зсувом `off` (у тижнях). */
 export function getWeekStart(off: number): Date {
@@ -274,21 +275,20 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
   toggleRestDay: (ds) => {
     const nextRest = !get().dayIsRest(ds);
     set((s) => ({ planRestDays: { ...s.planRestDays, [ds]: nextRest } }));
-    if (nextRest && !(get().planItems[ds] || []).find((i) => i.title.includes('заплануй'))) {
+    if (nextRest && !(get().planItems[ds] || []).some(i => i.isPrompt && i.title.includes('Заплануй наступний тиждень'))) {
       set((s) => ({
-        planItems: { ...s.planItems, [ds]: [...(s.planItems[ds] || []), { title: '📋 Заплануй наступний тиждень', done: false }] },
+        planItems: { ...s.planItems, [ds]: [...(s.planItems[ds] || []), { title: 'Заплануй наступний тиждень', done: false, isPrompt: true }] },
       }));
     }
   },
 
   togglePlanItem: (ds, index) => {
     const items = get().planItems[ds];
-    if (!items || !items[index]) return;
+    if (!items || !items[index] || items[index].isPrompt) return;
     const willBeDone = !items[index].done;
     set((s) => ({
       planItems: { ...s.planItems, [ds]: s.planItems[ds].map((it, i) => (i === index ? { ...it, done: willBeDone } : it)) },
     }));
-    if (willBeDone) get().award(5);
   },
 
   removePlanItem: (ds, index) => {
@@ -399,7 +399,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
 
   dayStats: (ds) => {
     const s = get();
-    const doneTasks = s.tasks.filter((t) => t.doneDate === ds);
+    const doneTasks = completedTaskOccurrences(s.taskHistory, s.tasks).filter(event => event.date === ds);
     const notes = s.qnotes.filter((n) => n.date === ds);
     const foci = (s.focusLog || []).filter((f) => f.date === ds);
     const distinct: string[] = [];
@@ -436,7 +436,7 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
         [ds]: {
           ...existing,
           energy: s.energy,
-          tasksDone: s.tasks.filter((t) => t.done).length,
+          tasksDone: completedTaskOccurrences(s.taskHistory, s.tasks).filter(event => event.date === ds).length,
           priorities: s.priorities.slice(),
           routineDone,
           focus,

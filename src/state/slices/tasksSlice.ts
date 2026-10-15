@@ -1,26 +1,31 @@
 import type { AppSlice } from '../store';
-import type { Task, TaskType, ChecklistItem, QuestDeferral, QuestDeferralKind } from '../../types';
+import type { Task, TaskType, TaskHistoryEvent, ChecklistItem, QuestDeferral, QuestDeferralKind } from '../../types';
+import taskTypeCatalog from '../../content/task-types.json' with { type: 'json' };
+import { createTaskRecord } from '../../utils/taskFactory';
+import { historyEvent, nextHistorySequence, seedKnownCompletions, taskOccurrenceId } from '../../utils/taskHistory';
 import { fmtDate, nowHM, normalizeTime, hmToString } from '../../utils/date';
 import { hasTaskCounter, resetTaskProgress, taskCounterTarget } from '../../utils/taskCounter';
 import { buildQuestTimeline, createQuestDeferral, isValidQuestDeferral } from '../../utils/questPolicy';
 
 /** TXP — рядок 1239: базова нагорода XP за тип задачі при виконанні. */
-const TASK_XP: Record<TaskType, number> = {
-  simple: 10, check: 10, counter: 2, note: 5, alarm: 10, sched: 10,
-  timewin: 5, ctx: 8, negative: 0, zonelinked: 8,
-};
+const TASK_XP = Object.keys(taskTypeCatalog).reduce((xp, type) => {
+  xp[type as TaskType] = taskTypeCatalog[type as TaskType].xp;
+  return xp;
+}, {} as Record<TaskType, number>);
 
 const REPEAT_UNIT_MS: Record<string, number> = { sec: 1000, min: 60000, hour: 3600000, day: 86400000, week: 604800000, month: 2592000000 };
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface TasksSlice {
   tasks: Task[];
+  taskHistory: TaskHistoryEvent[];
   /** Наступний вільний id (було S.nid) */
   nid: number;
 
   createTask: (title: string, type: TaskType, zoneId?: number | null, alarmTime?: string) => Task;
   toggleTask: (id: number) => void;
   setTaskDone: (id: number, done: boolean, completedAt?: number) => void;
+  recordPastTaskDone: (id: number, completedAt: number) => boolean;
   skipTask: (id: number) => void;
   toSomeday: (id: number) => void;
   fromSomeday: (id: number) => void;
@@ -57,43 +62,13 @@ export interface TasksSlice {
 
 export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   tasks: [],
+  taskHistory: [],
   nid: 300,
 
   createTask: (title, type, zoneId, alarmTime) => {
     const nid = get().nid;
     const zone = zoneId ? get().zones.find((z) => z.id === zoneId) : null;
-    const task: Task = {
-      id: nid,
-      title,
-      type,
-      done: false,
-      someday: false,
-      zoneId: zoneId ?? null,
-      zoneColor: zone ? zone.color : null,
-      zoneName: zone ? zone.nm : null,
-      expanded: false,
-      created: new Date().toISOString(),
-      items: type === 'check' ? [] : undefined,
-      counter: type === 'counter' || type === 'negative' ? 0 : undefined,
-      counterTarget: type === 'counter' ? 10 : undefined,
-      counterEnabled: type === 'counter', counterStep: 1, counterUnit: 'count',
-      negXp: type === 'negative' ? 5 : undefined,
-      note: type === 'note' ? '' : undefined,
-      alarmTime: type === 'alarm' ? alarmTime || '' : undefined,
-      alarmFired: false,
-      schedDate: type === 'sched' ? '' : undefined,
-      schedTime: type === 'sched' ? '' : undefined,
-      firedSched: type === 'sched' ? false : undefined,
-      firedPre: type === 'sched' ? false : undefined,
-      windowStart: type === 'timewin' ? '07:00' : undefined,
-      windowEnd: type === 'timewin' ? '09:00' : undefined,
-      completedToday: type === 'timewin' ? false : undefined,
-      ctxTags: type === 'ctx' ? [] : undefined,
-      zoneDoneToday: type === 'zonelinked' ? false : undefined,
-      repeat: 'none',
-      repeatDays: [false, false, false, false, false, false, false],
-      tags: [],
-    };
+    const task = createTaskRecord(nid, title, type, zoneId ?? null, zone, alarmTime);
     set((s) => ({ tasks: [task, ...s.tasks], nid: s.nid + 1 }));
     return task;
   },
@@ -123,10 +98,16 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const completionCreditDate = done
       ? (shouldCredit ? fmtDate(now) : t.completionCreditDate)
       : (completionCredited ? (t.completionCreditDate || t.doneDate || fmtDate(now)) : t.completionCreditDate);
+    const originAt = t.questDeferral?.requestedAt ?? now.getTime();
+    const occurrenceId = taskOccurrenceId(t, now.getTime(), t.zoneId
+      ? get().getZoneOccurrenceKey(t.zoneId, new Date(originAt)) : undefined);
     set((s) => ({
+      taskHistory: [...seedKnownCompletions(s.taskHistory, s.tasks),
+        historyEvent(t, done ? 'completed' : 'reopened', now.getTime(), occurrenceId,
+          nextHistorySequence(seedKnownCompletions(s.taskHistory, s.tasks)))],
       tasks: s.tasks.map((x) => {
         if (x.id !== id) return x;
-        const updated: Task = { ...x, done, completionCredited, completionCreditDate };
+        const updated: Task = { ...x, done, completionCredited, completionCreditDate, occurrenceId };
         if (x.type === 'timewin') updated.completedToday = done;
         if (x.type === 'zonelinked') updated.zoneDoneToday = done;
         if (done) {
@@ -153,10 +134,33 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       const day = fmtDate(now);
       if (day < fmtDate(new Date())) set(s => ({ planDayLog: { ...s.planDayLog,
         [day]: { ...(s.planDayLog[day] || { focus: [], energy: 0, routineDone: {}, priorities: [], tasksDone: 0 }),
-          tasksDone: (s.planDayLog[day]?.tasksDone || 0) + 1 } } }));
+          tasksDone: get().dayStats(day).tasksDone } } }));
       get().incrementDoneCount();
       get().award(TASK_XP[t.type] ?? 10);
     }
+  },
+
+  /** A durable tap from yesterday records that occurrence, never today's progress. */
+  recordPastTaskDone: (id, completedAt) => {
+    const task = get().tasks.find(candidate => candidate.id === id);
+    if (!task || task.type === 'negative' || !Number.isFinite(completedAt)
+      || new Date(task.created).getTime() > completedAt) return false;
+    const date = new Date(completedAt);
+    const day = fmtDate(date);
+    const key = task.zoneId ? get().getZoneOccurrenceKey(task.zoneId, date) : undefined;
+    const snapshot: Task = { ...task, occurrenceId: undefined, counterDay: day, planDate: day,
+      questDeferral: undefined, zoneOccurrenceKey: key,
+      counter: undefined, items: undefined };
+    const occurrenceId = taskOccurrenceId(snapshot, completedAt, key);
+    const history = seedKnownCompletions(get().taskHistory, get().tasks);
+    const previous = history.filter(event => event.occurrenceId === occurrenceId);
+    if (previous.some(event => event.kind === 'completed')
+      || previous.some(event => event.at >= completedAt)) return false;
+    set({ taskHistory: [...history, historyEvent(snapshot, 'completed', completedAt,
+      occurrenceId, nextHistorySequence(history))] });
+    get().incrementDoneCount();
+    get().award(TASK_XP[task.type]);
+    return true;
   },
 
   skipTask: (id) => {
@@ -246,6 +250,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   deleteTask: (id) => {
     set((s) => ({
+      taskHistory: seedKnownCompletions(s.taskHistory, s.tasks),
       tasks: s.tasks.map((t) => (t.id === id ? { ...t, trashed: true, trashedAt: Date.now() } : t)),
       priorities: s.priorities.map((pid) => (pid === id ? null : pid)),
       alarmTaskIds: s.alarmTaskIds.filter((taskId) => taskId !== id),
@@ -258,6 +263,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
   hardDeleteTask: (id) => {
     set((s) => ({
+      taskHistory: seedKnownCompletions(s.taskHistory, s.tasks),
       tasks: s.tasks.filter((t) => t.id !== id),
       priorities: s.priorities.map((pid) => (pid === id ? null : pid)),
       alarmTaskIds: s.alarmTaskIds.filter((taskId) => taskId !== id),
@@ -269,6 +275,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       const tasks = s.tasks.filter((t) => !t.trashed || Date.now() - (t.trashedAt || 0) < TRASH_RETENTION_MS);
       const retainedIds = new Set(tasks.map((t) => t.id));
       return {
+        taskHistory: seedKnownCompletions(s.taskHistory, s.tasks),
         tasks,
         priorities: s.priorities.map((pid) => pid !== null && !retainedIds.has(pid) ? null : pid),
         alarmTaskIds: s.alarmTaskIds.filter((taskId) => retainedIds.has(taskId)),
@@ -283,6 +290,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const copy: Task = {
       ...JSON.parse(JSON.stringify(t)), id: nid, done: false, completionCredited: false,
       completionCreditDate: undefined, doneDate: undefined, doneAt: undefined, nextRepeatAt: 0, snoozeUntil: 0,
+      occurrenceId: undefined,
       questDeferral: undefined, completionDeferral: undefined,
       completedToday: t.type === 'timewin' ? false : t.completedToday,
       zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,
@@ -530,7 +538,9 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     }
     set(state => ({
       tasks: state.tasks.map(candidate => candidate.id === id
-        ? { ...candidate, questDeferral: deferral, completionDeferral: undefined, snoozeUntil: 0, firedSched: false, firedPre: false, alarmFired: false }
+        ? { ...candidate, occurrenceId: taskOccurrenceId(candidate, baseAt, candidate.zoneId
+          ? get().getZoneOccurrenceKey(candidate.zoneId, new Date(baseAt)) : undefined),
+          questDeferral: deferral, completionDeferral: undefined, snoozeUntil: 0, firedSched: false, firedPre: false, alarmFired: false }
         : candidate),
       alarmTaskIds: state.alarmTaskIds.filter(taskId => taskId !== id),
       xpPopup: { text: deferral.kind === 'next-zone' ? '⏳ До наступної зони' : '⏳ Не сьогодні', tone: 'muted' },

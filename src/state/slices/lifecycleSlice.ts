@@ -3,6 +3,7 @@ import type { Task } from '../../types';
 import { fmtDate } from '../../utils/date';
 import { resetTaskProgress } from '../../utils/taskCounter';
 import { repeatDueOn, taskPlanDate } from '../../utils/taskSchedule';
+import { seedKnownCompletions } from '../../utils/taskHistory';
 
 export { repeatDueOn } from '../../utils/taskSchedule';
 
@@ -18,6 +19,7 @@ function resetOccurrence(task: Task, day: string): Task {
     completionCreditDate: undefined,
     doneDate: undefined,
     doneAt: undefined,
+    occurrenceId: undefined,
     alarmFired: false,
     firedSched: false,
     firedPre: false,
@@ -67,7 +69,7 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
         changed = true;
         return resetOccurrence(task, day);
       });
-      return changed ? { tasks } : state;
+      return changed ? { tasks, taskHistory: seedKnownCompletions(state.taskHistory, state.tasks) } : state;
     });
   },
 
@@ -88,7 +90,7 @@ export const createLifecycleSlice: AppSlice<LifecycleSlice> = (set, get) => ({
         if (!task.zoneOccurrenceKey) return { ...task, zoneOccurrenceKey: key };
         return { ...resetOccurrence(task, day), zoneOccurrenceKey: key };
       });
-      return changed ? { tasks } : state;
+      return changed ? { tasks, taskHistory: seedKnownCompletions(state.taskHistory, state.tasks) } : state;
     });
   },
 

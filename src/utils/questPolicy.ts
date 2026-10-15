@@ -93,6 +93,18 @@ export function getQuestDayRanges(input: QuestTimelineInput, day: string): Quest
   return ranges;
 }
 
+/** Assigned ranges belong to a zone, even while another primary zone overlays it. */
+export function getAssignedZoneOccurrences(input: QuestTimelineInput, day: string): import('../types').NotifQuestWallDay['assignedOccurrences'] {
+  const assigned: import('../types').NotifQuestWallDay['assignedOccurrences'] = [];
+  getQuestDayRanges(input, day).slice().sort((a, b) => a.zoneId - b.zoneId || a.start - b.start).forEach(range => {
+    const previous = assigned[assigned.length - 1];
+    if (previous?.zoneId === range.zoneId && range.start <= previous.endMinute) {
+      previous.endMinute = Math.max(previous.endMinute, range.end);
+    } else assigned.push({ zoneId: range.zoneId, startMinute: range.start, endMinute: range.end });
+  });
+  return assigned;
+}
+
 /** Persist wall-clock intent so Android can reconstruct dates after a timezone change. */
 export function buildQuestWallDays(input: QuestTimelineInput): import('../types').NotifQuestWallDay[] {
   const firstDay = fmtDate(input.now || new Date());
@@ -109,7 +121,7 @@ export function buildQuestWallDays(input: QuestTimelineInput): import('../types'
       if (previous?.zoneId === zoneId) previous.endMinute = boundaries[i + 1];
       else segments.push({ zoneId, startMinute: boundaries[i], endMinute: boundaries[i + 1] });
     }
-    return { date, segments };
+    return { date, segments, assignedOccurrences: getAssignedZoneOccurrences(input, date) };
   });
 }
 

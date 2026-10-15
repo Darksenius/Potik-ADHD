@@ -1,11 +1,11 @@
 import type { TaskType } from './types';
+import taskTypeData from './content/task-types.json' with { type: 'json' };
 
-/** TL — рядок 1238 */
-export const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  simple: 'Проста', check: 'Чекліст', counter: 'Лічильник', note: 'Нотатка', alarm: 'Будильник',
-  sched: 'Заплановано', timewin: 'Вікно часу',
-  ctx: 'З мітками', negative: 'Журнал подій', zonelinked: 'До зони',
-};
+/** The shared task catalog is the source for labels shown in task summaries. */
+export const TASK_TYPE_LABELS = Object.keys(taskTypeData).reduce((labels, type) => {
+  labels[type as TaskType] = taskTypeData[type as TaskType].label;
+  return labels;
+}, {} as Record<TaskType, string>);
 
 /** REP — рядок 1242 */
 export const REPEAT_LABELS: Record<string, string> = {

@@ -39,7 +39,7 @@ export interface GamificationSlice {
   lastEnergyXp: number;
   dayXpGained: number;
   xpDay: string;
-  /** TODO Крок «Щоденний скид»: логіка оновлення серії ще не перенесена (checkDailyReset, рядок 3037) */
+  /** Historical persisted counter; current task history does not infer a streak from it. */
   streak: number;
 
   /** Похідний UI-стан замість xpPop()-виклику DOM напряму (рядки 1562–1567) */
@@ -50,7 +50,7 @@ export interface GamificationSlice {
   /**
    * S.rareEvents — рендериться в renderRare() поруч із renderAchs() у вкладці
    * «Статистика» (секція РІДКІСНІ ПОДІЇ, рядок 2556), тому логічно тут, а не
-   * в планувальнику. Форма елементів ще не звірена побітово — TODO.
+   * в планувальнику. Форму елементів перевіряє backupValidation.
    */
   rareEvents: RareEvent[];
 

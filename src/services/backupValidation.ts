@@ -1,4 +1,5 @@
 import type { AppState } from '../types';
+import taskTypeCatalog from '../content/task-types.json' with { type: 'json' };
 
 type Obj = Record<string, unknown>;
 type Check = (value: unknown, path: string) => unknown;
@@ -40,10 +41,10 @@ const questDeferral: Check = (value, path) => {
   return result;
 };
 const task = shape({
-  id, title: str, type: oneOf(['simple', 'check', 'counter', 'note', 'alarm', 'sched', 'timewin', 'ctx', 'negative', 'zonelinked']),
+  id, title: str, type: oneOf(Object.keys(taskTypeCatalog)),
   done: bool, someday: bool, zoneId: nullable(id), zoneColor: nullable(str), zoneName: nullable(str), folderId: nullable(str),
   expanded: bool, created: str, trashed: bool, doneDate: str, doneAt: str, completionCredited: bool, completionCreditDate: str, snoozeUntil: num,
-  questDeferral, completionDeferral: questDeferral,
+  questDeferral, completionDeferral: questDeferral, occurrenceId: str,
   items: array(shape({ text: str, done: bool, credited: bool }, ['text'], { done: false })),
   counter: num, counterTarget: num, cntHit: bool, negXp: num, note: str, alarmTime: str, alarmFired: bool,
   counterEnabled: bool, counterStep: num, counterUnit: oneOf(['count', 'ml', 'min']), counterCreditedProgress: num, counterDay: str,
@@ -55,7 +56,13 @@ const task = shape({
 }, ['id', 'title'], { type: 'simple', done: false, someday: false, created: '1970-01-01T00:00:00.000Z', repeat: 'none', repeatDays: [false, false, false, false, false, false, false], tags: [] });
 
 const fields: Record<string, Check> = {
+  formatVersion: oneOf([2]),
   tasks: array(task),
+  taskHistory: array(shape({ id: str, occurrenceId: str, taskId: id, taskCreated: str,
+    title: str, type: oneOf(Object.keys(taskTypeCatalog)), kind: oneOf(['completed', 'reopened']),
+    at: num, date: str, time: str, sequence: id, zoneId: nullable(id), counter: num,
+    items: array(shape({ text: str, done: bool, credited: bool }, ['text', 'done'])),
+  }, ['id', 'occurrenceId', 'taskId', 'taskCreated', 'title', 'type', 'kind', 'at', 'date', 'time'])),
   zones: array(shape({ id, nm: str, color: str, slots: array(slot), desc: str, prio: num, active: bool, off: bool, bound: bool, actPin: bool }, ['id', 'nm'], { color: '#4f8ef7', slots: [] })),
   folders: array(shape({ id: str, nm: str, ico: str }, ['id', 'nm'], { ico: '📁' })),
   qnotes: array(shape({ id, txt: str, folder: str, time: str, date: str }, ['id', 'txt'], { folder: 'general', time: '', date: '' })),
@@ -70,7 +77,7 @@ const fields: Record<string, Check> = {
   dayTemplates: array(shape({ id: str, name: str, blocks: array(block) }, ['id', 'name'], { blocks: [] })),
   weekTemplates: array(shape({ id: str, name: str, days: array(ruleDay) }, ['id', 'name'], { days: [] })),
   weekTplSeeded: bool,
-  planItems: map(array(shape({ title: str, done: bool, isEvent: bool, time: str }, ['title'], { done: false }))),
+  planItems: map(array(shape({ title: str, done: bool, isEvent: bool, isPrompt: bool, time: str }, ['title'], { done: false }))),
   planRestDays: map(bool), planSchedules: map(str), planDayZones: map(array(block)), planDayOff: map(array(id)),
   planRules: array(shape({ id: str, name: str, start: str, end: str, days: array(ruleDay) }, ['id', 'start', 'end'], { name: '', days: [] })),
   planDayLog: map(shape({ focus: strings, energy: num, routineDone: map((v, p) => typeof v === 'boolean' ? v : str(v, p)), priorities: array(v => v), tasksDone: num, note: str }, [], { focus: [], energy: 0, routineDone: {}, priorities: [], tasksDone: 0 })),
@@ -86,7 +93,7 @@ export function validateBackup(raw: unknown): Partial<AppState> {
   const copy = object(JSON.parse(JSON.stringify(input)), 'файл');
   const result: Obj = {};
   for (const [key, check] of Object.entries(fields)) if (key in copy) result[key] = check(copy[key], key);
-  for (const key of ['tasks', 'zones', 'qnotes', 'folders', 'recur', 'dayTemplates', 'weekTemplates', 'rareEvents']) {
+  for (const key of ['tasks', 'taskHistory', 'zones', 'qnotes', 'folders', 'recur', 'dayTemplates', 'weekTemplates', 'rareEvents']) {
     const items = result[key] as Obj[] | undefined;
     if (items && new Set(items.map(item => item.id)).size !== items.length) fail(`${key}: повторені id`);
   }

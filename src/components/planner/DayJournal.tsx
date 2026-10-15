@@ -3,6 +3,7 @@ import type { DateKey } from '../../types';
 import { ENERGY_LABELS } from '../../constants';
 import Icon from '../common/Icon';
 import type { IconName } from '../common/Icon';
+import { completedTaskOccurrences } from '../../utils/taskHistory';
 
 type JournalEntry = { tm: string; icon?: IconName; textIcon?: string; tx: string };
 
@@ -49,6 +50,7 @@ export function DayAnalysis({ ds, isFuture }: { ds: DateKey; isFuture: boolean }
 
 export function DayJournal({ ds }: { ds: DateKey }) {
   const tasks = useStore((s) => s.tasks);
+  const taskHistory = useStore(s => s.taskHistory);
   const qnotes = useStore((s) => s.qnotes);
   const folders = useStore((s) => s.folders);
   const focusLog = useStore((s) => s.focusLog);
@@ -58,7 +60,8 @@ export function DayJournal({ ds }: { ds: DateKey }) {
 
   const jr: JournalEntry[] = [];
   tasks.filter((t) => t.created && dateOf(t.created) === ds).forEach((t) => jr.push({ tm: hmOf(t.created), icon: 'plus', tx: `створено «${truncate18(t.title)}»` }));
-  tasks.filter((t) => t.doneDate === ds).forEach((t) => jr.push({ tm: t.doneAt || '', icon: 'check', tx: t.title }));
+  completedTaskOccurrences(taskHistory, tasks).filter(event => event.date === ds)
+    .forEach(event => jr.push({ tm: event.time, icon: 'check', tx: event.title }));
   qnotes.filter((n) => n.date === ds).forEach((n) => {
     const f = folders.find((x) => x.id === n.folder);
     jr.push({ tm: n.time || '', icon: f?.ico ? undefined : 'note', textIcon: f?.ico || undefined, tx: `створено «${truncate18(n.txt)}»` });

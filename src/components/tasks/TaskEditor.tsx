@@ -5,27 +5,16 @@ import { fmtDate, WD } from '../../utils/date';
 import { saveState, saveIsBlocked, getSaveErrorMessage, showRecoveryBanner } from '../../services/persistence';
 import { repeatDueOn } from '../../utils/taskSchedule';
 import { hasTaskCounter } from '../../utils/taskCounter';
+import taskTypeData from '../../content/task-types.json' with { type: 'json' };
 
-const TYPE_OPTIONS: { value: TaskType; label: string }[] = [
-  { value: 'simple', label: 'Проста' }, { value: 'sched', label: 'Запланована' },
-  { value: 'check', label: 'Чекліст' }, { value: 'counter', label: 'Лічильник' },
-  { value: 'note', label: 'З нотаткою' }, { value: 'alarm', label: 'Будильник' },
-  { value: 'timewin', label: 'Вікно часу' },
-  { value: 'ctx', label: 'З мітками' }, { value: 'negative', label: 'Журнал подій' },
-  { value: 'zonelinked', label: 'До зони' },
-];
-const TYPE_HINTS: Record<TaskType, string> = {
-  simple: 'Одна дія. Без дати доступна одразу; зона визначає, коли її доречно показати.',
-  sched: 'Одна дія на точну дату й час. До цього моменту вона доступна в Плані.',
-  check: 'Кілька кроків однієї справи. Галочки зберігають поступ; завершення всієї справи — окрема дія.',
-  counter: 'Рахує повторення або обсяг. Крок і ціль налаштовуються нижче; завершення — вручну.',
-  note: 'Дія з розгорнутими деталями. Для вільної думки без виконання використовуй Блокнот.',
-  alarm: 'Нагадування у заданий час. Для щоденного сигналу вибери повторення «Щодня».',
-  timewin: 'Показує справу лише в обраному проміжку часу та її зоні, якщо вона задана.',
-  ctx: 'Дія з ручними мітками. Напрямок і час показу визначає зона, а не мітки.',
-  negative: 'Фіксує подію, а не виконання квесту. Натискання збільшує журнал і віднімає заданий досвід.',
-  zonelinked: 'Дія для конкретної зони. Для нового входження обери «Кожна зона»; без повтору вона разова.',
-};
+type TaskTypeInfo = { label: string; icon: string; xp: number; hint: string; description: string; example: string };
+const TYPE_CATALOG = taskTypeData as Record<TaskType, TaskTypeInfo>;
+const TYPE_OPTIONS: { value: TaskType; label: string }[] = (Object.keys(TYPE_CATALOG) as TaskType[])
+  .map(value => ({ value, label: TYPE_CATALOG[value].label }));
+const TYPE_HINTS = (Object.keys(TYPE_CATALOG) as TaskType[]).reduce((hints, value) => {
+  hints[value] = TYPE_CATALOG[value].hint;
+  return hints;
+}, {} as Record<TaskType, string>);
 const REPEATS: { value: Task['repeat']; label: string }[] = [
   { value: 'none', label: 'Без повторення' }, { value: 'daily', label: 'Щодня' },
   { value: 'weekly', label: 'Щотижня' }, { value: 'weekdays', label: 'Понеділок — п’ятниця' },
