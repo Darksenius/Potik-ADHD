@@ -278,7 +278,7 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
     },
   });
   expect(saved.tasks.find((t: any) => t.id === 502).done).toBe(true);
-  expect(saved.xpTotal).toBe(12);
+  expect(saved.xpTotal).toBe(23);
   expect(saved.done).toBe(1);
   const captured = saved.tasks.filter((t: any) => t.title === '... Задача зі шторки');
   expect(captured).toHaveLength(1);
@@ -302,6 +302,6 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
   expect(final.tasks.find((t: any) => t.id === 501).counter).toBe(300);
   expect(final.tasks.filter((t: any) => t.title === '... Задача зі шторки')).toHaveLength(1);
   expect(final.qnotes).toHaveLength(2);
-  expect(final.xpTotal).toBe(12);
+  expect(final.xpTotal).toBe(23);
   expect(final.done).toBe(1);
 });

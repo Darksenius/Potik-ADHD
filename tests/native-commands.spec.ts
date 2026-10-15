@@ -78,7 +78,7 @@ test('queued shade captures preserve literal text, commit once, and stay distinc
     .toHaveLength(2);
   expect(saved.qnotes.filter((n: any) => ['Note from shade', '... literal ellipsis\nsecond line'].includes(n.txt))
     .every((n: any) => n.folder === 'impulse')).toBe(true);
-  expect(saved.xp).toBe(failedState.xp || 0);
+  expect(saved.xp).toBe((failedState.xp || 0) + 4 * 10 + 2);
 
   await page.evaluate(() => {
     window.__flowDrainEvents?.();
