@@ -353,7 +353,9 @@ export function drainNativeEvents(onChanged: () => void): void {
         for (const e of events) {
           const task = useStore.getState().tasks.find(t => String(t.id) === e.event.split(':')[1]);
           const staleDay = fmtDate(new Date(e.createdAt)) !== fmtDate(new Date());
-          const resetsByDay = !task || !!task.repeat && !['none', 'interval'].includes(task.repeat) || task.type === 'timewin';
+          // A one-off time window (including a dated preset copy) never resets
+          // at midnight. Its queued completion must finish the actual task.
+          const resetsByDay = !task || !!task.repeat && !['none', 'interval'].includes(task.repeat);
           const carriedOccurrence = task?.questDeferral && e.createdAt >= task.questDeferral.requestedAt;
           if (staleDay && (/^rc_/.test(e.event) || resetsByDay && !carriedOccurrence && /^(task_done:|task_inc:|task_dec:)/.test(e.event))) {
             if (task && /^task_done:\d+$/.test(e.event) && task.type !== 'negative') {
