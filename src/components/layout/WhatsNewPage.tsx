@@ -13,7 +13,7 @@ export default function WhatsNewPage() {
       <h1>Що нового</h1>
       <p>Твоя версія: {version}</p>
     </header>
-    <p className="whats-new-intro">Мої пояснення для тебе й короткі перевірки на телефоні. Почни з поточної версії; попередні записи можна розгорнути нижче.</p>
+    <p className="whats-new-intro">Що я змінила в поточній та попередніх версіях.</p>
     {releaseNotes.map((note, index) => <details className="release-note" data-version={note.version} open={index === 0} key={note.version}>
       <summary>
         <span><strong>{note.version}</strong><span>{note.title}</span><small>{new Date(note.date + 'T12:00:00').toLocaleDateString('uk', { day: 'numeric', month: 'long', year: 'numeric' })}</small></span>
@@ -22,13 +22,13 @@ export default function WhatsNewPage() {
         <p className="release-personal">{note.message}</p>
         <h2>Що я змінила</h2>
         <ul className="release-changes">{note.changes.map(change => <li key={change}>{change}</li>)}</ul>
-        <h2>Що тобі перевірити</h2>
+        {note.checks.length > 0 && <h2>Що тобі перевірити</h2>}
         {note.checks.map(check => <section className="release-check" key={check.title}>
           <h3>{check.title}</h3>
           <ol>{check.steps.map(step => <li key={step}>{step}</li>)}</ol>
           <p className="release-check-expected"><strong>Має бути:</strong> {check.expected}</p>
         </section>)}
-        <h2>Що вже перевірено</h2>
+        <h2>Стан версії</h2>
         <p>{note.verified}</p>
         {note.unfinished.length > 0 && <><h2>Ще в роботі</h2><ul>{note.unfinished.map(item => <li key={item}>{item}</li>)}</ul></>}
       </article>

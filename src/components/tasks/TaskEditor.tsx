@@ -121,7 +121,15 @@ export default function TaskEditor() {
         <button type="button" aria-pressed={type === 'simple'} onClick={() => chooseType('simple')}>Проста<span>Без обов’язкового часу</span></button>
         <button type="button" aria-pressed={scheduled} onClick={() => chooseType('sched')}>Запланована<span>На точну дату й час</span></button>
       </div>
-      {special && <p className="editor-hint">Особливий тип: {TYPE_OPTIONS.find(o => o.value === type)?.label}. Його параметри збережені нижче.</p>}
+      <div className="ef">
+        <label className="el" htmlFor="task-type">Тип задачі</label>
+        <select id="task-type" className="ei" value={type} onChange={e => chooseType(e.target.value as TaskType)} aria-describedby="task-type-hint">
+          {TYPE_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}
+        </select>
+        <p className="editor-hint">Усі {TYPE_OPTIONS.length} типів доступні тут.</p>
+        <p id="task-type-hint" className="editor-hint">{TYPE_HINTS[type]}</p>
+      </div>
+      {isNew && type === 'check' && <label className="el" htmlFor="task-checklist">Кроки — кожен із нового рядка<textarea id="task-checklist" className="ei" rows={4} value={checklistDraft} onChange={e => setChecklistDraft(e.target.value)} placeholder={'Зібрати речі\nПеревірити документи\nВийти з дому'} /></label>}
       <details id="task-note-section" className="editor-section" open={type === 'note' || !!note || undefined}>
         <summary>Нотатка (необов’язково)</summary>
         <div className="ef"><label className="el" htmlFor="task-note">Нотатка до задачі</label><textarea id="task-note" className="ei" rows={4} value={note} onChange={e => setNote(e.target.value)} placeholder="Деталі, адреса чи те, що допоможе виконати задачу" /></div>
@@ -136,6 +144,8 @@ export default function TaskEditor() {
         <div className="editor-row"><div className="ef"><label className="el" htmlFor="task-date">Дата{scheduled ? ' *' : ''}</label><input id="task-date" className="ei" type="date" value={date} onChange={e => { setDate(e.target.value); setKeepPast(false); }} /></div>
           {scheduled && <div className="ef"><label className="el" htmlFor="task-time">Час *</label><input id="task-time" className="ei" type="time" value={time} onChange={e => { setTime(e.target.value); setKeepPast(false); }} /></div>}
         </div>
+        {type === 'alarm' && <label className="el" htmlFor="task-alarm-time">Час будильника<input id="task-alarm-time" className="ei" type="time" value={alarmTime} onChange={e => setAlarmTime(e.target.value)} /></label>}
+        {type === 'timewin' && <div className="editor-row"><label className="el" htmlFor="task-window-start">Початок вікна<input id="task-window-start" className="ei" type="time" value={winStart} onChange={e => setWinStart(e.target.value)} /></label><label className="el" htmlFor="task-window-end">Кінець вікна<input id="task-window-end" className="ei" type="time" value={winEnd} onChange={e => setWinEnd(e.target.value)} /></label></div>}
         {pastTime && <div className="editor-warning"><p>Вибраний час уже минув. Задача залишиться в цьому дні.</p><label><input type="checkbox" checked={keepPast} onChange={e => setKeepPast(e.target.checked)} /> Зберегти з минулим часом</label></div>}
         {(scheduled || type === 'alarm') && <div className="ef"><label className="editor-check"><input type="checkbox" checked={reminder} onChange={e => setReminder(e.target.checked)} /> Нагадати у заданий час</label>
           {scheduled && reminder && <label className="el">Додатково заздалегідь<select className="ei" value={advance} onChange={e => setAdvance(e.target.value)}>
@@ -146,14 +156,9 @@ export default function TaskEditor() {
       </section>
       <details className="editor-section" open={special || counterEnabled || undefined}>
         <summary>Додаткові можливості{special ? ' · ' + TYPE_OPTIONS.find(o => o.value === type)?.label : ''}</summary>
-        <div className="ef"><label className="el" htmlFor="task-type">Тип задачі</label><select id="task-type" className="ei" value={type} onChange={e => chooseType(e.target.value as TaskType)}>{TYPE_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}</select></div>
-        <p className="editor-hint">{TYPE_HINTS[type]}</p>
-        {isNew && type === 'check' && <label className="el" htmlFor="task-checklist">Кроки — кожен із нового рядка<textarea id="task-checklist" className="ei" rows={4} value={checklistDraft} onChange={e => setChecklistDraft(e.target.value)} placeholder={'Зібрати речі\nПеревірити документи\nВийти з дому'} /></label>}
         <div className="ef"><label className="el" htmlFor="task-repeat">Повторення</label><select id="task-repeat" className="ei" value={repeat} onChange={e => setRepeat(e.target.value as Task['repeat'])}>{REPEATS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
         {repeat === 'interval' && <div className="editor-row"><label className="el">Інтервал<input type="number" className="ei" min="1" value={repeatInterval} onChange={e => setRepeatInterval(Math.max(1, Number(e.target.value)))} /></label><label className="el">Одиниця<select className="ei" value={repeatUnit} onChange={e => setRepeatUnit(e.target.value as typeof repeatUnit)}><option value="sec">секунд</option><option value="min">хвилин</option><option value="hour">годин</option><option value="day">днів</option><option value="week">тижнів</option><option value="month">місяців (30 днів)</option></select></label></div>}
         {repeat === 'custom' && <div className="rep-days">{WD.map((day, i) => <button className={'rd' + (repeatDays[i] ? ' on' : '')} type="button" aria-pressed={repeatDays[i]} key={day} onClick={() => { setRepeatDays(days => days.map((v, j) => j === i ? !v : v)); setDirty(true); }}>{day}</button>)}</div>}
-        {type === 'alarm' && <label className="el">Час будильника<input className="ei" type="time" value={alarmTime} onChange={e => setAlarmTime(e.target.value)} /></label>}
-        {type === 'timewin' && <div className="editor-row"><label className="el">Початок вікна<input className="ei" type="time" value={winStart} onChange={e => setWinStart(e.target.value)} /></label><label className="el">Кінець вікна<input className="ei" type="time" value={winEnd} onChange={e => setWinEnd(e.target.value)} /></label></div>}
         {type !== 'negative' && <label className="editor-check"><input id="task-counter-enabled" type="checkbox" checked={type === 'counter' || counterEnabled} disabled={type === 'counter'} onChange={e => setCounterEnabled(e.target.checked)} /> Лічильник прогресу</label>}
         {type !== 'negative' && (type === 'counter' || counterEnabled) && <>
           <div className="editor-row"><label className="el" htmlFor="task-counter-step">Крок + / −<input id="task-counter-step" type="number" className="ei" min="1" value={counterStep} onChange={e => setCounterStep(Number(e.target.value))} /></label>

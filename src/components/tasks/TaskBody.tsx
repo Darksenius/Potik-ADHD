@@ -27,7 +27,9 @@ export default function TaskBody({ t }: { t: Task }) {
           <div className="bl">Пункти</div>
           {(t.items || []).map((it, i) => (
             <div className={'ci' + (it.done ? ' cid' : '')} key={i}>
-              <input type="checkbox" aria-label={it.text} checked={it.done} disabled={t.done} onChange={() => toggleChecklistItem(t.id, i)} />
+              <label className="ci-check-target">
+                <input type="checkbox" aria-label={it.text} checked={it.done} disabled={t.done} onChange={() => toggleChecklistItem(t.id, i)} />
+              </label>
               <input key={it.text} className="ei" aria-label={'Текст пункту ' + (i + 1)} defaultValue={it.text} onBlur={e => { editChecklistItem(t.id, i, e.target.value); e.target.value = e.target.value.trim() || it.text; }} />
               <button className="ab" aria-label={'Видалити пункт: ' + it.text} onClick={() => deleteChecklistItem(t.id, i)}><Icon name="close" /></button>
             </div>

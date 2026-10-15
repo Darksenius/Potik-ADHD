@@ -24,7 +24,11 @@ button{cursor:pointer}
 .ctx-filter .ctxf{font-family:inherit;min-height:40px;font-size:12px}
 .task-title-button{display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;font:inherit;min-height:36px;overflow-wrap:anywhere}
 .task-schedule-label{color:var(--t2);font-size:12px;line-height:1.45;margin:3px 0}
-.tc .ck{width:40px;height:40px;min-width:40px}
+.tc .ck{width:48px;height:48px;min-width:48px;flex-shrink:0;background:var(--s2);border-width:2px}
+.tc .ck.on{background:var(--z);border-color:var(--z)}
+.tc .ck:not(.on):hover{background:color-mix(in srgb,var(--z) 12%,var(--s2));border-color:var(--z)}
+.tc .ck.neg-ck:not(.on):hover{background:color-mix(in srgb,var(--neg) 12%,var(--s2));border-color:var(--neg)}
+.tc .ck svg{width:20px;height:20px}
 .tc .ab{min-width:40px;min-height:40px;font-size:16px}
 .tc-meta{flex-wrap:wrap;gap:6px}
 .tc-acts{display:flex;justify-content:flex-end;flex-wrap:wrap;width:100%;margin-left:0}
@@ -56,7 +60,7 @@ button{cursor:pointer}
 .editor-row>*{flex:1;min-width:0}
 .editor-actions{display:flex;flex-wrap:wrap;gap:7px}
 .editor-check,.editor-warning label{display:flex;align-items:center;gap:10px;min-height:46px;font-size:14px;line-height:1.45}
-.editor-check input,.editor-warning input{width:20px;height:20px;flex-shrink:0}
+.editor-check input,.editor-warning input{width:24px;height:24px;flex-shrink:0}
 .editor-warning,.editor-error{background:var(--s2);border-left:3px solid #e5ae4b;border-radius:7px;padding:12px;font-size:13px;line-height:1.5;margin:10px 0}
 .editor-error{border-color:var(--neg)}
 .editor-error button{min-height:44px;padding:8px 12px;margin-top:8px;background:var(--s1);color:var(--t1);border:1px solid var(--b2);border-radius:7px;font:inherit}
@@ -70,6 +74,9 @@ button{cursor:pointer}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 html[data-reduce-motion="true"] *,html[data-reduce-motion="true"] *::before,html[data-reduce-motion="true"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 .ci .ei { flex: 1; min-width: 0; width: auto; }
+.ci-check-target { display: flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; height: 44px; flex-shrink: 0; cursor: pointer; }
+.ci-check-target input[type=checkbox] { width: 24px; height: 24px; margin: 0; cursor: pointer; }
+.ci-check-target input[type=checkbox]:disabled { cursor: not-allowed; }
 .ci.cid .ei { text-decoration: line-through; color: var(--t3); }
 .cw { flex-wrap: wrap; }
 .cbtn { width: auto; min-width: 44px; height: 44px; padding: 0 8px; }

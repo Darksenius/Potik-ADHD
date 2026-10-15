@@ -311,7 +311,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 .tb-body.open{display:block}
 .bl{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);font-weight:700;margin:9px 0 4px}
 .ci{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;color:var(--t2)}
-.ci input[type=checkbox]{accent-color:var(--z);width:13px;height:13px;cursor:pointer;flex-shrink:0}
+.ci input[type=checkbox]{accent-color:var(--z);width:24px;height:24px;cursor:pointer;flex-shrink:0}
 .ci.cid span{text-decoration:line-through;color:var(--t3)}
 .ci-add{display:flex;gap:5px;margin-top:5px}
 .ci-add input{flex:1;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:5px 9px;color:var(--t1);font-size:12px;font-family:'Syne',sans-serif;outline:none}
