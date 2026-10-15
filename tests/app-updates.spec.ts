@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { compareAppVersions, parseAppVersion, parseLatestRelease } from '../src/services/appUpdates';
 
 const releasePayload = (overrides: Record<string, unknown> = {}) => ({
@@ -59,7 +60,9 @@ test('rejects draft, prerelease, and malformed release payloads', () => {
 
 test('checks releases only on request and keeps repository links available after a network error', async ({ page }) => {
   const apiUrl = 'https://api.github.com/repos/Darksenius/Potik-ADHD/releases/latest';
-  const apkUrl = 'https://github.com/Darksenius/Potik-ADHD/releases/download/v1.7.6.r21/Potik-v1.7.6.r21.apk';
+  const installedMajor = Number(JSON.parse(readFileSync('package.json', 'utf8')).version.split('.')[0]);
+  const newerVersion = `${installedMajor + 1}.0.0.r1`;
+  const apkUrl = `https://github.com/Darksenius/Potik-ADHD/releases/download/v${newerVersion}/Potik-v${newerVersion}.apk`;
   let requestCount = 0;
   let failRequests = false;
   await page.route(apiUrl, async route => {
@@ -72,13 +75,13 @@ test('checks releases only on request and keeps repository links available after
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        tag_name: 'v1.7.6.r21',
+        tag_name: `v${newerVersion}`,
         draft: false,
         prerelease: false,
         published_at: '2026-10-15T10:30:00Z',
         assets: [{
           id: 21,
-          name: 'Potik-v1.7.6.r21.apk',
+          name: `Potik-v${newerVersion}.apk`,
           state: 'uploaded',
           content_type: 'application/vnd.android.package-archive',
           browser_download_url: 'https://attacker.invalid/untrusted.apk',
@@ -107,7 +110,7 @@ test('checks releases only on request and keeps repository links available after
   await about.getByRole('button', { name: 'Перевірити оновлення' }).click();
   const response = await firstResponse;
   expect(response.status()).toBe(200);
-  await expect(about.getByText(/Остання версія: 1\.7\.6\.r21/)).toBeVisible();
+  await expect(about.locator('.app-updates-result')).toContainText(`Остання версія: ${newerVersion}`);
   await expect(about.getByRole('link', { name: 'Завантажити APK' })).toHaveAttribute('href', apkUrl);
   expect(requestCount).toBe(1);
 

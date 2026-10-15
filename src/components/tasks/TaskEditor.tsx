@@ -177,8 +177,15 @@ export default function TaskEditor() {
   }
 
   return <div id="edit-page" className="open" role="dialog" aria-modal="true" aria-labelledby="task-editor-title">
-    <div id="edit-header"><button className="edit-back" onClick={close}>← Назад</button><h2 id="task-editor-title">{isNew ? 'Нова задача' : 'Редагування задачі'}</h2></div>
-    <form id="edit-body" onChange={() => { setDirty(true); setError(''); }} onSubmit={e => { e.preventDefault(); submit(); }}>
+    <div id="edit-header">
+      <div className="editor-header-actions">
+        <button type="button" className="edit-back" onClick={close}>← Назад</button>
+        <h2 id="task-editor-title">{isNew ? 'Нова задача' : 'Редагування задачі'}</h2>
+        <button id="edit-save-fab" type="submit" form="edit-body" aria-label={isNew ? 'Створити задачу' : 'Зберегти зміни'}>{isNew ? 'Створити' : 'Зберегти'}</button>
+      </div>
+      {error && <div id="task-editor-error" className="editor-error" role="alert"><p>{error}</p>{saveIsBlocked() && <button type="button" onClick={showRecoveryBanner}>Відкрити відновлення</button>}</div>}
+    </div>
+    <form id="edit-body" aria-describedby={error ? 'task-editor-error' : undefined} onChange={() => { setDirty(true); setError(''); }} onSubmit={e => { e.preventDefault(); submit(); }}>
       <div className="ef"><label className="el" htmlFor="task-title">Що зробити?</label><input id="task-title" className="ei" value={title} onChange={e => setTitle(e.target.value)} placeholder="Наприклад, забрати посилку" autoFocus /></div>
       {isNew && draftConflict && <div className="editor-warning" role="status"><p>Збережена чернетка має іншу дату або попереднє налаштування. Можеш відновити її або відкинути й продовжити з переданими цій формі значеннями.</p><div className="editor-actions"><button type="button" onClick={restoreDraft}>Відновити чернетку</button><button type="button" onClick={startThisDraft}>Відкинути чернетку й почати цю</button></div></div>}
       {isNew && !draftConflict && <div className="editor-draft-status" role="status" aria-live="polite">{saveStatus.phase === 'pending' ? 'Зберігаю чернетку…' : saveStatus.phase === 'error' ? `Не вдалося зберегти чернетку: ${saveStatus.message || 'помилка збереження'}` : draftOnOpen ? 'Чернетку збережено на цьому пристрої.' : 'Налаштування чернетки зберігаються на цьому пристрої.'}<button type="button" onClick={discardDraft}>Відкинути чернетку</button></div>}
@@ -248,8 +255,6 @@ export default function TaskEditor() {
         {type === 'timewin' && <>Часове вікно доступності: <strong>{winStart}–{winEnd}</strong>. </>}
         {repeat !== 'none' && <>Повторення: <strong>{REPEATS.find(r => r.value === repeat)?.label}</strong>. </>}
       </div>
-      {error && <div className="editor-error" role="alert"><p>{error}</p>{saveIsBlocked() && <button type="button" onClick={showRecoveryBanner}>Відкрити відновлення</button>}</div>}
-      <button id="edit-save-fab" type="submit">{isNew ? 'Створити задачу' : 'Зберегти зміни'}</button>
     </form>
   </div>;
 }

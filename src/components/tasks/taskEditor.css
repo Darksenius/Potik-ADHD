@@ -3,4 +3,10 @@
 .editor-draft-status{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;margin:8px 0 14px;border:1px solid var(--b2);border-radius:10px;background:var(--s1);color:var(--t2);font-size:12px}
 .editor-draft-status button,.editor-warning button{flex:0 0 auto;border:0;background:transparent;color:var(--z);font:inherit;font-weight:700;text-decoration:underline}
 .editor-type-section{margin:4px 0 12px}
+#edit-page #edit-header{display:block;padding:0}
+.editor-header-actions{display:flex;align-items:center;max-width:520px;margin:0 auto;padding:10px 13px}
+#edit-header .edit-back{flex:0 0 auto;margin-right:8px}
+#edit-header h2{min-width:0;margin-right:8px}
+#edit-header #edit-save-fab{flex:0 0 auto;width:auto;min-height:44px;margin:0;padding:10px 12px;font-size:13px;white-space:nowrap}
+#edit-header .editor-error{margin:0 13px 10px;max-height:30vh;overflow-y:auto}
 @media(max-width:520px){.editor-kinds{grid-template-columns:1fr}.editor-kinds button{text-align:left}.editor-draft-status{align-items:flex-start;flex-direction:column}}
