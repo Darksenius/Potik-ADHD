@@ -53,7 +53,22 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         String action = intent != null ? intent.getAction() : null;
         if (action == null) return;
+        Context appContext = context.getApplicationContext();
+        Intent queuedIntent = new Intent(intent);
+        BroadcastReceiver.PendingResult pending = goAsync();
+        FlowDatabase.executeStorage(() -> {
+            try {
+                handleReceive(appContext, queuedIntent);
+            } catch (Exception e) {
+                android.util.Log.w("FlowAlarmReceiver", "Alarm command failed", e);
+            } finally {
+                if (pending != null) pending.finish();
+            }
+        });
+    }
 
+    private void handleReceive(Context context, Intent intent) {
+        String action = intent.getAction();
         FlowBridge bridge = new FlowBridge(context);
 
         if (ACTION_SCHED_CHECK.equals(action)) {
@@ -411,6 +426,11 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
      * спрацювання — нагадування приходить хвилина-в-хвилину, а не «раз на 15 хв».
      */
     public static void scheduleNextDue(Context ctx, FlowBridge bridge) {
+        if (!FlowDatabase.isStorageThread()) {
+            Context appContext = ctx.getApplicationContext();
+            FlowDatabase.executeStorage(() -> scheduleNextDue(appContext, bridge));
+            return;
+        }
         try {
             String notifJson = bridge.getNotifJson();
             if (notifJson == null || notifJson.isEmpty()) { cancelNextDue(ctx); return; }
@@ -440,12 +460,13 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             JSONArray original = snapshot.optJSONArray("schedList");
             JSONArray output = new JSONArray();
             List<QuestPolicy.Segment> timeline = QuestPolicy.timelineForSnapshot(snapshot, zone);
+            QuestPolicy.OccurrenceIndex occurrences = QuestPolicy.OccurrenceIndex.fromSnapshot(snapshot, zone);
             List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(snapshot.optJSONArray("questTasks"));
             JSONArray rawEvents;
             try { rawEvents = new JSONArray(bridge.getEventEnvelopes()); }
             catch (Exception ignored) { rawEvents = new JSONArray(); }
             List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
-                    QuestPolicy.eventsFromJson(rawEvents), now, timeline, zone);
+                    QuestPolicy.eventsFromJson(rawEvents), now, timeline, zone, occurrences);
             Map<String, QuestPolicy.Task> byId = new HashMap<>();
             for (QuestPolicy.Task task : projected) {
                 byId.put(task.id, task);
@@ -593,6 +614,11 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
 
     /** Викликати при старті апки — запускає всі цикли */
     public static void scheduleAll(Context ctx) {
+        if (!FlowDatabase.isStorageThread()) {
+            Context appContext = ctx.getApplicationContext();
+            FlowDatabase.executeStorage(() -> scheduleAll(appContext));
+            return;
+        }
         cancelLegacyWater(ctx);
         schedule(ctx, ACTION_SCHED_CHECK, System.currentTimeMillis() + 60_000L, 1);
         scheduleDailyReset(ctx);

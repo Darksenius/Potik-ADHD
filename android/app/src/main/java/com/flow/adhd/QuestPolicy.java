@@ -370,6 +370,116 @@ final class QuestPolicy {
         WallRange(int zoneId, int start, int end) { this.zoneId=zoneId; this.start=start; this.end=end; }
     }
 
+    /**
+     * Canonical assigned-zone occurrences, kept separate from the resolved
+     * primary-zone segments. Overlapping zones can split a primary segment
+     * without changing the assigned occurrence that owns a task completion.
+     */
+    static final class OccurrenceIndex {
+        private final List<AssignedOccurrence> wallOccurrences;
+        private final List<AbsoluteOccurrence> absoluteOccurrences;
+        private final boolean wallClock;
+
+        private OccurrenceIndex(List<AssignedOccurrence> wall, List<AbsoluteOccurrence> absolute,
+                                boolean wallClock) {
+            wallOccurrences = wall;
+            absoluteOccurrences = absolute;
+            this.wallClock = wallClock;
+        }
+
+        static OccurrenceIndex fromAssignedRanges(List<AssignedOccurrence> ranges) {
+            return new OccurrenceIndex(ranges == null ? Collections.<AssignedOccurrence>emptyList()
+                    : new ArrayList<>(ranges), Collections.<AbsoluteOccurrence>emptyList(), true);
+        }
+
+        static OccurrenceIndex fromAbsoluteRanges(List<AbsoluteOccurrence> ranges) {
+            return new OccurrenceIndex(Collections.<AssignedOccurrence>emptyList(),
+                    ranges == null ? Collections.<AbsoluteOccurrence>emptyList() : new ArrayList<>(ranges), false);
+        }
+
+        static OccurrenceIndex fromSnapshot(JSONObject snapshot, TimeZone zone) {
+            if (snapshot == null) return null;
+            JSONArray days = snapshot.optJSONArray("questWallDays");
+            List<AssignedOccurrence> wall = new ArrayList<>();
+            boolean hasWallContract = false;
+            if (days != null) {
+                for (int i = 0; i < days.length(); i++) {
+                    JSONObject day = days.optJSONObject(i);
+                    if (day == null || !day.has("assignedOccurrences")) continue;
+                    hasWallContract = true;
+                    String date = day.optString("date", "");
+                    if (parseDate(date, zone) == null) continue;
+                    JSONArray rows = day.optJSONArray("assignedOccurrences");
+                    if (rows == null) continue;
+                    for (int j = 0; j < rows.length(); j++) {
+                        JSONObject row = rows.optJSONObject(j);
+                        if (row == null) continue;
+                        int zoneId = row.optInt("zoneId", -1);
+                        int start = row.optInt("startMinute", -1);
+                        int end = row.optInt("endMinute", -1);
+                        if (zoneId < 0 || start < 0 || start >= 1440 || end <= start || end > 1440) continue;
+                        wall.add(new AssignedOccurrence(date, zoneId, start, end));
+                    }
+                }
+            }
+            if (hasWallContract) return new OccurrenceIndex(wall, Collections.<AbsoluteOccurrence>emptyList(), true);
+
+            JSONArray absoluteRows = snapshot.optJSONArray("questZoneOccurrences");
+            if (absoluteRows == null) return null;
+            List<AbsoluteOccurrence> absolute = new ArrayList<>();
+            for (int i = 0; i < absoluteRows.length(); i++) {
+                JSONObject row = absoluteRows.optJSONObject(i);
+                if (row == null) continue;
+                int zoneId = row.optInt("zoneId", -1);
+                long start = row.optLong("startAt", 0L), end = row.optLong("endAt", 0L);
+                String key = row.optString("key", "");
+                if (zoneId >= 0 && start > 0 && end > start && !key.isEmpty())
+                    absolute.add(new AbsoluteOccurrence(zoneId, start, end, key));
+            }
+            return new OccurrenceIndex(Collections.<AssignedOccurrence>emptyList(), absolute, false);
+        }
+
+        String keyAt(int zoneId, long at, TimeZone zone) {
+            if (zoneId < 0 || at <= 0) return "";
+            if (!wallClock) {
+                for (AbsoluteOccurrence occurrence : absoluteOccurrences)
+                    if (occurrence.zoneId == zoneId && at >= occurrence.startAt && at < occurrence.endAt)
+                        return occurrence.key;
+                return "";
+            }
+            TimeZone localZone = zone == null ? TimeZone.getDefault() : zone;
+            Calendar calendar = Calendar.getInstance(localZone, Locale.US);
+            calendar.setTimeInMillis(at);
+            String date = localDate(at, localZone);
+            int minute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE);
+            for (AssignedOccurrence occurrence : wallOccurrences) {
+                if (occurrence.zoneId == zoneId && occurrence.date.equals(date)
+                        && minute >= occurrence.startMinute && minute < occurrence.endMinute) {
+                    return date + ":" + zoneId + ":" + String.format(Locale.US, "%02d:%02d",
+                            occurrence.startMinute / 60, occurrence.startMinute % 60);
+                }
+            }
+            return "";
+        }
+    }
+
+    static final class AssignedOccurrence {
+        final String date;
+        final int zoneId, startMinute, endMinute;
+        AssignedOccurrence(String date, int zoneId, int startMinute, int endMinute) {
+            this.date = date; this.zoneId = zoneId; this.startMinute = startMinute; this.endMinute = endMinute;
+        }
+    }
+
+    static final class AbsoluteOccurrence {
+        final int zoneId;
+        final long startAt, endAt;
+        final String key;
+        AbsoluteOccurrence(int zoneId, long startAt, long endAt, String key) {
+            this.zoneId = zoneId; this.startAt = startAt; this.endAt = endAt; this.key = key;
+        }
+    }
+
     private static int wallZoneAt(List<WallRange> ranges, int minute) {
         if (ranges != null) for (WallRange range : ranges)
             if (minute >= range.start && minute < range.end) return range.zoneId;
@@ -421,6 +531,11 @@ final class QuestPolicy {
 
     /** Projects Room commands onto a copy so actions remain correct while WebView is closed. */
     static List<Task> projectPendingEvents(List<Task> source,List<Event> events,long now,List<Segment> timeline,TimeZone zone) {
+        return projectPendingEvents(source, events, now, timeline, zone, null);
+    }
+
+    static List<Task> projectPendingEvents(List<Task> source,List<Event> events,long now,List<Segment> timeline,
+                                           TimeZone zone,OccurrenceIndex occurrences) {
         List<Task> result=new ArrayList<>(); Map<String,Task> byId=new HashMap<>();
         String today=localDate(now,zone);
         Set<String> pendingDeferrals=new HashSet<>();
@@ -441,19 +556,20 @@ final class QuestPolicy {
         if(events==null)return result;
         for(Event e:events){
             if(e==null||e.createdAt<=0)continue; Task t=byId.get(e.taskId);
-            if(t==null||"negative".equals(t.type)||createdAfter(t,e.createdAt,zone)||isCurrentlyDone(t,now,timeline,zone))continue;
+            if(t==null||"negative".equals(t.type)||createdAfter(t,e.createdAt,zone)
+                    ||isCurrentlyDone(t,now,timeline,zone,occurrences))continue;
             switch(e.type){
                 case Event.DONE:
-                    if(!completionApplies(t,e.createdAt,now,timeline,zone))break;
+                    if(!completionApplies(t,e.createdAt,now,timeline,zone,occurrences))break;
                     t.done=true;t.doneDate=localDate(e.createdAt,zone);
                     t.snoozeUntil=0L;t.deferral=null;
                     if("timewin".equals(t.type))t.completedToday=sameLocalDate(e.createdAt,now,zone);
                     if("zonelinked".equals(t.type)){
                         t.zoneDoneToday=sameLocalDate(e.createdAt,now,zone);
-                        t.zoneOccurrenceKey=occurrenceKey(t.zoneId,segmentAt(timeline,e.createdAt),e.createdAt,zone);
+                        t.zoneOccurrenceKey=occurrenceKeyAt(t, e.createdAt, timeline, zone, occurrences);
                     }
                     if("everyzone".equals(t.repeat))
-                        t.zoneOccurrenceKey=occurrenceKey(t.zoneId,segmentAt(timeline,e.createdAt),e.createdAt,zone);
+                        t.zoneOccurrenceKey=occurrenceKeyAt(t, e.createdAt, timeline, zone, occurrences);
                     if("interval".equals(t.repeat)&&t.repeatMs>0L&&e.createdAt<=Long.MAX_VALUE-t.repeatMs)
                         t.nextRepeatAt=e.createdAt+t.repeatMs;
                     break;
@@ -474,18 +590,25 @@ final class QuestPolicy {
     }
 
     static Selection select(List<Task> source,List<Segment> timeline,long timelineUntil,long now,TimeZone zone,int limit) {
+        return select(source, timeline, timelineUntil, now, zone, limit, null);
+    }
+
+    static Selection select(List<Task> source,List<Segment> timeline,long timelineUntil,long now,TimeZone zone,
+                            int limit,OccurrenceIndex occurrences) {
         if(timeline==null||timeline.isEmpty()||timelineUntil<=now)return Selection.invalid("Відкрий Потік, щоб оновити квести");
         Segment current=segmentAt(timeline,now); if(current==null)return Selection.invalid("Відкрий Потік, щоб оновити зони");
         List<Ranked> candidates=new ArrayList<>();
-        if(source!=null)for(int i=0;i<source.size();i++){Task t=source.get(i);if(t!=null&&eligible(t,current,timeline,now,zone))candidates.add(new Ranked(t,i));}
+        if(source!=null)for(int i=0;i<source.size();i++){Task t=source.get(i);if(t!=null&&eligible(t,current,timeline,now,zone,occurrences))candidates.add(new Ranked(t,i));}
         Collections.sort(candidates,(a,b)->{int ap=a.task.priorityIndex<0?Integer.MAX_VALUE:a.task.priorityIndex;int bp=b.task.priorityIndex<0?Integer.MAX_VALUE:b.task.priorityIndex;int p=Integer.compare(ap,bp);return p!=0?p:Integer.compare(a.index,b.index);});
         List<Task> selected=new ArrayList<>();int max=Math.max(0,Math.min(MAX_CARDS,limit));for(Ranked r:candidates){if(selected.size()>=max)break;selected.add(r.task);}
         return new Selection(true,"",current.zoneId,current,selected);
     }
     private static final class Ranked {final Task task;final int index;Ranked(Task t,int i){task=t;index=i;}}
 
-    private static boolean eligible(Task t,Segment current,List<Segment> timeline,long now,TimeZone zone) {
-        if(t.id.isEmpty()||t.trashed||t.someday||"negative".equals(t.type)||isCurrentlyDone(t,now,timeline,zone))return false;
+    private static boolean eligible(Task t,Segment current,List<Segment> timeline,long now,TimeZone zone,
+                                     OccurrenceIndex occurrences) {
+        if(t.id.isEmpty()||t.trashed||t.someday||"negative".equals(t.type)
+                ||isCurrentlyDone(t,now,timeline,zone,occurrences))return false;
         if("everyzone".equals(t.repeat)&&!t.hasZone)return false;
         if("zonelinked".equals(t.type)&&!t.hasZone)return false;
         if(t.snoozeUntil>now)return false;
@@ -565,15 +688,20 @@ final class QuestPolicy {
     }
 
     static boolean isCurrentlyDone(Task t,long now,List<Segment> timeline,TimeZone zone) {
+        return isCurrentlyDone(t, now, timeline, zone, null);
+    }
+
+    static boolean isCurrentlyDone(Task t,long now,List<Segment> timeline,TimeZone zone,
+                                   OccurrenceIndex occurrences) {
         String today=localDate(now,zone);
         String creditDate=t.doneDate.isEmpty()?t.completionCreditDate:t.doneDate;
         if("timewin".equals(t.type)&&t.completedToday&&(creditDate.isEmpty()||today.equals(creditDate)))return true;
-        if("zonelinked".equals(t.type)&&t.zoneDoneToday){String key=occurrenceKey(t.zoneId,segmentAt(timeline,now),now,zone);if(t.zoneOccurrenceKey.isEmpty()||t.zoneOccurrenceKey.equals(key))return true;}
+        if("zonelinked".equals(t.type)&&t.zoneDoneToday){String key=occurrenceKeyAt(t,now,timeline,zone,occurrences);if(t.zoneOccurrenceKey.isEmpty()||t.zoneOccurrenceKey.equals(key))return true;}
         if(!t.done)return false;
         if(calendarRepeat(t.repeat)&&repeatDue(t,today,now,t.zoneId,zone))
             return creditDate.isEmpty()||today.compareTo(creditDate)<=0;
         if("everyzone".equals(t.repeat)) {
-            String occurrence=occurrenceKey(t.zoneId,segmentAt(timeline,now),now,zone);
+            String occurrence=occurrenceKeyAt(t,now,timeline,zone,occurrences);
             if(!t.zoneOccurrenceKey.isEmpty()&&!occurrence.isEmpty()&&!t.zoneOccurrenceKey.equals(occurrence))return false;
         }
         if("interval".equals(t.repeat)&&t.nextRepeatAt>0&&now>=t.nextRepeatAt)return false;
@@ -581,13 +709,30 @@ final class QuestPolicy {
         return true;
     }
     static boolean completionApplies(Task t,long eventAt,long now,List<Segment> timeline,TimeZone zone) {
+        return completionApplies(t, eventAt, now, timeline, zone, null);
+    }
+
+    static boolean completionApplies(Task t,long eventAt,long now,List<Segment> timeline,TimeZone zone,
+                                     OccurrenceIndex occurrences) {
         if(t.done&&"interval".equals(t.repeat)&&t.nextRepeatAt>0&&eventAt<t.nextRepeatAt)return false;
         if(calendarRepeat(t.repeat))return sameLocalDate(eventAt,now,zone);
         if("everyzone".equals(t.repeat)||"zonelinked".equals(t.type)){
-            if(!sameLocalDate(eventAt,now,zone))return false;Segment a=segmentAt(timeline,eventAt),b=segmentAt(timeline,now);
+            if(!sameLocalDate(eventAt,now,zone))return false;
+            if (occurrences != null) {
+                String eventKey = occurrenceKeyAt(t, eventAt, timeline, zone, occurrences);
+                String nowKey = occurrenceKeyAt(t, now, timeline, zone, occurrences);
+                return !eventKey.isEmpty() && eventKey.equals(nowKey);
+            }
+            Segment a=segmentAt(timeline,eventAt),b=segmentAt(timeline,now);
             return a==null||b==null||(a.zoneId==b.zoneId&&a.startAt==b.startAt);
         }
         return true;
+    }
+
+    private static String occurrenceKeyAt(Task task,long at,List<Segment> timeline,TimeZone zone,
+                                          OccurrenceIndex occurrences) {
+        if (occurrences != null) return occurrences.keyAt(task.zoneId, at, zone);
+        return occurrenceKey(task.zoneId, segmentAt(timeline, at), at, zone);
     }
     private static boolean createdAfter(Task t,long eventAt,TimeZone zone){long created=parseCreatedAt(t.created);return created>0&&eventAt<created;}
 

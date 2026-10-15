@@ -48,7 +48,8 @@ public class MainActivity extends BridgeActivity {
             if (taskId != null && !taskId.trim().isEmpty() && taskId.indexOf(':') < 0) {
                 // Navigation is durable through Room if the WebView is not ready yet.
                 // The JS bridge handles focus; native never mutates the task itself.
-                flowBridge.pushEvent("open_task:" + taskId.trim());
+                String event = "open_task:" + taskId.trim();
+                FlowDatabase.executeStorage(() -> flowBridge.pushEvent(event));
             }
         }
         if (intent != null && "tasks".equals(intent.getStringExtra("nav"))) {

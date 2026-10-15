@@ -352,7 +352,8 @@ public class FlowCaptureTest {
             .substring(("capture_task_v2:" + capturedTaskIdText + ":").length()));
         assertTrue(capturedTaskId > 0 && capturedTaskId <= 9_007_199_254_740_991L);
         assertEquals(capturedCommand.getLong("createdAt"), capturedPayload.getLong("createdAt"));
-        Notification capturedCard = awaitTaskNotification(notificationManager, FlowNotifService.NOTIF_TASK_BASE);
+        Notification capturedCard = awaitTaskNotification(notificationManager, FlowNotifService.NOTIF_TASK_BASE,
+                "1.  " + taskText);
         assertEquals("1.  " + taskText, capturedCard.extras.getCharSequence(Notification.EXTRA_TITLE).toString());
         assertEquals(3, capturedCard.actions.length);
         assertTrue(hasAction(capturedCard, "Виконано", FlowNotifService.ACTION_TASK_DONE));
@@ -452,6 +453,23 @@ public class FlowCaptureTest {
             SystemClock.sleep(100);
         }
         fail("Task notification did not appear: " + id);
+        return null;
+    }
+
+    private static Notification awaitTaskNotification(NotificationManager manager, int id,
+                                                       String expectedTitle) throws Exception {
+        long deadline = SystemClock.elapsedRealtime() + TIMEOUT_MS;
+        String lastTitle = "<none>";
+        while (SystemClock.elapsedRealtime() < deadline) {
+            for (android.service.notification.StatusBarNotification item : manager.getActiveNotifications()) {
+                if (item.getId() != id) continue;
+                CharSequence title = item.getNotification().extras.getCharSequence(Notification.EXTRA_TITLE);
+                lastTitle = String.valueOf(title);
+                if (expectedTitle.contentEquals(title)) return item.getNotification();
+            }
+            SystemClock.sleep(100);
+        }
+        fail("Task notification title was not updated to " + expectedTitle + "; current title=" + lastTitle);
         return null;
     }
 

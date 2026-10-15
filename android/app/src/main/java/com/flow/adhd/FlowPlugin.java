@@ -11,6 +11,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.Manifest;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import androidx.core.content.ContextCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -65,9 +67,16 @@ public class FlowPlugin extends Plugin {
 
     @PluginMethod
     public void readEvents(PluginCall call) {
-        JSObject ret = new JSObject();
-        ret.put("events", new FlowBridge(getContext()).getEventEnvelopes());
-        call.resolve(ret);
+        Context appContext = getContext().getApplicationContext();
+        FlowDatabase.executeStorage(() -> {
+            try {
+                JSObject ret = new JSObject();
+                ret.put("events", new FlowBridge(appContext).getEventEnvelopes());
+                resolveOnMain(call, ret);
+            } catch (Exception e) {
+                rejectOnMain(call, "Unable to read queued events");
+            }
+        });
     }
 
     @PluginMethod
@@ -105,17 +114,27 @@ public class FlowPlugin extends Plugin {
      */
     @PluginMethod
     public void drainEvents(PluginCall call) {
-        FlowBridge bridge = new FlowBridge(getContext());
-        String eventsJson = bridge.getEvents();
-        JSObject ret = new JSObject();
-        if ("[]".equals(eventsJson)) {
-            ret.put("events", "[]");
-            call.resolve(ret);
-            return;
-        }
-        bridge.clearEvents();
-        ret.put("events", eventsJson);
-        call.resolve(ret);
+        Context appContext = getContext().getApplicationContext();
+        FlowDatabase.executeStorage(() -> {
+            try {
+                FlowBridge bridge = new FlowBridge(appContext);
+                String eventsJson = bridge.getEvents();
+                if (!"[]".equals(eventsJson)) bridge.clearEvents();
+                JSObject ret = new JSObject();
+                ret.put("events", eventsJson);
+                resolveOnMain(call, ret);
+            } catch (Exception e) {
+                rejectOnMain(call, "Unable to drain queued events");
+            }
+        });
+    }
+
+    private static void resolveOnMain(PluginCall call, JSObject result) {
+        new Handler(Looper.getMainLooper()).post(() -> call.resolve(result));
+    }
+
+    private static void rejectOnMain(PluginCall call, String message) {
+        new Handler(Looper.getMainLooper()).post(() -> call.reject(message));
     }
 
     @Override

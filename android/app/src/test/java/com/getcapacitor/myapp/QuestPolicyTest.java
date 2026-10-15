@@ -312,6 +312,57 @@ public class QuestPolicyTest {
         assertTrue(QuestPolicy.isCurrentlyDone(projected.get(1), NOW, ordinaryTimeline(), UTC));
     }
 
+    @Test public void everyZoneCompletionUsesMergedAssignedSlotAcrossPrimaryZoneOverlap() {
+        long nine = QuestPolicy.localDateTime("2026-10-14", "09:00", UTC);
+        long ten = QuestPolicy.localDateTime("2026-10-14", "10:00", UTC);
+        long eleven = QuestPolicy.localDateTime("2026-10-14", "11:00", UTC);
+        long noon = QuestPolicy.localDateTime("2026-10-14", "12:00", UTC);
+        long completedAt = nine + 30 * 60_000L;
+        long now = eleven + 30 * 60_000L;
+        List<QuestPolicy.Segment> primaryTimeline = Arrays.asList(
+                new QuestPolicy.Segment(1, nine, ten),
+                new QuestPolicy.Segment(2, ten, eleven),
+                new QuestPolicy.Segment(1, eleven, noon));
+        QuestPolicy.OccurrenceIndex occurrences = QuestPolicy.OccurrenceIndex.fromAssignedRanges(Arrays.asList(
+                new QuestPolicy.AssignedOccurrence("2026-10-14", 1, 9 * 60, 12 * 60),
+                new QuestPolicy.AssignedOccurrence("2026-10-14", 2, 10 * 60, 11 * 60)));
+
+        assertEquals(1, QuestPolicy.segmentAt(primaryTimeline, completedAt).zoneId);
+        assertEquals(2, QuestPolicy.segmentAt(primaryTimeline, ten + 30 * 60_000L).zoneId);
+        assertEquals(1, QuestPolicy.segmentAt(primaryTimeline, now).zoneId);
+        assertEquals("2026-10-14:1:09:00", occurrences.keyAt(1, completedAt, UTC));
+        assertEquals("2026-10-14:1:09:00", occurrences.keyAt(1, now, UTC));
+        assertEquals("2026-10-14:2:10:00", occurrences.keyAt(2, ten + 30 * 60_000L, UTC));
+
+        QuestPolicy.Task alreadyDone = QuestPolicy.Task.builder("every-zone").repeat("everyzone")
+                .zone(1).done(true).build();
+        alreadyDone.doneDate = "2026-10-14";
+        alreadyDone.zoneOccurrenceKey = "2026-10-14:1:09:00";
+        assertTrue("The primary overlay must not create a new every-zone occurrence",
+                QuestPolicy.isCurrentlyDone(alreadyDone, now, primaryTimeline, UTC, occurrences));
+        assertTrue(QuestPolicy.select(Collections.singletonList(alreadyDone), primaryTimeline, noon,
+                now, UTC, 5, occurrences).tasks.isEmpty());
+
+        QuestPolicy.Task pending = QuestPolicy.Task.builder("every-zone-pending").repeat("everyzone").zone(1).build();
+        List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(Collections.singletonList(pending),
+                Collections.singletonList(QuestPolicy.Event.done(pending.id, completedAt)), now,
+                primaryTimeline, UTC, occurrences);
+        assertEquals("2026-10-14:1:09:00", projected.get(0).zoneOccurrenceKey);
+        assertTrue("A queued completion earlier in the same assigned slot remains complete after the overlay",
+                QuestPolicy.isCurrentlyDone(projected.get(0), now, primaryTimeline, UTC, occurrences));
+    }
+
+    @Test public void absoluteOccurrenceRangesRemainSupportedForOlderPayloads() {
+        long start = QuestPolicy.localDateTime("2026-10-14", "09:00", UTC);
+        long end = QuestPolicy.localDateTime("2026-10-14", "12:00", UTC);
+        String key = "2026-10-14:1:09:00";
+        QuestPolicy.OccurrenceIndex occurrences = QuestPolicy.OccurrenceIndex.fromAbsoluteRanges(
+                Collections.singletonList(new QuestPolicy.AbsoluteOccurrence(1, start, end, key)));
+
+        assertEquals(key, occurrences.keyAt(1, start + 2 * 60 * 60_000L, UTC));
+        assertEquals("", occurrences.keyAt(1, end, UTC));
+    }
+
     @Test public void intervalDoneProjectsItsDeadlineAndReopensAfterItWhileOldCommandRemainsPending() {
         long repeatMs = 60L * 60_000L;
         QuestPolicy.Task interval = QuestPolicy.Task.builder("interval-pending").repeat("interval")

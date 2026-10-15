@@ -122,6 +122,9 @@ public class FlowReminderTest {
             bridge.saveNotif(new JSONObject().put("schedList", new JSONArray().put(reminder)).toString());
             receiver.onReceive(context, new Intent(FlowAlarmReceiver.ACTION_TASK_DUE));
             receiver.onReceive(context, new Intent(FlowAlarmReceiver.ACTION_TASK_DUE));
+            // Direct receiver fixtures enqueue work on the shared FIFO lane; this synchronous bridge read
+            // waits behind both deliveries before the test inspects notification side effects.
+            bridge.getEventEnvelopes();
             int shown = 0;
             for (StatusBarNotification notification : notifications.getActiveNotifications()) {
                 if (("flow-task:" + id).equals(notification.getTag())) shown++;

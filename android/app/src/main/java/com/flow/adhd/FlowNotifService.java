@@ -66,29 +66,104 @@ public class FlowNotifService extends Service {
     private int        lastZoneColor = COLOR_FLOW;
     private String     captureReceipt = "";
     private long       captureReceiptAt = 0L;
+    private volatile boolean destroyed;
+    private final Object uiRefreshLock = new Object();
+    private long uiRefreshBurstStartedAt = 0L;
     private final Map<Integer, Runnable> tempCancelCallbacks = new HashMap<>();
+    private static final long UI_REFRESH_QUIET_MS = 1_500L;
+    private static final long UI_REFRESH_MAX_BURST_MS = 4_000L;
 
     @Override
     public void onCreate() {
         super.onCreate();
+        destroyed = false;
         bridge = new FlowBridge(this);
         handler = new Handler(Looper.getMainLooper());
+        // A foreground service must publish immediately; storage work is queued
+        // on the shared FIFO lane and replaces this starter notification.
+        createChannels();
+        Notification bootstrap = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Потік")
+                .setContentText("Оновлюю сповіщення…")
+                .setOngoing(true)
+                .setSilent(true)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .build();
+        startForeground(NOTIF_ID, bootstrap);
         handler.postDelayed(refreshTick, REFRESH_MS);
     }
 
     private final Runnable refreshTick = new Runnable() {
         @Override public void run() {
-            rebuildFromDb();
-            if (hasActiveQuestNotifications()) showTaskNotifications();
-            handler.postDelayed(this, REFRESH_MS);
+            if (destroyed) return;
+            FlowDatabase.executeStorage(() -> {
+                if (destroyed) return;
+                try {
+                    rebuildFromDb();
+                    if (!destroyed && hasActiveQuestNotifications()) showTaskNotifications();
+                } catch (Exception e) {
+                    android.util.Log.w("FlowNotifService", "Periodic notification refresh failed", e);
+                }
+                if (!destroyed && handler != null) handler.postDelayed(refreshTick, REFRESH_MS);
+            });
         }
     };
 
+    /** One trailing projection refresh per burst; it reads current Room state and never replays commands. */
+    private final Runnable coalescedUiRefresh = new Runnable() {
+        @Override public void run() {
+            synchronized (uiRefreshLock) { uiRefreshBurstStartedAt = 0L; }
+            if (destroyed) return;
+            FlowDatabase.executeStorage(() -> {
+                if (destroyed) return;
+                try {
+                    rebuildFromDb();
+                } catch (Exception e) {
+                    android.util.Log.w("FlowNotifService", "Coalesced notification refresh failed", e);
+                }
+            });
+        }
+    };
+
+    private void scheduleCoalescedUiRefresh() {
+        if (destroyed || handler == null) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        synchronized (uiRefreshLock) {
+            if (destroyed || handler == null) return;
+            if (uiRefreshBurstStartedAt == 0L) uiRefreshBurstStartedAt = now;
+            long maxAt = uiRefreshBurstStartedAt + UI_REFRESH_MAX_BURST_MS;
+            long dueAt = Math.min(now + UI_REFRESH_QUIET_MS, maxAt);
+            handler.removeCallbacks(coalescedUiRefresh);
+            handler.postDelayed(coalescedUiRefresh, Math.max(0L, dueAt - now));
+        }
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) { rebuildFromDb(); return START_STICKY; }
+        Intent queuedIntent = intent == null ? null : new Intent(intent);
+        FlowDatabase.executeStorage(() -> {
+            try {
+                handleStartCommand(queuedIntent);
+            } catch (Exception e) {
+                android.util.Log.w("FlowNotifService", "Notification command failed", e);
+                try {
+                    setCaptureReceipt("Відкрий Потік, щоб перевірити дію");
+                    rebuildFromDb();
+                } catch (Exception recoveryError) {
+                    android.util.Log.w("FlowNotifService", "Unable to refresh after command failure", recoveryError);
+                }
+            } finally {
+                scheduleCoalescedUiRefresh();
+            }
+        });
+        return START_STICKY;
+    }
+
+    private void handleStartCommand(Intent intent) {
+        if (intent == null) { rebuildFromDb(); return; }
         String action = intent.getAction();
-        if (action == null) { rebuildFromDb(); return START_STICKY; }
+        if (action == null) { rebuildFromDb(); return; }
 
         switch (action) {
             case ACTION_DONE:
@@ -221,12 +296,12 @@ public class FlowNotifService extends Service {
             default:
                 rebuildFromDb();
         }
-        return START_STICKY;
     }
 
     // ════════════════ ОСНОВНЕ СПОВІЩЕННЯ ════════════════
 
     private void rebuildFromDb() {
+        if (destroyed) return;
         createChannels();
         String notifJson = bridge.getNotifJson();
 
@@ -400,6 +475,7 @@ public class FlowNotifService extends Service {
 
     private void buildMain(String zone, String slots, String desc, String tasks,
             String routine, String body, String time, int done, int total, int energy) {
+        if (destroyed) return;
 
         Intent openIntent = new Intent(this, MainActivity.class);
         openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -464,6 +540,7 @@ public class FlowNotifService extends Service {
     // ════════════════ ТИМЧАСОВІ: ЗАДАЧІ ════════════════
 
     private void showTaskNotifications() {
+        if (destroyed) return;
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) return;
         // Clear two legacy slots from the older seven-card panel as well.
@@ -528,6 +605,7 @@ public class FlowNotifService extends Service {
     // ════════════════ ТИМЧАСОВІ: РУТИНА ════════════════
 
     private void showRoutineNotifications() {
+        if (destroyed) return;
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) return;
         pruneNotificationRange(NOTIF_RC_BASE, 10);
@@ -601,6 +679,7 @@ public class FlowNotifService extends Service {
 
     /** Після +/− оновлюємо саме це сповіщення свіжим значенням з Room */
     private void refreshRoutineSingle(int notifId, String id) {
+        if (destroyed) return;
         if (notifId < 0 || id == null) return;
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) return;
@@ -629,7 +708,8 @@ public class FlowNotifService extends Service {
         long now = System.currentTimeMillis();
         java.util.TimeZone zone = java.util.TimeZone.getDefault();
         java.util.List<QuestPolicy.Segment> timeline = currentQuestTimeline();
-        if (QuestPolicy.isCurrentlyDone(task, now, timeline, zone)) return false;
+        QuestPolicy.OccurrenceIndex occurrences = currentQuestOccurrences();
+        if (QuestPolicy.isCurrentlyDone(task, now, timeline, zone, occurrences)) return false;
         if (expectedGeneration == null || expectedGeneration.isEmpty()) return false;
         return expectedGeneration.equals(QuestPolicy.actionGeneration(task, timeline, now, zone));
     }
@@ -640,9 +720,11 @@ public class FlowNotifService extends Service {
         if (notif == null) return null;
         List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(notif.optJSONArray("questTasks"));
         List<QuestPolicy.Segment> timeline = QuestPolicy.timelineForSnapshot(notif, java.util.TimeZone.getDefault());
+        QuestPolicy.OccurrenceIndex occurrences = QuestPolicy.OccurrenceIndex.fromSnapshot(
+                notif, java.util.TimeZone.getDefault());
         List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
                 QuestPolicy.eventsFromJson(readEventEnvelopes()), System.currentTimeMillis(), timeline,
-                java.util.TimeZone.getDefault());
+                java.util.TimeZone.getDefault(), occurrences);
         for (QuestPolicy.Task task : projected) if (id.equals(task.id)) return task;
         return null;
     }
@@ -651,6 +733,11 @@ public class FlowNotifService extends Service {
         JSONObject notif = readNotifObject();
         return notif == null ? java.util.Collections.<QuestPolicy.Segment>emptyList()
                 : QuestPolicy.timelineForSnapshot(notif, java.util.TimeZone.getDefault());
+    }
+
+    private QuestPolicy.OccurrenceIndex currentQuestOccurrences() {
+        JSONObject notif = readNotifObject();
+        return QuestPolicy.OccurrenceIndex.fromSnapshot(notif, java.util.TimeZone.getDefault());
     }
 
     private QuestPolicy.Selection currentQuestSelection(long now) {
@@ -662,12 +749,14 @@ public class FlowNotifService extends Service {
         if (rows == null || timelineRows == null)
             return QuestPolicy.Selection.invalid("Відкрий Потік, щоб оновити квести");
         List<QuestPolicy.Segment> timeline = QuestPolicy.timelineForSnapshot(notif, java.util.TimeZone.getDefault());
+        QuestPolicy.OccurrenceIndex occurrences = QuestPolicy.OccurrenceIndex.fromSnapshot(
+                notif, java.util.TimeZone.getDefault());
         List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(rows);
         List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
                 QuestPolicy.eventsFromJson(readEventEnvelopes()), now, timeline,
-                java.util.TimeZone.getDefault());
+                java.util.TimeZone.getDefault(), occurrences);
         return QuestPolicy.select(projected, timeline, QuestPolicy.timelineUntil(notif, timeline),
-                now, java.util.TimeZone.getDefault(), QuestPolicy.MAX_CARDS);
+                now, java.util.TimeZone.getDefault(), QuestPolicy.MAX_CARDS, occurrences);
     }
 
     private String actionGenerationForTask(QuestPolicy.Task task, long now) {
@@ -682,10 +771,12 @@ public class FlowNotifService extends Service {
             if (value == null || value.isEmpty()) return "";
             JSONObject notif = new JSONObject(value);
             List<QuestPolicy.Segment> timeline = QuestPolicy.timelineForSnapshot(notif, java.util.TimeZone.getDefault());
+            QuestPolicy.OccurrenceIndex occurrences = QuestPolicy.OccurrenceIndex.fromSnapshot(
+                    notif, java.util.TimeZone.getDefault());
             List<QuestPolicy.Task> source = QuestPolicy.tasksFromJson(notif.optJSONArray("questTasks"));
             List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
                     QuestPolicy.eventsFromJson(new JSONArray(bridge.getEventEnvelopes())), now, timeline,
-                    java.util.TimeZone.getDefault());
+                    java.util.TimeZone.getDefault(), occurrences);
             for (QuestPolicy.Task task : projected)
                 if (taskId.equals(task.id)) return QuestPolicy.actionGeneration(task, timeline, now, java.util.TimeZone.getDefault());
         } catch (Exception ignored) { }
@@ -1080,18 +1171,16 @@ public class FlowNotifService extends Service {
     private void setCaptureReceipt(String receipt) {
         captureReceipt = receipt;
         captureReceiptAt = android.os.SystemClock.elapsedRealtime();
-        final long receiptAt = captureReceiptAt;
-        // Android may shed a notification update after a burst of quest cards.
-        // Retry the latest receipt once after the burst, without repeating the
-        // capture command or replacing a more recent acknowledgement.
+        if (handler == null || destroyed) return;
         handler.postDelayed(() -> {
-            if (captureReceiptAt == receiptAt && !captureReceipt.isEmpty()) rebuildFromDb();
-        }, 2_000L);
-        handler.postDelayed(() -> {
-            if (android.os.SystemClock.elapsedRealtime() - captureReceiptAt >= 30_000L) {
-                captureReceipt = "";
-                rebuildFromDb();
-            }
+            if (destroyed) return;
+            FlowDatabase.executeStorage(() -> {
+                if (destroyed) return;
+                if (android.os.SystemClock.elapsedRealtime() - captureReceiptAt >= 30_000L) {
+                    captureReceipt = "";
+                    scheduleCoalescedUiRefresh();
+                }
+            });
         }, 30_000L);
     }
 
@@ -1185,6 +1274,8 @@ public class FlowNotifService extends Service {
     @Override public IBinder onBind(Intent intent) { return null; }
 
     @Override public void onDestroy() {
+        destroyed = true;
+        synchronized (uiRefreshLock) { uiRefreshBurstStartedAt = 0L; }
         if (handler != null) handler.removeCallbacksAndMessages(null);
         stopForeground(true);
         super.onDestroy();

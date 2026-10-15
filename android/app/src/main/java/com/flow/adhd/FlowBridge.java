@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import android.util.Base64;
 
 public class FlowBridge {
@@ -29,6 +30,10 @@ public class FlowBridge {
     private final File publicBackupOverride;
     private final File privateBackupOverride;
     private volatile String lastSaveError = "";
+
+    private static <T> T callStorage(Callable<T> work) {
+        return FlowDatabase.callStorage(work);
+    }
 
     public FlowBridge(Context context) {
         this(context, FlowDatabase.getInstance(context).flowDao(), null, null);
@@ -44,7 +49,7 @@ public class FlowBridge {
     /** window.FlowBridge.save(json) — зберігає повний стан */
     @JavascriptInterface
     public void save(String json) {
-        dao.writeState(json);
+        callStorage(() -> { dao.writeState(json); return null; });
     }
 
     /** Acknowledgement cannot become durable without its resulting state. */
@@ -66,19 +71,21 @@ public class FlowBridge {
             android.util.Log.w("FlowBridge", "Invalid state or event ids");
             return false;
         }
-        try {
-            dao.commitEvents(json, ids);
-            lastSaveError = "";
-            return true;
-        } catch (SQLiteFullException e) {
-            lastSaveError = "storage_full";
-            android.util.Log.w("FlowBridge", "Command commit failed: storage_full", e);
-            return false;
-        } catch (Exception e) {
-            lastSaveError = "database_error";
-            android.util.Log.w("FlowBridge", "Command commit failed", e);
-            return false;
-        }
+        return callStorage(() -> {
+            try {
+                dao.commitEvents(json, ids);
+                lastSaveError = "";
+                return true;
+            } catch (SQLiteFullException e) {
+                lastSaveError = "storage_full";
+                android.util.Log.w("FlowBridge", "Command commit failed: storage_full", e);
+                return false;
+            } catch (Exception e) {
+                lastSaveError = "database_error";
+                android.util.Log.w("FlowBridge", "Command commit failed", e);
+                return false;
+            }
+        });
     }
 
     /** Sanitized code for the most recent failed snapshot commit. */
@@ -87,7 +94,11 @@ public class FlowBridge {
 
     /** Preserve all recovery inputs in a new archive; never alters Room or backups. */
     @JavascriptInterface
-    public synchronized boolean archiveRecovery(String suppliedJson) {
+    public boolean archiveRecovery(String suppliedJson) {
+        return callStorage(() -> archiveRecoveryOnStorage(suppliedJson));
+    }
+
+    private boolean archiveRecoveryOnStorage(String suppliedJson) {
         try {
             new org.json.JSONObject(suppliedJson);
             String originalState = dao.getStateJson();
@@ -115,17 +126,25 @@ public class FlowBridge {
 
     /** Returns the newest readable archive as JSON, or an empty string. */
     @JavascriptInterface
-    public synchronized String readRecoveryArchive() {
+    public String readRecoveryArchive() {
+        return callStorage(this::readRecoveryArchiveOnStorage);
+    }
+
+    private String readRecoveryArchiveOnStorage() {
         try {
-            org.json.JSONArray archives = new org.json.JSONArray(listRecoveryArchives());
+            org.json.JSONArray archives = new org.json.JSONArray(listRecoveryArchivesOnStorage());
             if (archives.length() == 0) return "";
-            return readRecoveryArchiveFile(archives.getJSONObject(0).getString("name"));
+            return readRecoveryArchiveFileOnStorage(archives.getJSONObject(0).getString("name"));
         } catch (Exception ignored) { return ""; }
     }
 
     /** Metadata for readable immutable recovery archives, newest first. */
     @JavascriptInterface
-    public synchronized String listRecoveryArchives() {
+    public String listRecoveryArchives() {
+        return callStorage(this::listRecoveryArchivesOnStorage);
+    }
+
+    private String listRecoveryArchivesOnStorage() {
         org.json.JSONArray result = new org.json.JSONArray();
         File directory = new File(ctx.getFilesDir(), "recovery");
         File[] files = directory.listFiles();
@@ -148,7 +167,11 @@ public class FlowBridge {
 
     /** Read one archive by its generated filename only; reject traversal and paths. */
     @JavascriptInterface
-    public synchronized String readRecoveryArchiveFile(String name) {
+    public String readRecoveryArchiveFile(String name) {
+        return callStorage(() -> readRecoveryArchiveFileOnStorage(name));
+    }
+
+    private String readRecoveryArchiveFileOnStorage(String name) {
         if (!isRecoveryArchiveName(name)) return "";
         try {
             File directory = new File(ctx.getFilesDir(), "recovery").getCanonicalFile();
@@ -190,16 +213,21 @@ public class FlowBridge {
     /** window.FlowBridge.saveNotif(json) — зберігає snapshot для сповіщення */
     @JavascriptInterface
     public void saveNotif(String notifJson) {
-        dao.writeNotif(notifJson);
-        // знімок оновився → перепланувати точний будильник на найближчу задачу
-        try { FlowAlarmReceiver.scheduleNextDue(ctx, this); } catch (Exception ignored) {}
+        callStorage(() -> {
+            dao.writeNotif(notifJson);
+            // Keep the saved snapshot and its derived alarm update in FIFO order.
+            try { FlowAlarmReceiver.scheduleNextDue(ctx, this); } catch (Exception ignored) {}
+            return null;
+        });
     }
 
     /** window.FlowBridge.load() — повертає повний стан */
     @JavascriptInterface
     public String load() {
-        String s = dao.getStateJson();
-        return s != null ? s : "";
+        return callStorage(() -> {
+            String s = dao.getStateJson();
+            return s != null ? s : "";
+        });
     }
 
     // id останньої прочитаної події — щоб clearEvents() видаляв лише її і старіші,
@@ -209,45 +237,51 @@ public class FlowBridge {
     /** window.FlowBridge.getEvents() — повертає JSON-масив подій */
     @JavascriptInterface
     public String getEvents() {
-        List<PendingEvent> events = dao.getPendingEvents();
-        if (events.isEmpty()) return "[]";
-        // org.json коректно екранує \n, \t, лапки тощо — на відміну від ручного склеювання
-        org.json.JSONArray arr = new org.json.JSONArray();
-        long maxId = lastReadEventId;
-        for (PendingEvent e : events) {
-            arr.put(e.event != null ? e.event : "");
-            if (e.id > maxId) maxId = e.id;
-        }
-        lastReadEventId = maxId;
-        return arr.toString();
+        return callStorage(() -> {
+            List<PendingEvent> events = dao.getPendingEvents();
+            if (events.isEmpty()) return "[]";
+            org.json.JSONArray arr = new org.json.JSONArray();
+            long maxId = lastReadEventId;
+            for (PendingEvent e : events) {
+                arr.put(e.event != null ? e.event : "");
+                if (e.id > maxId) maxId = e.id;
+            }
+            lastReadEventId = maxId;
+            return arr.toString();
+        });
     }
 
     /** New app versions read commands without removing them. Old string API remains compatible. */
     public String getEventEnvelopes() {
-        org.json.JSONArray arr = new org.json.JSONArray();
-        for (PendingEvent e : dao.getPendingEvents()) {
-            if (arr.length() >= 500) break;
-            try {
-                org.json.JSONObject value = new org.json.JSONObject();
-                value.put("id", e.id);
-                value.put("event", e.event == null ? "" : e.event);
-                value.put("createdAt", e.createdAt);
-                arr.put(value);
-            } catch (org.json.JSONException ignored) {}
-        }
-        return arr.toString();
+        return callStorage(() -> {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (PendingEvent e : dao.getPendingEvents()) {
+                if (arr.length() >= 500) break;
+                try {
+                    org.json.JSONObject value = new org.json.JSONObject();
+                    value.put("id", e.id);
+                    value.put("event", e.event == null ? "" : e.event);
+                    value.put("createdAt", e.createdAt);
+                    arr.put(value);
+                } catch (org.json.JSONException ignored) {}
+            }
+            return arr.toString();
+        });
     }
 
     /** window.FlowBridge.clearEvents() — лише прочитані (до lastReadEventId) */
     @JavascriptInterface
     public void clearEvents() {
-        if (lastReadEventId > 0) dao.clearEventsUpTo(lastReadEventId);
-        else dao.clearEvents();
+        callStorage(() -> {
+            if (lastReadEventId > 0) dao.clearEventsUpTo(lastReadEventId);
+            else dao.clearEvents();
+            return null;
+        });
     }
 
     /** Викликається з Java-коду (не JS) */
     public void pushEvent(String event) {
-        dao.insertEvent(new PendingEvent(event));
+        callStorage(() -> { dao.insertEvent(new PendingEvent(event)); return null; });
     }
 
     /**
@@ -256,7 +290,7 @@ public class FlowBridge {
      */
     public String queueCapturedTask(String title) {
         if (title == null || title.trim().isEmpty()) return null;
-        synchronized (FlowBridge.class) {
+        return callStorage(() -> {
             long createdAt = System.currentTimeMillis();
             try {
                 String stateJson = dao.getStateJson();
@@ -278,7 +312,7 @@ public class FlowBridge {
                 android.util.Log.w("FlowBridge", "Quick task queue failed", e);
                 return null;
             }
-        }
+        });
     }
 
     static long allocateCapturedTaskId(long now, long savedNextId,
@@ -349,8 +383,10 @@ public class FlowBridge {
     }
 
     public String getNotifJson() {
-        String s = dao.getNotifJson();
-        return s != null ? s : "";
+        return callStorage(() -> {
+            String s = dao.getNotifJson();
+            return s != null ? s : "";
+        });
     }
 
     /** window.FlowBridge.appVersion() — версія з build.gradle (єдине джерело правди) */
@@ -382,11 +418,13 @@ public class FlowBridge {
     /** window.FlowBridge.writeBackup(json) — записує резервну копію на диск */
     @JavascriptInterface
     public boolean writeBackup(String json) {
-        synchronized (FlowBridge.class) {
-            // Attempt the private fallback even when a public directory exists but is unwritable.
-            return writeAtomicBackup(getPublicBackupDir(), json)
-                    || writeAtomicBackup(getPrivateBackupDir(), json);
-        }
+        return callStorage(() -> writeBackupOnStorage(json));
+    }
+
+    private boolean writeBackupOnStorage(String json) {
+        // Attempt the private fallback even when a public directory exists but is unwritable.
+        return writeAtomicBackup(getPublicBackupDir(), json)
+                || writeAtomicBackup(getPrivateBackupDir(), json);
     }
 
     private boolean writeAtomicBackup(File directory, String json) {
@@ -411,22 +449,24 @@ public class FlowBridge {
      */
     @JavascriptInterface
     public String readBackup() {
-        synchronized (FlowBridge.class) {
-            File pub = new File(getPublicBackupDir(), BACKUP_FILE);
-            File priv = new File(getPrivateBackupDir(), BACKUP_FILE);
-            File[] candidates = pub.lastModified() >= priv.lastModified()
-                    ? new File[] {pub, priv} : new File[] {priv, pub};
-            String unreadable = "";
-            for (File candidate : candidates) {
-                try {
-                    String json = new String(new AtomicFile(candidate).readFully(), StandardCharsets.UTF_8);
-                    if (unreadable.isEmpty()) unreadable = json;
-                    new org.json.JSONObject(json);
-                    return json;
-                } catch (Exception ignored) {}
-            }
-            return unreadable; // Let the UI protect and export damaged copies instead of overwriting them.
+        return callStorage(this::readBackupOnStorage);
+    }
+
+    private String readBackupOnStorage() {
+        File pub = new File(getPublicBackupDir(), BACKUP_FILE);
+        File priv = new File(getPrivateBackupDir(), BACKUP_FILE);
+        File[] candidates = pub.lastModified() >= priv.lastModified()
+                ? new File[] {pub, priv} : new File[] {priv, pub};
+        String unreadable = "";
+        for (File candidate : candidates) {
+            try {
+                String json = new String(new AtomicFile(candidate).readFully(), StandardCharsets.UTF_8);
+                if (unreadable.isEmpty()) unreadable = json;
+                new org.json.JSONObject(json);
+                return json;
+            } catch (Exception ignored) {}
         }
+        return unreadable; // Let the UI protect and export damaged copies instead of overwriting them.
     }
 
     /** window.FlowBridge.hasBackup() — true якщо є резервний файл */

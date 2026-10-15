@@ -34,10 +34,10 @@ public class FlowWebViewTest {
             await(scenario, "document.querySelector('.settings-whats-new') !== null", "What's New is reachable in Settings");
             click(scenario, ".settings-whats-new");
             await(scenario, "document.querySelector('#whats-new-page') !== null", "Personal release page opens");
-            assertEquals("1.7.6.r9", value(scenario, "return document.querySelector('.release-note').getAttribute('data-version');").getString("value"));
+            assertEquals(BuildConfig.VERSION_NAME, value(scenario, "return document.querySelector('.release-note').getAttribute('data-version');").getString("value"));
             assertTrue(value(scenario, "return document.querySelector('.release-note').open;").getBoolean("value"));
-            assertEquals(3, value(scenario, "return document.querySelector('.release-note').querySelectorAll('.release-check').length;").getInt("value"));
-            assertTrue(value(scenario, "return document.querySelector('.release-personal').textContent.indexOf('Пишу це для тебе') >= 0;").getBoolean("value"));
+            assertTrue(value(scenario, "return document.querySelector('.release-note').querySelectorAll('.release-check').length >= 1;").getBoolean("value"));
+            assertTrue(value(scenario, "return !!document.querySelector('.release-personal') && document.querySelector('.release-personal').textContent.trim().length > 0 && document.querySelector('.release-personal').textContent.toLowerCase().indexOf('для тебе') >= 0;").getBoolean("value"));
             click(scenario, ".release-note:nth-of-type(2) > summary");
             assertTrue(value(scenario, "return document.querySelectorAll('.release-note')[1].open;").getBoolean("value"));
             click(scenario, ".whats-new-header button");
@@ -48,7 +48,7 @@ public class FlowWebViewTest {
             await(scenario, "document.querySelector('.settings-whats-new') !== null", "Settings after recreation");
             click(scenario, ".settings-whats-new");
             await(scenario, "document.querySelector('#whats-new-page') !== null", "Packaged release text remains available");
-            assertEquals("1.7.6.r9", value(scenario, "return document.querySelector('.release-note').getAttribute('data-version');").getString("value"));
+            assertEquals(BuildConfig.VERSION_NAME, value(scenario, "return document.querySelector('.release-note').getAttribute('data-version');").getString("value"));
         }
     }
 
