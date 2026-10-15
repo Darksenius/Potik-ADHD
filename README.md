@@ -12,6 +12,7 @@
 - Android-сповіщення з явним створенням задачі/нотатки й діями над задачами; XP, рівні та відстеження фокусу.
 
 APK та опис випусків: [GitHub Releases](https://github.com/Darksenius/Potik-ADHD/releases).
+Актуальний перевірений випуск — [1.7.6.r10](https://github.com/Darksenius/Potik-ADHD/releases/tag/v1.7.6.r10); [результати перевірок](docs/qa/architecture-r10-2026-10-15.md). Поточна лінія перенесена в `main`.
 Наявні межі й фактичні результати перевірок фіксуються в [дорожній карті](docs/roadmap/) і [QA-звітах](docs/qa/).
 
 ## Збирання
@@ -24,7 +25,7 @@ npm run build
 npm run embed-oss
 npx cap sync android
 cd android
-./gradlew assembleDebug
+./gradlew :app:assembleDebug
 ```
 
 На Windows використовуйте `gradlew.bat`. APK: `android/app/build/outputs/apk/debug/app-debug.apk`. `npm run sync` об'єднує web build, embedding і Capacitor sync. Копіювання APK в іншу папку запускається лише явно через `-PflowApkOutput=<directory>`.
