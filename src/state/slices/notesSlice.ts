@@ -19,6 +19,11 @@ const FOLDER_ICO: Record<string, string> = {
   impulse: '⚡', thought: '💭', general: '📝', therapy: '💆', training: '💪', food: '🍎', work: '💼', kid: '👶',
 };
 
+function validNoteFolder(folder: string | undefined, folders: Folder[]): string {
+  if (folder && folders.some(candidate => candidate.id === folder)) return folder;
+  return folders.find(candidate => candidate.id === 'general')?.id || folders[0]?.id || '';
+}
+
 export interface NotesSlice {
   qnotes: QuickNote[];
   folders: Folder[];
@@ -61,10 +66,11 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
 
   addQuickNote: (text, folder = 'impulse') => {
     const now = new Date();
+    const destination = validNoteFolder(folder, get().folders);
     const note: QuickNote = {
       id: get().qnid,
       txt: text,
-      folder,
+      folder: destination,
       time: now.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' }),
       date: fmtDate(now),
     };
@@ -122,13 +128,17 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
   },
 
   deleteFolder: (id) => {
-    set((s) => ({
-      folders: s.folders.filter((f) => f.id !== id),
-      qnotes: s.qnotes.map((n) => (n.folder === id ? { ...n, folder: 'general' } : n)),
-      tasks: s.tasks.map((t) => (t.folderId === id ? { ...t, folderId: null } : t)),
-      noteFolder: s.noteFolder === id ? 'all' : s.noteFolder,
-      notepadFolder: s.notepadFolder === id ? s.folders.find(f => f.id !== id)?.id || '' : s.notepadFolder,
-      taskFilter: s.taskFilter === 'f:' + id ? 'all' : s.taskFilter,
-    }));
+    set((s) => {
+      const folders = s.folders.filter((f) => f.id !== id);
+      const fallbackFolder = validNoteFolder('general', folders);
+      return {
+        folders,
+        qnotes: s.qnotes.map((n) => (n.folder === id ? { ...n, folder: fallbackFolder } : n)),
+        tasks: s.tasks.map((t) => (t.folderId === id ? { ...t, folderId: null } : t)),
+        noteFolder: s.noteFolder === id ? 'all' : s.noteFolder,
+        notepadFolder: s.notepadFolder === id ? folders[0]?.id || '' : s.notepadFolder,
+        taskFilter: s.taskFilter === 'f:' + id ? 'all' : s.taskFilter,
+      };
+    });
   },
 });

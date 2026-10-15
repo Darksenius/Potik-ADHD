@@ -96,3 +96,101 @@ test('queued shade captures preserve literal text, commit once, and stay distinc
   expect(reloaded.qnotes.filter((n: any) => n.txt === 'Note from shade' || n.txt === '... literal ellipsis\nsecond line'))
     .toHaveLength(2);
 });
+
+test('deleting note folders keeps stored notes and later captures in an available folder', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-08T12:00:00+03:00') });
+  await page.addInitScript(() => {
+    const restored = sessionStorage.getItem('note-folder-delete-test');
+    const mock = (window as any).__commands = {
+      persisted: restored || JSON.stringify({
+        saveDate: new Date().toDateString(), weekTplSeeded: true, tasks: [], qnid: 503,
+        qnotes: [
+          { id: 501, txt: 'У загальній', folder: 'general', date: '2026-10-08', time: '10:00' },
+          { id: 502, txt: 'В імпульсах', folder: 'impulse', date: '2026-10-08', time: '10:01' },
+        ],
+      }),
+      pending: [],
+    };
+    (window as any).FlowBridge = {
+      load: () => mock.persisted,
+      save: () => {}, saveNotif: () => {}, writeBackup: () => {}, readBackup: () => '', hasBackup: () => false,
+      saveWithEvents: (json: string, ids: string) => {
+        mock.persisted = json;
+        sessionStorage.setItem('note-folder-delete-test', json);
+        const ack = JSON.parse(ids);
+        mock.pending = mock.pending.filter((event: any) => !ack.includes(event.id));
+        return true;
+      },
+    };
+    (window as any).Capacitor = { isNativePlatform: () => true, Plugins: { FlowNotif: {
+      addListener: () => ({ remove: async () => {} }), start: async () => {}, update: async () => {}, stop: async () => {},
+      readEvents: async () => ({ events: JSON.stringify(mock.pending) }),
+      drainEvents: async () => { throw new Error('Old destructive drain must not be called'); },
+    } } };
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
+  await expect(page.locator('#qn-list')).toContainText('У загальній');
+  await expect(page.locator('#qn-list')).toContainText('В імпульсах');
+
+  page.on('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Папки нотаток', exact: true }).click();
+  await page.getByRole('button', { name: 'Видалити папку Загальне', exact: true }).click();
+  await page.getByRole('button', { name: 'Видалити папку Імпульс', exact: true }).click();
+
+  await page.evaluate(() => {
+    const mock = (window as any).__commands;
+    mock.pending = [{ id: 1, event: 'capture_note: Після видалення папок', createdAt: Date.now() }];
+    window.__flowDrainEvents?.();
+  });
+  await expect.poll(async () => page.evaluate(() => JSON.parse((window as any).__commands.persisted).qnotes))
+    .toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 501, folder: 'thought' }),
+      expect.objectContaining({ id: 502, folder: 'thought' }),
+      expect.objectContaining({ txt: 'Після видалення папок', folder: 'thought' }),
+    ]));
+
+  await page.getByRole('button', { name: '← Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
+  await page.getByRole('button', { name: /Думка/ }).click();
+  await expect(page.locator('#qn-list .qn-row')).toHaveCount(3);
+  await page.reload();
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
+  await page.getByRole('button', { name: /Думка/ }).click();
+  await expect(page.locator('#qn-list .qn-row')).toHaveCount(3);
+  expect(await page.evaluate(() => JSON.parse((window as any).__commands.persisted).qnotes.map((note: any) => note.folder)))
+    .toEqual(['thought', 'thought', 'thought']);
+
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Папки нотаток', exact: true }).click();
+  const folderRows = page.locator('.notes-folder-manager-row');
+  while (await folderRows.count()) {
+    const remaining = await folderRows.count();
+    await folderRows.nth(0).getByRole('button').click();
+    await expect(folderRows).toHaveCount(remaining - 1);
+  }
+  await page.evaluate(() => {
+    const mock = (window as any).__commands;
+    mock.pending = [{ id: 2, event: 'capture_note: Без жодної папки', createdAt: Date.now() }];
+    window.__flowDrainEvents?.();
+  });
+  await expect.poll(async () => page.evaluate(() => JSON.parse((window as any).__commands.persisted).qnotes))
+    .toEqual(expect.arrayContaining([
+      expect.objectContaining({ txt: 'Без жодної папки', folder: '' }),
+    ]));
+  expect(await page.evaluate(() => JSON.parse((window as any).__commands.persisted).qnotes.every((note: any) => note.folder === '')))
+    .toBe(true);
+
+  await page.getByRole('button', { name: '← Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
+  await expect(page.locator('#qn-list .qn-row')).toHaveCount(4);
+  await expect(page.locator('#qn-list')).toContainText('Без папки');
+  await page.reload();
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
+  await expect(page.locator('#qn-list .qn-row')).toHaveCount(4);
+  await expect(page.locator('#qn-list')).toContainText('Без папки');
+  expect(await page.evaluate(() => JSON.parse((window as any).__commands.persisted).qnotes.every((note: any) => note.folder === '')))
+    .toBe(true);
+});
