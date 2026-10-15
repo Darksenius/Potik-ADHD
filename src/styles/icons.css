@@ -3,4 +3,5 @@
 .nb .potik-icon,.tb .potik-icon{width:27px;height:27px}
 .more-menu strong{display:flex;align-items:center;gap:8px}
 #logo{display:flex;align-items:center;gap:8px}
-.potik-brand{width:30px;height:30px;object-fit:contain}
+.potik-brand-frame{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;flex-shrink:0;overflow:hidden}
+.potik-brand{display:block;width:36px;height:36px;flex-shrink:0;object-fit:contain;transform:scale(1.45)}

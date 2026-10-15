@@ -1,6 +1,6 @@
 {
   "name": "flow-app",
-  "version": "1.7.6-r14",
+  "version": "1.7.6-r15",
   "description": "Потік — органайзер для людей з РДУГ (ADHD)",
   "private": true,
   "type": "module",
