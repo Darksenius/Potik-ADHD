@@ -47,6 +47,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - run: npm ci
       - run: npm run sync
       - name: Native unit tests and application/instrumentation compilation
