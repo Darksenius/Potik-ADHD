@@ -1,5 +1,5 @@
 import type { AppSlice } from '../store';
-import type { Preferences } from '../../types';
+import type { Preferences, Task } from '../../types';
 import { fmtDate } from '../../utils/date';
 
 /**
@@ -15,6 +15,7 @@ import { fmtDate } from '../../utils/date';
  */
 export type PageId = 'main' | 'readme' | 'settings' | 'whatsnew';
 export type TabId = 'tasks' | 'ideas' | 'planner' | 'stats' | 'zones' | 'notes' | 'state' | 'inbox' | 'more' | 'alltasks';
+export type TaskEditorPreset = Partial<Pick<Task, 'type' | 'repeat' | 'counterUnit' | 'counterStep' | 'counterTarget'>>;
 
 export interface UiSlice {
   alarmTaskIds: number[];
@@ -43,6 +44,7 @@ export interface UiSlice {
    */
   editorTaskId: number | 'new' | null;
   editorInitialDate: string | null;
+  editorPreset: TaskEditorPreset | null;
 
   toggleTheme: () => void;
   showPage: (page: PageId) => void;
@@ -50,7 +52,7 @@ export interface UiSlice {
   setTaskFilter: (filter: string) => void;
   setNoteFolder: (folder: string) => void;
   toggleShowDone: () => void;
-  requestNewTaskEditor: (date?: string) => void;
+  requestNewTaskEditor: (date?: string, preset?: TaskEditorPreset) => void;
   requestEditTask: (id: number) => void;
   closeTaskEditor: () => void;
   /** planSelDay(ds) — рядок 3400, без scrollIntoView (репорт 11.06 — совало інтерфейс) */
@@ -103,6 +105,7 @@ export const createUiSlice: AppSlice<UiSlice> = (set) => ({
   planSelectedDay: null,
   editorTaskId: null,
   editorInitialDate: null,
+  editorPreset: null,
   toastMessage: null,
   noteReviews: [],
   backupBanner: null,
@@ -119,9 +122,9 @@ export const createUiSlice: AppSlice<UiSlice> = (set) => ({
   setTaskFilter: (filter) => set({ taskFilter: filter }),
   setNoteFolder: (folder) => set({ noteFolder: folder }),
   toggleShowDone: () => set((s) => ({ showDone: !s.showDone })),
-  requestNewTaskEditor: (date) => set({ editorTaskId: 'new', editorInitialDate: typeof date === 'string' ? date : null }),
-  requestEditTask: (id) => set({ editorTaskId: id, editorInitialDate: null }),
-  closeTaskEditor: () => set({ editorTaskId: null, editorInitialDate: null }),
+  requestNewTaskEditor: (date, preset) => set({ editorTaskId: 'new', editorInitialDate: typeof date === 'string' ? date : null, editorPreset: preset || null }),
+  requestEditTask: (id) => set({ editorTaskId: id, editorInitialDate: null, editorPreset: null }),
+  closeTaskEditor: () => set({ editorTaskId: null, editorInitialDate: null, editorPreset: null }),
   setPlanSelectedDay: (ds) => set({ planSelectedDay: ds }),
   shiftPlanWeek: (dir) => set((s) => {
     const selected = s.planSelectedDay ? new Date(s.planSelectedDay + 'T12:00:00') : new Date();

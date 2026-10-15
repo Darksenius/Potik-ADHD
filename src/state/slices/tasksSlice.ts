@@ -4,7 +4,7 @@ import taskTypeCatalog from '../../content/task-types.json' with { type: 'json' 
 import { createTaskRecord } from '../../utils/taskFactory';
 import { historyEvent, nextHistorySequence, seedKnownCompletions, taskOccurrenceId } from '../../utils/taskHistory';
 import { fmtDate, nowHM, normalizeTime, hmToString } from '../../utils/date';
-import { hasTaskCounter, resetTaskProgress, taskCounterTarget } from '../../utils/taskCounter';
+import { hasTaskCounter, resetTaskProgress, taskCounterStep, taskCounterTarget } from '../../utils/taskCounter';
 import { buildQuestTimeline, createQuestDeferral, isValidQuestDeferral } from '../../utils/questPolicy';
 
 /** TXP — рядок 1239: базова нагорода XP за тип задачі при виконанні. */
@@ -79,7 +79,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
 
     if (t.type === 'negative') {
       set((s) => ({
-        tasks: s.tasks.map((x) => (x.id === id ? { ...x, counter: (x.counter || 0) + 1, counterDay: fmtDate(new Date()) } : x)),
+        tasks: s.tasks.map((x) => (x.id === id ? { ...x, counter: (x.counter || 0) + taskCounterStep(x), counterDay: fmtDate(new Date()) } : x)),
       }));
       get().incrementNegCount();
       get().award(-(t.negXp || 5));
@@ -292,7 +292,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const copy: Task = {
       ...JSON.parse(JSON.stringify(t)), id: nid, done: false, completionCredited: false,
       completionCreditDate: undefined, doneDate: undefined, doneAt: undefined, nextRepeatAt: 0, snoozeUntil: 0,
-      occurrenceId: undefined,
+      occurrenceId: undefined, legacyRoutineId: undefined,
       questDeferral: undefined, completionDeferral: undefined,
       completedToday: t.type === 'timewin' ? false : t.completedToday,
       zoneDoneToday: t.type === 'zonelinked' ? false : t.zoneDoneToday,

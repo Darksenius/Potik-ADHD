@@ -6,6 +6,10 @@ async function boot(page: Page, data = {}) {
   await page.goto('/');
   await expect(page.locator('#add-fab')).toBeVisible();
 }
+async function openInbox(page: Page) {
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+}
 async function scheduled(page: Page, title: string, day: string, time: string) {
   await page.locator('#add-fab').click();
   await page.getByLabel('Що зробити?').fill(title);
@@ -88,7 +92,7 @@ test('week shift keeps selected weekday in view, Today restores current week', a
 
 test('inbox capture is available immediately and settings persist independently of legacy theme', async ({ page }, info) => {
   await boot(page);
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await openInbox(page);
   await page.getByLabel('Нова проста задача').fill('Не забути зарядку');
   await page.getByRole('button', { name: 'Додати', exact: true }).click();
   await expect(page.locator('.tt')).toHaveText('Не забути зарядку');
@@ -135,13 +139,13 @@ test('day-only zone edit opens real inputs and cancel keeps original day rules',
 
 test('Inbox retains its capture while it is available immediately; date edits and clearing preserve the task', async ({ page }, info) => {
   await boot(page);
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await openInbox(page);
   await page.getByLabel('Нова проста задача').fill('Купити батарейки');
   await page.getByRole('button', { name: 'Додати', exact: true }).click();
   const id = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!).tasks[0].id);
   await page.getByRole('button', { name: 'Зараз', exact: true }).click();
   await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await openInbox(page);
   await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
   await expect(page.locator('.schedule-preview')).toContainText('Без дати — доступна, коли підходять зона й умови задачі.');
   await page.getByRole('button', { name: 'Завтра', exact: true }).click();
@@ -160,7 +164,7 @@ test('Inbox retains its capture while it is available immediately; date edits an
   await page.locator('#edit-save-fab').click();
   await page.reload();
   await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await openInbox(page);
   await expect(page.locator('#inbox-sec .tt')).toHaveText('Купити батарейки');
   const state = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(state.tasks).toHaveLength(1);
@@ -221,7 +225,7 @@ test('moving a task reorders neighbors in All tasks while Inbox keeps its captur
   await page.getByRole('button', { name: 'Зараз', exact: true }).click();
   await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   await expect(page.locator('#tasks-list .tt')).toHaveText(['Ще не запланована', 'Перша на сьогодні', 'На майбутнє', 'Друга на сьогодні']);
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await openInbox(page);
   await expect(page.locator('#inbox-sec .tt')).toHaveText('Ще не запланована');
 });
 

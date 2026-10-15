@@ -2,6 +2,7 @@ import { useStore } from '../../state/store';
 import type { Task } from '../../types';
 import { TASK_TYPE_LABELS } from '../../constants';
 import TaskBody from './TaskBody';
+import TaskCounterControls from './TaskCounterControls';
 import Icon from '../common/Icon';
 import { taskPlanDate } from '../../utils/taskSchedule';
 import { questDeferralLabel } from '../../utils/questPolicy';
@@ -23,7 +24,7 @@ function repeatLabel(t: Task): string {
 }
 
 export default function TaskItem({
-  t, isPriority, visibleIds, allowMove = true, questCard = false, canDefer = false, allView = false, availabilityMessage,
+  t, isPriority, visibleIds, allowMove = true, questCard = false, canDefer = false, allView = false, availabilityMessage, quickCounter = false,
 }: {
   t: Task;
   isPriority: boolean;
@@ -33,6 +34,7 @@ export default function TaskItem({
   canDefer?: boolean;
   allView?: boolean;
   availabilityMessage?: string;
+  quickCounter?: boolean;
 }) {
   const toggleTask = useStore((s) => s.toggleTask);
   const toggleExpanded = useStore((s) => s.toggleExpanded);
@@ -117,6 +119,7 @@ export default function TaskItem({
           </>}
         </div>
       </div>
+      {quickCounter && hasTaskCounter(t) && !t.expanded && <div className="daily-counter-controls"><TaskCounterControls t={t} /></div>}
       {hasBody && (
         <div className={'tb-body' + (t.expanded ? ' open' : '')}>
           {t.expanded && <TaskBody t={t} />}

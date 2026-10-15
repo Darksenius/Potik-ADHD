@@ -142,6 +142,10 @@ export function preparePendingNativeDeferrals(): void {
  */
 export function handleNativeEvent(event: string | null | undefined, createdAt?: number): boolean {
   if (!event) return false;
+  // Old routine notifications may still be tapped just after an upgrade.
+  // Their progress belongs to the tap's day, never a later daily occurrence.
+  if (/^rc_(inc|dec|done):/.test(event) && Number.isFinite(createdAt)
+    && fmtDate(new Date(createdAt!)) !== fmtDate(new Date())) return false;
   const taskCommand = /^(?:task_(?:done|skip|inc|dec):|task_defer:)(\d+)(?::|$)/.exec(event);
   const taskCommandId = taskCommand ? Number(taskCommand[1]) : undefined;
   const eventDate = new Date(Number.isFinite(createdAt) ? createdAt! : Date.now());

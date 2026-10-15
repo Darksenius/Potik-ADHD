@@ -5,8 +5,9 @@ import { flowBridge } from '../bridge/nativeBridge';
 import { fmtDate } from '../utils/date';
 import { ULBL } from '../state/slices/routineSlice';
 import { normalizePlannerTasks } from './plannerMigration';
+import { normalizeRoutineTasks } from './routineMigration';
 import { remapHistoryIdentity, seedKnownCompletions } from '../utils/taskHistory';
-import type { Task, Zone, Folder, QuickNote, RecurItem, RareEvent, DayTemplate, WeekTemplate, PlanRule, PlanItem, PlanDayZoneOverride } from '../types';
+import type { Task, Zone, Folder, QuickNote, RareEvent, DayTemplate, WeekTemplate, PlanRule, PlanItem, PlanDayZoneOverride } from '../types';
 
 /** exportBackup() — рядки 2593-2605. ПОВНА копія (те, що читає імпорт). */
 export function exportBackupFile(): void {
@@ -195,8 +196,9 @@ export function buildAiPromptText(): string {
 export function mergeState(raw: unknown): number {
   const parsed = validateBackup(raw);
   const normalized = normalizePlannerTasks(parsed.tasks || [], parsed.nid || 1, parsed.planItems || {});
-  const d = { ...parsed, ...normalized,
-    taskHistory: seedKnownCompletions(parsed.taskHistory || [], normalized.tasks) };
+  const routineNormalized = normalizeRoutineTasks(normalized.tasks, parsed.recur || [], normalized.nid, parsed.saveDate);
+  const d = { ...parsed, ...normalized, tasks: routineNormalized.tasks, nid: routineNormalized.nid, recur: [],
+    taskHistory: seedKnownCompletions(parsed.taskHistory || [], routineNormalized.tasks) };
   const s = useStore.getState();
   let added = 0;
 
@@ -296,7 +298,8 @@ export function mergeState(raw: unknown): number {
     d.tasks.forEach((t) => {
       if (!t || !t.title) return;
       const remapped = remapTaskZones(t);
-      const ex = tasks.find(x => sameBackupValue(comparableTask(x), comparableTask(remapped)));
+      const ex = tasks.find(x => (remapped.legacyRoutineId && x.legacyRoutineId === remapped.legacyRoutineId)
+        || sameBackupValue(comparableTask(x), comparableTask(remapped)));
       if (ex) {
         if (t.id !== undefined) taskMap[t.id] = ex.id;
         return;
@@ -344,18 +347,6 @@ export function mergeState(raw: unknown): number {
       const nn: QuickNote = JSON.parse(JSON.stringify(n));
       nn.id = qnid++;
       qnotes.push(nn);
-      added++;
-    });
-  }
-
-  const recur: RecurItem[] = s.recur.slice();
-  if (Array.isArray(d.recur)) {
-    d.recur.forEach((r) => {
-      if (!r || !r.nm) return;
-      if (recur.some((x) => x.nm === r.nm)) return;
-      const nr: RecurItem = JSON.parse(JSON.stringify(r));
-      nr.id = 'r' + Date.now() + Math.floor(Math.random() * 1e4);
-      recur.push(nr);
       added++;
     });
   }
@@ -479,7 +470,7 @@ export function mergeState(raw: unknown): number {
   }
 
   useStore.setState({
-    zones, folders, tasks, taskHistory, nid, priorities, qnotes, qnid, recur, rareEvents, focusChips,
+    zones, folders, tasks, taskHistory, nid, priorities, qnotes, qnid, recur: [], rareEvents, focusChips,
     dayTemplates, weekTemplates, planRules, planItems, planDayZones, planDayOff,
   });
   useStore.getState().recalculateZoneUsage();
@@ -498,7 +489,7 @@ export function importState(raw: unknown, mode: 'merge' | 'restore'): number {
   let count: number;
   if (mode === 'restore') {
     if (!applyState(parsed, true)) throw new Error('Некоректна резервна копія.');
-    count = (parsed.tasks || []).length;
+    count = useStore.getState().tasks.length;
   } else count = mergeState(parsed);
   releaseSaveGuard();
   useStore.getState().dismissBackupBanner();

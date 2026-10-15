@@ -90,6 +90,8 @@ export interface QuestTimelineSegment {
  */
 export interface Task {
   id: number;
+  /** Links a task materialized from the legacy routine collection. */
+  legacyRoutineId?: string;
   title: string;
   type: TaskType;
   done: boolean;
@@ -120,7 +122,7 @@ export interface Task {
   counterTarget?: number; // 0 means no goal; completing the task is a separate action
   counterEnabled?: boolean;
   counterStep?: number;
-  counterUnit?: 'count' | 'ml' | 'min';
+  counterUnit?: 'count' | 'ml' | 'min' | 'kcal';
   counterCreditedProgress?: number;
   counterDay?: string;
   /** Разовий бонус XP уже нараховано за досягнення цілі (chgCnt) */

@@ -2,8 +2,11 @@ import { useStore } from '../../state/store';
 import { useState } from 'react';
 import ZoneEditor from './ZoneEditor';
 import Icon from '../common/Icon';
+import './zone-ui.css';
 
-const PRIO_LABELS = ['', 'Фон', 'Нарада', 'Критичне'];
+function zonePriority(value: number | undefined): number {
+  return Math.min(5, Math.max(1, Math.round(Number(value) || 1)));
+}
 
 export default function ZonesTab() {
   const zones = useStore((s) => s.zones);
@@ -34,6 +37,7 @@ export default function ZonesTab() {
         ) : (
           zones.map((z) => {
             const linked = tasks.filter((t) => !t.trashed && t.type === 'zonelinked' && t.zoneId === z.id);
+            const priority = zonePriority(z.prio);
             return (
               <div className="zrow" key={z.id} style={{ borderLeftColor: z.color }}>
                 <div className="zdot" style={{ background: z.color }} />
@@ -44,7 +48,7 @@ export default function ZonesTab() {
                       <span className="zslot" key={i}>{sl.s}–{sl.e}</span>
                     ))}
                   </div>
-                  <span className={'zprio zp' + z.prio}>{PRIO_LABELS[z.prio || 1] || ''}</span>
+                  <span className="zone-priority-badge" aria-label={`Пріоритет ${priority} з 5`} style={{ borderColor: z.color, color: z.color }}>Пріоритет {priority}/5</span>
                   {z.desc && <div className="zdesc">{z.desc}</div>}
                   {!!linked.length && (
                     <div className="zdesc" style={{ color: 'var(--z)' }}>

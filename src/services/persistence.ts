@@ -5,6 +5,7 @@ import { flowBridge } from '../bridge/nativeBridge';
 import { buildForegroundNotifPayload } from '../bridge/notifPayload';
 import { seedKnownCompletions } from '../utils/taskHistory';
 import { normalizePlannerTasks } from './plannerMigration';
+import { normalizeRoutineTasks } from './routineMigration';
 
 /** Stable storage slot. formatVersion distinguishes the persisted domain schema. */
 export const LS_KEY = 'flow_v2';
@@ -78,10 +79,17 @@ export function applyState(raw: unknown, replace = false): boolean {
     const normalized = normalizePlannerTasks(patch.tasks || current.tasks, patch.nid || current.nid,
       patch.planItems || current.planItems);
     Object.assign(patch, normalized);
-    const tasks = normalized.tasks;
+    let tasks = normalized.tasks;
+    let nid = Math.max(patch.nid || current.nid, 1, ...tasks.map(t => t.id + 1));
+    if (Array.isArray(patch.recur) && patch.recur.length) {
+      const migrated = normalizeRoutineTasks(tasks, patch.recur, nid, parsed.saveDate);
+      tasks = migrated.tasks;
+      nid = migrated.nid;
+      patch.recur = [];
+    }
+    patch.tasks = tasks;
     patch.taskHistory = seedKnownCompletions(patch.taskHistory || current.taskHistory, tasks);
     const qnotes = patch.qnotes || current.qnotes;
-    const nid = Math.max(patch.nid || current.nid, 1, ...tasks.map(t => t.id + 1));
     const qnid = Math.max(100, ...qnotes.map(n => n.id + 1));
     useStore.setState({ ...patch, nid, qnid });
     return true;

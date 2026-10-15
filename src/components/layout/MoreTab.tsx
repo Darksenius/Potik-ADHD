@@ -2,10 +2,10 @@ import { useStore } from '../../state/store';
 import type { TabId } from '../../state/slices/uiSlice';
 import Icon from '../common/Icon';
 
-const destinations: { id: TabId; icon: 'quest' | 'note' | 'focus' | 'zones' | 'idea' | 'chart'; label: string; description: string }[] = [
+const destinations: { id: TabId; icon: 'quest' | 'inbox' | 'note' | 'focus' | 'zones' | 'idea' | 'chart'; label: string; description: string }[] = [
   { id: 'alltasks', icon: 'quest', label: 'Усі задачі', description: 'Пошук, майбутні, відкладені й виконані справи' },
-  { id: 'notes', icon: 'note', label: 'Блокнот', description: 'Швидкі нотатки, папки й вільний текст' },
-  { id: 'state', icon: 'focus', label: 'Стан', description: 'Фокус, енергія, пріоритети й рутина' },
+  { id: 'inbox', icon: 'inbox', label: 'Вхідні', description: 'Незаплановані справи для розбору' },
+  { id: 'state', icon: 'focus', label: 'Стан', description: 'Фокус, енергія, пріоритети й повсякденні задачі' },
   { id: 'zones', icon: 'zones', label: 'Зони', description: 'Розклад і контексти дня' },
   { id: 'ideas', icon: 'idea', label: 'Ідеї', description: 'Справи, які чекають свого часу' },
   { id: 'stats', icon: 'chart', label: 'Стат', description: 'Історія та досягнення' },

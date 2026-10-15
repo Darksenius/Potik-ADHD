@@ -287,6 +287,7 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
   expect(saved.qnotes.some((n: any) => n.txt === '... Нотатка зі шторки\nДругий рядок' && n.folder === 'impulse')).toBe(true);
   expect(saved.qnotes.some((n: any) => n.txt.includes('task_inc:501') && n.txt.includes('день уже змінився'))).toBe(true);
 
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
   await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await expect(page.locator('#inbox-sec')).toContainText('... Задача зі шторки');
   await page.evaluate(() => {

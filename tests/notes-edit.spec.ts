@@ -3,8 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 const originalText = 'Зберегти думку 🌿\nДругий абзац';
 
 async function openNotebook(page: Page) {
-  await page.getByRole('button', { name: 'Ще', exact: true }).click();
-  await page.getByRole('button', { name: 'Блокнот', exact: true }).click();
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
 }
 
 async function boot(page: Page) {

@@ -2,7 +2,8 @@ import { useStore } from '../../state/store';
 import type { Task } from '../../types';
 import { WD } from '../../utils/date';
 import { REPEAT_LABELS, CONTEXT_TAGS } from '../../constants';
-import { COUNTER_UNITS, hasTaskCounter, taskCounterStep, taskCounterTarget } from '../../utils/taskCounter';
+import { COUNTER_UNITS, hasTaskCounter, taskCounterTarget } from '../../utils/taskCounter';
+import TaskCounterControls from './TaskCounterControls';
 import Icon from '../common/Icon';
 
 
@@ -11,8 +12,6 @@ export default function TaskBody({ t }: { t: Task }) {
   const addChecklistItem = useStore((s) => s.addChecklistItem);
   const editChecklistItem = useStore((s) => s.editChecklistItem);
   const deleteChecklistItem = useStore((s) => s.deleteChecklistItem);
-  const changeCounter = useStore((s) => s.changeCounter);
-  const updateCounterTarget = useStore((s) => s.updateCounterTarget);
   const updateNote = useStore((s) => s.updateNote);
   const updateAlarm = useStore((s) => s.updateAlarm);
   const toggleCtxTag = useStore((s) => s.toggleCtxTag);
@@ -42,22 +41,7 @@ export default function TaskBody({ t }: { t: Task }) {
       {hasTaskCounter(t) && (
         <>
           <div className="bl">Лічильник</div>
-          <div className="cw">
-            <button className="cbtn" disabled={t.done || !t.counter} aria-label={'Зменшити: ' + t.title} onClick={() => changeCounter(t.id, -taskCounterStep(t))}>−{taskCounterStep(t)}</button>
-            <span className="cvv">{t.counter || 0} {COUNTER_UNITS[t.counterUnit || 'count']}</span>
-            <button className="cbtn" disabled={t.done} aria-label={'Збільшити: ' + t.title} onClick={() => changeCounter(t.id, taskCounterStep(t))}>+{taskCounterStep(t)}</button>
-            <span style={{ fontSize: 11, color: 'var(--t3)' }}>
-              /{' '}
-              <input
-                className="ct-inp"
-                type="number"
-                aria-label={'Ціль: ' + t.title}
-                defaultValue={taskCounterTarget(t)}
-                min={0}
-                onBlur={(e) => updateCounterTarget(t.id, Number(e.target.value))}
-              />
-            </span>
-          </div>
+          <TaskCounterControls t={t} editTarget />
           <p className="editor-hint">{taskCounterTarget(t) === 0 ? 'Без цілі. ' : t.cntHit ? 'Цілі досягнуто. ' : ''}0 у полі цілі — без цілі. Завершення задачі — окрема кнопка «Виконати».</p>
         </>
       )}
@@ -97,7 +81,7 @@ export default function TaskBody({ t }: { t: Task }) {
           <div className="bl">Зафіксовано</div>
           <div className="neg-counter">
             <div className="neg-cnt-v">{t.counter || 0}</div>
-            <span style={{ fontSize: 11, color: 'var(--t3)' }}>раз сьогодні</span>
+            <span style={{ fontSize: 11, color: 'var(--t3)' }}>{COUNTER_UNITS[t.counterUnit || 'count']} сьогодні</span>
             <button className="neg-tap-btn" onClick={() => toggleTask(t.id)}><Icon name="note" /> Зафіксувати (−{t.negXp} досвіду)</button>
           </div>
         </>

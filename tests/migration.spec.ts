@@ -64,11 +64,11 @@ test('alarm displays in the app at the configured time', async ({ page }) => {
   await expect(page.getByRole('alert').filter({ hasText: 'Час перерви' })).toBeVisible();
 });
 
-test('all sections remain reachable through the four primary tabs and render without runtime errors or horizontal page overflow', async ({ page }) => {
+test('all sections remain reachable through primary tabs and More without runtime errors or horizontal page overflow', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await boot(page);
-  for (const label of ['Зараз', 'Блокнот', 'План', 'Стан', 'Зони', 'Ідеї', 'Стат']) {
+  for (const label of ['Зараз', 'Нотатки', 'План', 'Стан', 'Зони', 'Ідеї', 'Стат']) {
     await openTab(page, label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label).toBe(true);
   }
@@ -134,8 +134,8 @@ test('zones can be edited and disabled without losing their tasks', async ({ pag
   await openTab(page, 'Зони');
   await page.getByRole('button', { name: 'Редагувати зону Робота', exact: true }).click();
   await page.getByLabel('Назва зони').fill('Робочий фокус');
-  await page.getByLabel('Початок 1', { exact: true }).fill('10:00');
-  await page.getByRole('button', { name: 'Зберегти зону', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Редагування зони' }).getByLabel('Початок', { exact: true }).first().fill('10:00');
+  await page.getByRole('button', { name: 'Зберегти зміни', exact: true }).click();
   await page.getByRole('button', { name: 'Вимкнути Робочий фокус', exact: true }).click();
   await page.clock.runFor(1000);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
@@ -188,7 +188,8 @@ test('midnight resets daily tasks and routine while preserving one-off completio
   expect(window.doneDate).toBeUndefined();
   expect(window.doneAt).toBeUndefined();
   expect(window.completionCreditDate).toBeUndefined();
-  expect(saved.recur[0]).toMatchObject({ val: 0, done: false });
+  expect(saved.recur).toEqual([]);
+  expect(saved.tasks.find((t: any) => t.legacyRoutineId === 'water')).toMatchObject({ type: 'counter', counter: 0, done: false, repeat: 'daily' });
 });
 
 test('Android backup remains intact when native archiving is unavailable', async ({ page }) => {
@@ -265,7 +266,7 @@ test('mobile screens at 320 and 390 pixels remain usable with screenshots', asyn
   await boot(page, { tasks: [task(401, 'Довга назва задачі для перевірки перенесення тексту без втрати кнопок та горизонтального прокручування')] });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const label of ['Зараз', 'Блокнот', 'План', 'Стан', 'Зони']) {
+    for (const label of ['Зараз', 'Нотатки', 'План', 'Стан', 'Зони']) {
       await openTab(page, label);
       await page.clock.runFor(400);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), width + ' ' + label).toBe(true);
@@ -286,20 +287,22 @@ test('accidentally deleted tasks can be restored from trash', async ({ page }) =
   await expect(page.locator('#tasks-list .tt')).toHaveText('Повернути задачу');
 });
 
-test('new routine supports millilitres instead of forcing a count', async ({ page }) => {
+test('daily counter tasks support millilitres instead of forcing a count', async ({ page }) => {
   await boot(page);
   await openTab(page, 'Стан');
-  await page.getByRole('button', { name: '+ Корисна', exact: true }).click();
-  await page.getByLabel('Назва звички').fill('Чай');
-  await page.getByLabel('Одиниця виміру').selectOption('ml');
-  await page.getByRole('button', { name: 'Зберегти звичку', exact: true }).click();
-  await page.locator('.rc-item').filter({ hasText: 'Чай' }).getByRole('button', { name: '+100мл', exact: true }).click();
+  await page.getByRole('button', { name: 'Лічильник', exact: true }).click();
+  await page.getByLabel('Що зробити?', { exact: true }).fill('Чай');
+  await page.getByLabel('Одиниця', { exact: true }).selectOption('ml');
+  await page.getByLabel('Крок + / −', { exact: true }).fill('100');
+  await page.getByRole('button', { name: 'Створити задачу', exact: true }).click();
+  await page.locator('.daily-task-list .tc').filter({ hasText: 'Чай' }).getByRole('button', { name: 'Збільшити: Чай', exact: true }).click();
   await page.clock.runFor(1000);
   const data = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
-  expect(data.recur.find((r: any) => r.nm === 'Чай')).toMatchObject({ unit: 'ml', step: 100, val: 100 });
+  expect(data.recur).toEqual([]);
+  expect(data.tasks.find((t: any) => t.title === 'Чай')).toMatchObject({ type: 'counter', repeat: 'daily', counterUnit: 'ml', counterStep: 100, counter: 100 });
 });
 
 async function openTab(page: Page, label: string) {
-  if (!['Зараз', 'План', 'Вхідні', 'Ще'].includes(label)) await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  if (!['Зараз', 'План', 'Нотатки', 'Ще'].includes(label)) await page.getByRole('button', { name: 'Ще', exact: true }).click();
   await page.getByRole('button', { name: label, exact: true }).click();
 }

@@ -1062,6 +1062,7 @@ public class FlowNotifService extends Service {
     private String counterUnitLabel(String unit) {
         if ("ml".equals(unit)) return "мл";
         if ("min".equals(unit)) return "хв";
+        if ("kcal".equals(unit)) return "ккал";
         return "раз";
     }
 

@@ -14,6 +14,7 @@ async function boot(page: Page) {
 }
 
 async function openInbox(page: Page) {
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
   await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
 }
 

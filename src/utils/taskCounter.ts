@@ -1,6 +1,6 @@
 import type { Task } from '../types';
 
-export const COUNTER_UNITS = { count: 'раз', ml: 'мл', min: 'хв' } as const;
+export const COUNTER_UNITS = { count: 'раз', ml: 'мл', min: 'хв', kcal: 'ккал' } as const;
 export function hasTaskCounter(task: Task): boolean {
   return task.type !== 'negative' && (task.type === 'counter' || task.counterEnabled === true);
 }

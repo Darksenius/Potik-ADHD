@@ -12,6 +12,7 @@ import type {
 import { fmtDate, addDaysDs } from '../../utils/date';
 import { ruleFor, dayBlocksFor, dayIsRestFor } from './plannerHelpers';
 import { ULBL } from './routineSlice';
+import { COUNTER_UNITS, hasTaskCounter } from '../../utils/taskCounter';
 import { completedTaskOccurrences } from '../../utils/taskHistory';
 
 /** getWeekStart() — рядки 3316–3319. Понеділок тижня зі зсувом `off` (у тижнях). */
@@ -425,6 +426,11 @@ export const createPlannerSlice: AppSlice<PlannerSlice> = (set, get) => ({
     const routineDone: Record<string, string | boolean> = {};
     s.recur.forEach((r) => {
       routineDone[r.nm] = r.unit === 'check' ? r.done : r.val + ' ' + (ULBL[r.unit] || '');
+    });
+    s.tasks.filter(task => !task.trashed && !task.someday && task.repeat !== 'none').forEach(task => {
+      if (hasTaskCounter(task)) routineDone[task.title] = `${task.counter || 0} ${COUNTER_UNITS[task.counterUnit || 'count']}`;
+      else if (task.type === 'negative') routineDone[task.title] = `${task.counter || 0} раз`;
+      else routineDone[task.title] = task.done;
     });
     const focus = existing.focus.slice();
     if (s.currentFocus && (!focus.length || focus[focus.length - 1] !== s.currentFocus)) {

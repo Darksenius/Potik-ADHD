@@ -4,7 +4,7 @@ import type { Task, TaskType } from '../../types';
 import { fmtDate, WD } from '../../utils/date';
 import { saveState, saveIsBlocked, getSaveErrorMessage, showRecoveryBanner } from '../../services/persistence';
 import { repeatDueOn } from '../../utils/taskSchedule';
-import { hasTaskCounter } from '../../utils/taskCounter';
+import { COUNTER_UNITS, hasTaskCounter } from '../../utils/taskCounter';
 import taskTypeData from '../../content/task-types.json' with { type: 'json' };
 
 type TaskTypeInfo = { label: string; icon: string; xp: number; hint: string; description: string; example: string };
@@ -25,6 +25,7 @@ const REPEATS: { value: Task['repeat']; label: string }[] = [
 export default function TaskEditor() {
   const editorTaskId = useStore(s => s.editorTaskId);
   const initialDate = useStore(s => s.editorInitialDate);
+  const preset = useStore(s => s.editorPreset);
   const tasks = useStore(s => s.tasks);
   const zones = useStore(s => s.zones);
   const folders = useStore(s => s.folders);
@@ -35,10 +36,10 @@ export default function TaskEditor() {
   const isNew = editorTaskId === 'new';
   const existing = !isNew ? tasks.find(t => t.id === editorTaskId) : undefined;
   const [title, setTitle] = useState(existing?.title || '');
-  const [type, setType] = useState<TaskType>(existing?.type || 'simple');
+  const [type, setType] = useState<TaskType>(existing?.type || preset?.type || 'simple');
   const [zoneId, setZoneId] = useState(existing?.zoneId ? String(existing.zoneId) : '');
   const [folderId, setFolderId] = useState(existing?.folderId || '');
-  const [repeat, setRepeat] = useState<Task['repeat']>(existing?.repeat || 'none');
+  const [repeat, setRepeat] = useState<Task['repeat']>(existing?.repeat || preset?.repeat || 'none');
   const [repeatDays, setRepeatDays] = useState(existing?.repeatDays?.slice() || Array<boolean>(7).fill(false));
   const [repeatInterval, setRepeatInterval] = useState(existing?.repeatInterval || 30);
   const [repeatUnit, setRepeatUnit] = useState(existing?.repeatUnit || 'min');
@@ -50,10 +51,10 @@ export default function TaskEditor() {
   const [winEnd, setWinEnd] = useState(existing?.windowEnd || '09:00');
   const [note, setNote] = useState(existing?.note || '');
   const [checklistDraft, setChecklistDraft] = useState('');
-  const [cntTgt, setCntTgt] = useState(existing?.counterTarget ?? (existing?.type === 'counter' ? 10 : 0));
-  const [counterEnabled, setCounterEnabled] = useState(existing ? hasTaskCounter(existing) : false);
-  const [counterStep, setCounterStep] = useState(existing?.counterStep || 1);
-  const [counterUnit, setCounterUnit] = useState<Task['counterUnit']>(existing?.counterUnit || 'count');
+  const [cntTgt, setCntTgt] = useState(existing?.counterTarget ?? preset?.counterTarget ?? (existing?.type === 'counter' ? 10 : 0));
+  const [counterEnabled, setCounterEnabled] = useState(existing ? hasTaskCounter(existing) : preset?.type === 'counter');
+  const [counterStep, setCounterStep] = useState(existing?.counterStep || preset?.counterStep || 1);
+  const [counterUnit, setCounterUnit] = useState<Task['counterUnit']>(existing?.counterUnit || preset?.counterUnit || 'count');
   const [negXp, setNegXp] = useState(existing?.negXp || 5);
   const [reminder, setReminder] = useState(existing?.reminderEnabled !== false);
   const [advance, setAdvance] = useState(String(existing?.remindBeforeMinutes || 0));
@@ -162,9 +163,9 @@ export default function TaskEditor() {
         {type !== 'negative' && <label className="editor-check"><input id="task-counter-enabled" type="checkbox" checked={type === 'counter' || counterEnabled} disabled={type === 'counter'} onChange={e => setCounterEnabled(e.target.checked)} /> Лічильник прогресу</label>}
         {type !== 'negative' && (type === 'counter' || counterEnabled) && <>
           <div className="editor-row"><label className="el" htmlFor="task-counter-step">Крок + / −<input id="task-counter-step" type="number" className="ei" min="1" value={counterStep} onChange={e => setCounterStep(Number(e.target.value))} /></label>
-            <label className="el" htmlFor="task-counter-unit">Одиниця<select id="task-counter-unit" className="ei" value={counterUnit} onChange={e => setCounterUnit(e.target.value as Task['counterUnit'])}><option value="count">раз</option><option value="ml">мл</option><option value="min">хв</option></select></label></div>
+            <label className="el" htmlFor="task-counter-unit">Одиниця<select id="task-counter-unit" className="ei" value={counterUnit} onChange={e => setCounterUnit(e.target.value as Task['counterUnit'])}>{Object.entries(COUNTER_UNITS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
           <label className="el" htmlFor="task-counter-target">Ціль лічильника (0 — без цілі)<input id="task-counter-target" type="number" className="ei" min="0" value={cntTgt} onChange={e => setCntTgt(Number(e.target.value))} /></label>
-          <p className="editor-hint">Наприклад, «Розтяжка»: крок 5 хв. Ціль обираєш сам; досягнення цілі не завершує задачу автоматично.</p>
+          <p className="editor-hint">Наприклад, «Вода»: крок 250 мл; «Розтяжка»: 5 хв. Для щоденного обнулення вибери повторення «Щодня». Кількість таких задач не обмежена. Ціль обираєш сам; її досягнення не завершує задачу автоматично.</p>
         </>}
         {type === 'negative' && <label className="el">Штраф досвіду<input type="number" className="ei" min="1" value={negXp} onChange={e => setNegXp(Math.max(1, Number(e.target.value)))} /></label>}
         <div className="ef"><label className="el" htmlFor="task-folder">Папка</label><div className="editor-row"><select id="task-folder" className="ei" value={folderId} onChange={e => setFolderId(e.target.value)}><option value="">Без папки</option>{folders.map(f => <option value={f.id} key={f.id}>{f.ico} {f.nm}</option>)}</select><button type="button" onClick={() => { const name = window.prompt('Назва нової папки:'); if (name?.trim()) { const id = addFolder(name.trim(), '📁'); if (id) { setFolderId(id); setDirty(true); } } }}>+ Папка</button></div></div>

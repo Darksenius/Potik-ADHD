@@ -1,4 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+async function openInbox(page: Page) {
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+}
 
 test('queued shade captures preserve literal text, commit once, and stay distinct', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-08T12:00:00+03:00') });
@@ -40,10 +45,10 @@ test('queued shade captures preserve literal text, commit once, and stay distinc
   const failedState = await page.evaluate(() => JSON.parse((window as any).FlowBridge.load()));
   expect(failedState.tasks).toHaveLength(0);
   expect(failedState.qnotes).toHaveLength(0);
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await openInbox(page);
   await expect(page.locator('#inbox-sec')).not.toContainText('Inbox from shade');
   await page.getByRole('button', { name: 'Ще', exact: true }).click();
-  await page.getByRole('button', { name: 'Блокнот', exact: true }).click();
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
   await expect(page.locator('#qn-list')).not.toContainText('Note from shade');
 
   await page.evaluate(() => {
@@ -51,13 +56,13 @@ test('queued shade captures preserve literal text, commit once, and stay distinc
     window.__flowDrainEvents?.();
     window.__flowDrainEvents?.();
   });
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await openInbox(page);
   await expect(page.locator('#inbox-sec')).toContainText('Inbox from shade');
   await expect(page.locator('#inbox-sec')).toContainText('... literal ellipsis');
   await expect(page.locator('#inbox-sec')).toContainText('Same title');
   await expect(page.locator('#inbox-sec').getByText('Same title', { exact: true })).toHaveCount(2);
   await page.getByRole('button', { name: 'Ще', exact: true }).click();
-  await page.getByRole('button', { name: 'Блокнот', exact: true }).click();
+  await page.getByRole('button', { name: 'Нотатки', exact: true }).click();
   await expect(page.locator('#qn-list')).toContainText('Note from shade');
   await expect(page.locator('#qn-list')).toContainText('... literal ellipsis\nsecond line');
 

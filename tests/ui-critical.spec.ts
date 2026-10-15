@@ -13,6 +13,7 @@ test('failed inbox save keeps the text and retries into the same task', async ({
     };
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
   await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
   await page.evaluate(() => { (window as any).__failNextStateWrite = 1; });
 

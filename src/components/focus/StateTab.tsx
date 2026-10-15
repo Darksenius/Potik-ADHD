@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useStore } from '../../state/store';
-import { ULBL } from '../../state/slices/routineSlice';
+import { hasTaskCounter } from '../../utils/taskCounter';
+import TaskItem from '../tasks/TaskItem';
+import '../../styles/daily-tasks.css';
 import { ENERGY_LABELS } from '../../constants';
 import PriorityPicker from '../tasks/PriorityPicker';
-import RoutineEditor from './RoutineEditor';
 import { canPrioritizeTask } from '../../utils/taskSchedule';
 import { useClock } from '../../hooks/useClock';
 import Icon from '../common/Icon';
@@ -51,79 +52,29 @@ function PrioritySlot({ index }: { index: number }) {
   );
 }
 
-function RoutineList() {
-  const [editing, setEditing] = useState<boolean | null>(null);
-  const recur = useStore((s) => s.recur);
-  const incRecur = useStore((s) => s.incRecur);
-  const decRecur = useStore((s) => s.decRecur);
-  const toggleRecurCheck = useStore((s) => s.toggleRecurCheck);
-  const deleteRecur = useStore((s) => s.deleteRecur);
+function DailyTasks() {
+  useClock();
+  const tasks = useStore(s => s.tasks);
+  const priorities = useStore(s => s.priorities);
+  const requestNewTaskEditor = useStore(s => s.requestNewTaskEditor);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const recurring = tasks.filter(t => !t.trashed && !t.someday
+    && (hasTaskCounter(t) || t.type === 'negative' || t.repeat !== 'none'));
+  const completed = recurring.filter(t => t.done).length;
+  const visible = recurring.filter(t => showCompleted || !t.done);
 
-  return (
-    <div id="recur-bar">
-      <div className="rb-head">
-        <span className="rb-lbl">Рутина дня</span>
-        <div className="rb-btns">
-          <button
-            className="rb-add"
-            onClick={() => {
-              setEditing(false);
-            }}
-          >
-            + Корисна
-          </button>
-          <button
-            className="rb-add neg"
-            onClick={() => {
-              setEditing(true);
-            }}
-          >
-            − Шкідлива
-          </button>
-        </div>
-      </div>
-      {editing !== null && <RoutineEditor negative={editing} onClose={() => setEditing(null)} />}
-      <div className="rc-list">
-        {recur.map((r) => {
-          const ul = ULBL[r.unit] || '';
-          const negStyle = { borderLeftColor: r.neg ? 'var(--neg)' : r.color };
-          return (
-            <div className="rc-item" key={r.id} style={negStyle}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="rc-nm">
-                  {r.nm} {r.neg && <span className="neg-tag">−{r.negXp} досвіду</span>}
-                </div>
-                <div className="rc-stat">
-                  {r.unit === 'check' ? (r.done ? '✓ виконано' : 'не виконано') : `${r.val} ${ul} сьогодні${r.done ? ' · ✓' : ''}`}
-                </div>
-              </div>
-              <div className="rc-ctrl">
-                {r.unit === 'check' ? (
-                  <button className={'rc-check' + (r.done ? ' on' : '')} onClick={() => toggleRecurCheck(r.id)}>
-                    {r.done ? '✓ Виконано' : 'Виконати'}
-                  </button>
-                ) : (
-                  <>
-                    <button className="rc-b" onClick={() => decRecur(r.id)}>−</button>
-                    <span className="rc-v">
-                      {r.val}
-                      <span style={{ fontSize: 9, color: 'var(--t3)', marginLeft: 2 }}>{ul}</span>
-                    </span>
-                    <button className={'rc-b' + (r.neg ? ' neg-b' : ' pri')} onClick={() => incRecur(r.id)}>
-                      +{r.step}{ul}
-                    </button>
-                  </>
-                )}
-                <button className="rc-del" onClick={() => deleteRecur(r.id)}>✕</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+  return <section className="daily-tasks" aria-labelledby="daily-tasks-title">
+    <div className="section-title"><h2 id="daily-tasks-title">Повсякденні задачі</h2></div>
+    <p className="section-hint">Лічильники та повторювані справи — ті самі задачі, що в Плані й «Усі задачі». Задай одиницю, крок, ціль і потрібну зону. Щоденне повторення обнуляє прогрес наступного дня.</p>
+    <div className="daily-task-actions">
+      <button className="secondary-action" onClick={() => requestNewTaskEditor(undefined, { type: 'counter', repeat: 'daily', counterTarget: 0 })}><Icon name="plus" /> Лічильник</button>
+      <button className="secondary-action" onClick={() => requestNewTaskEditor(undefined, { type: 'simple', repeat: 'daily' })}><Icon name="repeat" /> Повторювана задача</button>
     </div>
-  );
+    {completed > 0 && <button className="secondary-action daily-completed" onClick={() => setShowCompleted(!showCompleted)}>{showCompleted ? 'Сховати виконані' : `Виконані (${completed})`}</button>}
+    <div className="daily-task-list">{visible.map(t => <TaskItem key={t.id} t={t} isPriority={priorities.includes(t.id)} visibleIds={visible.map(task => task.id)} allowMove={false} allView quickCounter />)}</div>
+    {!visible.length && <p className="empty">{completed ? 'Усе виконано. Нове повторення з’явиться за розкладом.' : 'Створи власні лічильники: вода в мл, рух у хвилинах чи будь-яка дія в разах.'}</p>}
+  </section>;
 }
-
 function FocusTracker() {
   const focusChips = useStore((s) => s.focusChips);
   const currentFocus = useStore((s) => s.currentFocus);
@@ -241,7 +192,7 @@ export default function StateTab() {
         </div>
       </div>
 
-      <RoutineList />
+      <DailyTasks />
       <FocusTracker />
     </div>
   );

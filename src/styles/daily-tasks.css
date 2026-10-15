@@ -1,0 +1,10 @@
+.daily-tasks{margin:16px 0 22px}
+.daily-tasks h2{font-size:19px}
+.daily-task-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.daily-task-actions button{display:inline-flex;align-items:center;gap:7px;min-height:46px;flex:1 1 170px}
+.daily-completed{margin-bottom:12px}
+.daily-counter-controls{padding:0 12px 12px}
+.daily-counter-controls .cw{justify-content:flex-start;gap:10px}
+.daily-task-list .cvv{font-size:18px;min-width:65px;text-align:center;overflow-wrap:anywhere}
+.counter-goal{font-size:12px;color:var(--t2);max-width:100%}
+@media(max-width:360px){.daily-counter-controls .cw{gap:6px}.daily-task-list .cvv{min-width:45px}}

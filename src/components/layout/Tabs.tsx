@@ -2,10 +2,10 @@ import { useStore } from '../../state/store';
 import type { TabId } from '../../state/slices/uiSlice';
 import Icon from '../common/Icon';
 
-const TABS: { id: TabId; icon: 'quest' | 'calendar' | 'inbox' | 'more'; label: string }[] = [
+const TABS: { id: TabId; icon: 'quest' | 'calendar' | 'note' | 'more'; label: string }[] = [
   { id: 'tasks', icon: 'quest', label: 'Зараз' },
   { id: 'planner', icon: 'calendar', label: 'План' },
-  { id: 'inbox', icon: 'inbox', label: 'Вхідні' },
+  { id: 'notes', icon: 'note', label: 'Нотатки' },
   { id: 'more', icon: 'more', label: 'Ще' },
 ];
 
@@ -16,7 +16,7 @@ export default function Tabs() {
   return (
     <div id="tabs" role="group" aria-label="Розділи Потоку">
       {TABS.map((t) => {
-        const active = currentTab === t.id || (t.id === 'more' && !['tasks', 'planner', 'inbox'].includes(currentTab));
+        const active = currentTab === t.id || (t.id === 'more' && !['tasks', 'planner', 'notes'].includes(currentTab));
         return <button
           type="button"
           key={t.id}

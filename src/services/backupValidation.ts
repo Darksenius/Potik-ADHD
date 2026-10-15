@@ -41,13 +41,13 @@ const questDeferral: Check = (value, path) => {
   return result;
 };
 const task = shape({
-  id, title: str, type: oneOf(Object.keys(taskTypeCatalog)),
+  id, legacyRoutineId: str, title: str, type: oneOf(Object.keys(taskTypeCatalog)),
   done: bool, someday: bool, zoneId: nullable(id), zoneColor: nullable(str), zoneName: nullable(str), folderId: nullable(str),
   expanded: bool, created: str, trashed: bool, doneDate: str, doneAt: str, completionCredited: bool, completionCreditDate: str, snoozeUntil: num,
   questDeferral, completionDeferral: questDeferral, occurrenceId: str,
   items: array(shape({ text: str, done: bool, credited: bool }, ['text'], { done: false })),
   counter: num, counterTarget: num, cntHit: bool, negXp: num, note: str, alarmTime: str, alarmFired: bool,
-  counterEnabled: bool, counterStep: num, counterUnit: oneOf(['count', 'ml', 'min']), counterCreditedProgress: num, counterDay: str,
+  counterEnabled: bool, counterStep: num, counterUnit: oneOf(['count', 'ml', 'min', 'kcal']), counterCreditedProgress: num, counterDay: str,
   schedDate: str, schedTime: str, firedSched: bool, firedPre: bool, reminderEnabled: bool, remindBeforeMinutes: num, windowStart: str, windowEnd: str, completedToday: bool,
   ctxTags: strings, zoneDoneToday: bool, zoneOccurrenceKey: str,
   repeat: oneOf(['none', 'daily', 'weekly', 'weekdays', 'weekend', 'everyzone', 'interval', 'custom']),
