@@ -3,6 +3,7 @@ package com.flow.adhd
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.flow.adhd.domain.FlowCommand
+import com.flow.adhd.domain.CaptureOrigin
 import com.flow.adhd.domain.FlowCommandResult
 import com.flow.adhd.domain.FlowEngine
 import com.flow.adhd.domain.FlowSnapshot
@@ -24,6 +25,20 @@ import org.junit.runner.RunWith
 /** Runs only the pure native engine: no Activity, WebView, Room writes, or network. */
 @RunWith(AndroidJUnit4::class)
 class NativeCoreTest {
+    @Test fun repeatedNotificationCaptureRetainsItsIdWithoutDuplicateReward() {
+        val engine = FlowEngine(mapOf("simple" to 10.0))
+        val zone = ZoneId.systemDefault()
+        val at = System.currentTimeMillis()
+        val state = FlowSnapshot.parse("""{"formatVersion":2,"tasks":[],"nid":300,"xp":0,"xpTotal":0,"level":1,"progressionVersion":2,"progressDays":[],"dailyInsightClaims":[],"unlocked":[]}""")
+        val command = FlowCommand.CaptureTask("Зі сповіщення", "notification", at, CaptureOrigin.NOTIFICATION, 777)
+        val first = engine.apply(state, command, zone, at) as FlowCommandResult.Applied
+        val repeated = engine.apply(first.snapshot, command, zone, at) as FlowCommandResult.Applied
+        assertEquals(777L, first.snapshot.tasks.single().id)
+        assertEquals("10", repeated.snapshot.data["xpTotal"].toString())
+        assertEquals(first.snapshot.data, repeated.snapshot.data)
+        assertEquals(0, repeated.events.size)
+    }
+
     @Test fun allEditorTypesRetainDetailsAndDailyCounterStartsNewOccurrence() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = context.assets.open("public/contracts/task-types.json").bufferedReader().use { Json.parseToJsonElement(it.readText()) as JsonObject }

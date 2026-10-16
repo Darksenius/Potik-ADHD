@@ -6304,6 +6304,733 @@
       "expectedValue": 1792239600000
     }
   ],
+  "captureCases": [
+    {
+      "scenario": "notification-capture-honors-requested-id-and-awards-10-xp",
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [],
+        "nid": 300,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      },
+      "title": "Захоплено зі сповіщення",
+      "requestedId": 777,
+      "activityAt": 1792141200000,
+      "now": 1792141200000,
+      "zone": "Europe/Kyiv",
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 777,
+            "title": "Захоплено зі сповіщення",
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "created": "2026-10-16T09:00:00.000Z",
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false,
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": []
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [],
+        "nid": 778,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 10,
+        "xpTotal": 10,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [
+          "2026-10-16"
+        ],
+        "dailyInsightClaims": [
+          {
+            "day": "2026-10-16",
+            "sequence": 1,
+            "cardId": 1,
+            "earnedAt": 1792141200000
+          }
+        ],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [
+          "active1"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 10,
+        "xpDay": "Fri Oct 16 2026",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      }
+    },
+    {
+      "scenario": "duplicate-requested-id-is-a-no-op-without-second-xp",
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 777,
+            "title": "Початкова задача",
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false,
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": []
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [],
+        "nid": 778,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 10,
+        "xpTotal": 10,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 10,
+        "xpDay": "Fri Oct 16 2026",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      },
+      "title": "Повторний захват",
+      "requestedId": 777,
+      "activityAt": 1792141200000,
+      "now": 1792141200000,
+      "zone": "Europe/Kyiv",
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 777,
+            "title": "Початкова задача",
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false,
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": []
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [],
+        "nid": 778,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 10,
+        "xpTotal": 10,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 10,
+        "xpDay": "Fri Oct 16 2026",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      }
+    },
+    {
+      "scenario": "delayed-yesterday-capture-keeps-today-xp-day-and-archives-activity-date",
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [],
+        "nid": 300,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [
+          "2026-10-14"
+        ],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "Fri Oct 16 2026",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      },
+      "title": "Вчорашнє сповіщення",
+      "requestedId": 888,
+      "activityAt": 1792054800000,
+      "now": 1792141200000,
+      "zone": "Europe/Kyiv",
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 888,
+            "title": "Вчорашнє сповіщення",
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false,
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": []
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [],
+        "nid": 889,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 10,
+        "xpTotal": 10,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [
+          "2026-10-14",
+          "2026-10-15"
+        ],
+        "dailyInsightClaims": [
+          {
+            "day": "2026-10-14",
+            "sequence": 1,
+            "cardId": 1,
+            "earnedAt": 0
+          },
+          {
+            "day": "2026-10-15",
+            "sequence": 2,
+            "cardId": 2,
+            "earnedAt": 0
+          }
+        ],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [
+          "active1"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 10,
+        "xpDay": "Fri Oct 16 2026",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      }
+    }
+  ],
   "notes": [
     {
       "scenario": "first-note-then-same-day-edit",

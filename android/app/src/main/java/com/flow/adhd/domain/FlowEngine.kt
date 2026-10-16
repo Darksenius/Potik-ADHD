@@ -30,15 +30,24 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
     private fun capture(snapshot: FlowSnapshot, command: FlowCommand.CaptureTask, zone: ZoneId, now: Long): FlowCommandResult {
         val title = command.title.trim()
         if (title.isEmpty()) return FlowCommandResult.Rejected("empty-title", "Task title must not be blank")
+        // Notification buttons may already reference this ID before any screen opens.
+        if (command.requestedId != null && snapshot.tasks.any { it.id == command.requestedId }) {
+            return FlowCommandResult.Applied(snapshot, emptyList())
+        }
         val next = maxOf(300L, snapshot.tasks.maxOfOrNull { it.id + 1L } ?: 300L,
             (snapshot.data["nid"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull ?: 300L)
-        if (next >= 9_007_199_254_740_991L) return FlowCommandResult.Rejected("id-exhausted", "No safe task ID remains")
-        val task = TaskFactory.create(next, title, "simple", command.activityAt)
+        val id = command.requestedId ?: next
+        if (next >= 9_007_199_254_740_991L || id >= 9_007_199_254_740_991L) return FlowCommandResult.Rejected("id-exhausted", "No safe task ID remains")
+        val task = TaskFactory.create(id, title, "simple", command.activityAt)
         val data = snapshot.data.toMutableMap().apply {
             put("tasks", JsonArray(listOf(task) + snapshot.tasks.map { it.raw }))
-            put("nid", JsonPrimitive(next + 1L))
+            put("nid", JsonPrimitive(maxOf(next + 1L, id + 1L)))
         }
         val activity = Progression.recordActivity(JsonObject(data), command.activityAt, zone, now)
+        if (command.origin == CaptureOrigin.NOTIFICATION) {
+            val award = Experience.award(activity.state, 10.0, command.activityAt, zone, now)
+            return FlowCommandResult.Applied(FlowSnapshot.fromData(award.state), activity.events + award.events)
+        }
         return FlowCommandResult.Applied(FlowSnapshot.fromData(activity.state), activity.events)
     }
 }

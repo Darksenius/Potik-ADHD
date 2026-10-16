@@ -192,6 +192,17 @@ function runStateCommandFixture(scenario, initialData, command, performCommand) 
   };
 }
 
+function runCaptureFixture(scenario, initialData, title, requestedId, activityAt) {
+  const input = capture(createStore(initialData).state());
+  const store = createStore(input);
+  store.get().addQuickTaskFromShade(title, requestedId, activityAt);
+  return {
+    scenario, initialState: input, title, requestedId, activityAt,
+    now: fixedNow, zone: fixedZone,
+    expectedState: capture(store.state()),
+  };
+}
+
 function taskState(task) {
   return {
     ...initial(), tasks: [task], taskHistory: [], nid: task.id + 1,
@@ -223,6 +234,16 @@ const initial = (overrides = {}) => ({
 const atToday = fixedNow;
 const atYesterday = dayAt('2026-10-15', 9);
 const todayLabel = new Date(fixedNow).toDateString();
+const captureCases = [
+  runCaptureFixture('notification-capture-honors-requested-id-and-awards-10-xp', initial({ nid: 300 }), 'Захоплено зі сповіщення', 777, atToday),
+  runCaptureFixture('duplicate-requested-id-is-a-no-op-without-second-xp', initial({
+    tasks: [createTaskRecord(777, 'Початкова задача', 'simple', null, null, '', iso(atYesterday))],
+    nid: 778, xp: 10, xpTotal: 10, dayXpGained: 10, xpDay: todayLabel,
+  }), 'Повторний захват', 777, atToday),
+  runCaptureFixture('delayed-yesterday-capture-keeps-today-xp-day-and-archives-activity-date', initial({
+    nid: 300, progressDays: ['2026-10-14'], xpDay: todayLabel,
+  }), 'Вчорашнє сповіщення', 888, atYesterday),
+];
 const editorZone = { id: 7, nm: 'Робота', color: '#7ed321', slots: [{ s: '09:00', e: '18:00' }], desc: '', prio: 1 };
 
 const editorInputs = [
@@ -486,6 +507,7 @@ const fixture = {
   editorCases: [...editorCases, ...editorUpdates],
   lifecycleCases,
   scheduleCases,
+  captureCases,
   notes,
   xpCases,
   energyCases,
@@ -494,4 +516,4 @@ const fixture = {
 
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(fixture, null, 2)}\n`, 'utf8');
-console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, and ${completionCases.length} completion fixtures to ${path.relative(root, outputPath)}`);
+console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${captureCases.length} capture cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, and ${completionCases.length} completion fixtures to ${path.relative(root, outputPath)}`);

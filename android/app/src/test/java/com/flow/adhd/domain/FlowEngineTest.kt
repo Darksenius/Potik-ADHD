@@ -30,4 +30,16 @@ class FlowEngineTest {
         assertTrue(result is FlowCommandResult.Rejected)
         assertTrue(state.tasks.isEmpty())
     }
+
+    @Test fun notificationCaptureRetainsActionIdAndAwardsOnlyOnce() {
+        val initial = FlowSnapshot.parse("""{"formatVersion":2,"tasks":[],"nid":300,"xp":0,"xpTotal":0,"level":1,"progressionVersion":2,"progressDays":[],"dailyInsightClaims":[],"unlocked":[]}""")
+        val command = FlowCommand.CaptureTask("Із шторки", "notification", at, CaptureOrigin.NOTIFICATION, 1700)
+        val first = engine.apply(initial, command, zone, at) as FlowCommandResult.Applied
+        assertEquals(1700L, first.snapshot.tasks.single().id)
+        assertEquals("10", first.snapshot.data["xpTotal"].toString())
+        assertEquals("1701", first.snapshot.data["nid"].toString())
+        val repeated = engine.apply(first.snapshot, command, zone, at) as FlowCommandResult.Applied
+        assertTrue(first.snapshot === repeated.snapshot)
+        assertTrue(repeated.events.isEmpty())
+    }
 }

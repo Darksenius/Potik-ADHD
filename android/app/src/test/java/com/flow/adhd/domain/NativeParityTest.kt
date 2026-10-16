@@ -44,6 +44,13 @@ class NativeParityTest(private val name: String, private val group: String, priv
             )
             check(result is FlowCommandResult.Applied) { "$name rejected: $result" }
             assertEquals(name, fixture["expectedState"], result.snapshot.data)
+        } else if (group == "capture") {
+            val at = fixture.number("activityAt")
+            val result = FlowEngine(taskXp).apply(FlowSnapshot.parse(fixture["initialState"].toString()),
+                FlowCommand.CaptureTask(fixture.text("title")!!, name, at, CaptureOrigin.NOTIFICATION, fixture.number("requestedId")),
+                ZoneId.of(fixture.text("zone")), fixture.number("now"))
+            check(result is FlowCommandResult.Applied) { "$name rejected: $result" }
+            assertEquals(name, fixture["expectedState"], result.snapshot.data)
         } else if (group == "schedule") {
             val task = fixture["task"] as JsonObject
             val at = fixture.number("at")
@@ -131,7 +138,7 @@ class NativeParityTest(private val name: String, private val group: String, priv
                     val item = entry as JsonObject
                     add(arrayOf("notes-$index-${item.text("scenario")}", "notes", item))
                 }
-                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion", "editorCases" to "editor", "lifecycleCases" to "lifecycle", "scheduleCases" to "schedule")) {
+                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion", "editorCases" to "editor", "lifecycleCases" to "lifecycle", "scheduleCases" to "schedule", "captureCases" to "capture")) {
                     (root[key] as JsonArray).forEachIndexed { index, entry ->
                         val item = entry as JsonObject
                         add(arrayOf("$group-$index-${item.text("name") ?: item.text("scenario")}", group, item))

@@ -3,6 +3,7 @@ package com.flow.adhd.domain
 import kotlinx.serialization.json.JsonObject
 
 enum class QuestDeferralKind { NEXT_ZONE, NOT_TODAY }
+enum class CaptureOrigin { APP, NOTIFICATION }
 
 /** A durable, replayable request to change one part of the application state. */
 sealed class FlowCommand(
@@ -17,7 +18,12 @@ sealed class FlowCommand(
         require(activityAtValue >= 0) { "activityAt must be a non-negative epoch timestamp" }
     }
 
-    data class CaptureTask(val title: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class CaptureTask(
+        val title: String, override val commandId: String, override val activityAt: Long,
+        val origin: CaptureOrigin = CaptureOrigin.APP, val requestedId: Long? = null,
+    ) : FlowCommand(commandId, activityAt) {
+        init { require(requestedId == null || requestedId in 1L..9_007_199_254_740_991L) { "capture ID must be a positive JavaScript-safe integer" } }
+    }
     data class CreateTask(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateTask(val taskId: Long, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetTaskDone(val taskId: Long, val done: Boolean, val completedAt: Long?, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
