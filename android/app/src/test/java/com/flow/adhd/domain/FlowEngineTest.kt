@@ -24,7 +24,7 @@ class FlowEngineTest {
         assertTrue(result.events.any { it.type == "daily_insight_claimed" })
     }
 
-    @Test fun unsupportedEditorCommandRejectsRatherThanDiscardingItsFields() {
+    @Test fun invalidEditorCommandRejectsRatherThanDiscardingItsFields() {
         val state = FlowSnapshot.parse("""{"tasks":[]}""")
         val result = engine.apply(state, FlowCommand.CreateTask(JsonObject(emptyMap()), "editor", at), zone, at)
         assertTrue(result is FlowCommandResult.Rejected)

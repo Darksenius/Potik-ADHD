@@ -115,7 +115,7 @@ object TaskHistory {
     /** Matches Date(day + 'T' + normalizedTime) with JavaScript local DST resolution. */
     fun localDateTimeMillis(day: String, time: String, zone: ZoneId): Long? {
         if (!dayPattern.matches(day)) return null
-        val match = timePattern.matchEntire(time) ?: return null
+        val match = timePattern.matchEntire(time.trim()) ?: return null
         val hour = match.groupValues[1].toIntOrNull() ?: return null
         val minute = match.groupValues[2].toIntOrNull() ?: return null
         if (hour !in 0..23 || minute !in 0..59) return null

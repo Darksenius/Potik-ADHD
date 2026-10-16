@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.boolean
 import org.junit.Assert.assertEquals
@@ -43,6 +44,53 @@ class NativeParityTest(private val name: String, private val group: String, priv
             )
             check(result is FlowCommandResult.Applied) { "$name rejected: $result" }
             assertEquals(name, fixture["expectedState"], result.snapshot.data)
+        } else if (group == "schedule") {
+            val task = fixture["task"] as JsonObject
+            val at = fixture.number("at")
+            val zone = ZoneId.of(fixture.text("zone"))
+            val timeline = (fixture["timeline"] as JsonArray).map { row ->
+                val segment = row as JsonObject
+                TimelineSegment(segment.number("zoneId"), segment.number("startAt"), segment.number("endAt"))
+            }
+            val context = ProjectionContext(at, timeline, zone)
+            val value: Any? = when (fixture.text("method")) {
+                "taskDoneOn" -> TaskSchedule.doneOn(task, fixture.text("day")!!, context, (fixture["history"] as JsonArray).map { it as JsonObject })
+                "isTaskInInbox" -> TaskSchedule.isUnscheduled(task)
+                "isTaskInTimeWindow" -> TaskSchedule.window(task, at, zone)
+                "repeatDueOn" -> TaskSchedule.repeatDueOn(task, at, zone)
+                "nextTaskReminderAt" -> TaskSchedule.nextReminderAt(task, context)
+                "taskPreReminderAt" -> TaskSchedule.preReminderAt(task, at)
+                else -> error("Unsupported schedule parity method")
+            }
+            val actual = when (value) {
+                is Boolean -> JsonPrimitive(value)
+                is Long -> JsonPrimitive(value)
+                null -> JsonNull
+                else -> error("Unexpected schedule value")
+            }
+            assertEquals(name, fixture["expectedValue"], actual)
+        } else if (group == "editor") {
+            val data = fixture["command"] as JsonObject
+            val at = data.number("activityAt")
+            val command = if (data.text("kind") == "CreateTask") FlowCommand.CreateTask(data["payload"] as JsonObject, name, at)
+                else FlowCommand.UpdateTask(data.number("taskId"), data["payload"] as JsonObject, name, at)
+            val result = TaskEditorReducer.reduce(FlowSnapshot.parse(fixture["initialState"].toString()), command,
+                ZoneId.of(data.text("zone")), taskXp.keys, data.number("now"), (data["activeZoneId"] as? JsonPrimitive)?.long)
+            check(result is FlowCommandResult.Applied) { "$name rejected: $result" }
+            assertEquals(name, fixture["expectedState"], result.snapshot.data)
+        } else if (group == "lifecycle") {
+            val data = fixture["command"] as JsonObject
+            val state = FlowSnapshot.parse(fixture["initialState"].toString())
+            val at = data.number("at")
+            val zone = ZoneId.of(data.text("zone"))
+            val resolver = { zoneId: Long, instant: Long -> "${Instant.ofEpochMilli(instant).atZone(zone).toLocalDate()}:$zoneId:09:00" }
+            val result = when (data.text("kind")) {
+                "ResetRepeating" -> TaskLifecycle.resetRepeating(state, at, zone)
+                "CheckZoneRepeats" -> TaskLifecycle.checkZoneRepeats(state, at, zone, resolver, (data["taskId"] as? JsonPrimitive)?.long)
+                "DailyReset" -> TaskLifecycle.dailyReset(state, data.text("savedDate"), at, zone)
+                else -> error("Unsupported lifecycle parity method")
+            }
+            assertEquals(name, fixture["expectedState"], result.data)
         } else if (group == "completion") {
             val data = fixture["command"] as JsonObject
             val at = data.number("completedAt")
@@ -83,10 +131,10 @@ class NativeParityTest(private val name: String, private val group: String, priv
                     val item = entry as JsonObject
                     add(arrayOf("notes-$index-${item.text("scenario")}", "notes", item))
                 }
-                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion")) {
+                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion", "editorCases" to "editor", "lifecycleCases" to "lifecycle", "scheduleCases" to "schedule")) {
                     (root[key] as JsonArray).forEachIndexed { index, entry ->
                         val item = entry as JsonObject
-                        add(arrayOf("$group-$index-${item.text("name")}", group, item))
+                        add(arrayOf("$group-$index-${item.text("name") ?: item.text("scenario")}", group, item))
                     }
                 }
             }

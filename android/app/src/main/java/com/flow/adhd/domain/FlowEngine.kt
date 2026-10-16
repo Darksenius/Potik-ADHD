@@ -11,6 +11,7 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
     fun apply(
         snapshot: FlowSnapshot, command: FlowCommand, zone: ZoneId, now: Long,
         zoneOccurrenceKey: (Long, Long) -> String? = { _, _ -> null },
+        activeZoneId: Long? = null,
     ): FlowCommandResult = when (command) {
         is FlowCommand.AddQuickNote, is FlowCommand.UpdateQuickNote, is FlowCommand.DeleteQuickNote,
         is FlowCommand.SetNotepad, is FlowCommand.SetNotepadFolder, is FlowCommand.SaveNotepadAsNote,
@@ -21,6 +22,8 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.SetEnergy -> Experience.setEnergy(snapshot.data, command.value, command.activityAt, zone, now)
             .let { FlowCommandResult.Applied(FlowSnapshot.fromData(it.state), it.events) }
         is FlowCommand.CaptureTask -> capture(snapshot, command, zone, now)
+        is FlowCommand.CreateTask, is FlowCommand.UpdateTask -> TaskEditorReducer.reduce(snapshot, command, zone, taskXp.keys, now, activeZoneId)
+        is FlowCommand.LifecycleTick -> TaskLifecycle.tick(snapshot, now, zone, zoneOccurrenceKey)
         else -> FlowCommandResult.Rejected("not-migrated", "This command has not been migrated yet")
     }
 

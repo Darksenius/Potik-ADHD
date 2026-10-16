@@ -19,10 +19,12 @@ const entry = `
   import { createNotesSlice } from './src/state/slices/notesSlice.ts';
   import { createGamificationSlice } from './src/state/slices/gamificationSlice.ts';
   import { createTasksSlice } from './src/state/slices/tasksSlice.ts';
+  import { createLifecycleSlice } from './src/state/slices/lifecycleSlice.ts';
   import { completedTaskOccurrences } from './src/utils/taskHistory.ts';
   import { fmtDate } from './src/utils/date.ts';
+  import { isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt } from './src/utils/taskSchedule.ts';
   import taskTypes from './src/content/task-types.json' with { type: 'json' };
-  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, completedTaskOccurrences, fmtDate, taskTypes };
+  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes };
 `;
 const bundled = await build({
   stdin: { contents: entry, resolveDir: root, sourcefile: 'native-parity-entry.ts' },
@@ -43,10 +45,11 @@ const bundled = await build({
   }],
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`;
-const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, completedTaskOccurrences, fmtDate, taskTypes } = await import(moduleUrl);
+const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes } = await import(moduleUrl);
 
 const transientFields = new Set(['qnid', 'dailyInsightNotice', 'selectedInsightDay', 'xpPopup', 'levelUpFlash', 'alarmTaskIds']);
 const fixedZone = 'Europe/Kyiv';
+const activeZoneId = 7;
 const iso = (at) => new Date(at).toISOString();
 const dayAt = (day, hour = 9) => Date.parse(`${day}T${String(hour).padStart(2, '0')}:00:00.000Z`);
 
@@ -71,12 +74,15 @@ function createStore(initial = {}) {
     priorities: [null, null, null], focusChips: [], focusLog: [], currentFocus: '',
     taskEditorDraft: '', theme: 'dark', preferences: { themeMode: 'system', reduceMotion: false, showGamification: true },
   };
-  state = { ...defaults, ...createGamificationSlice(set, get), ...createNotesSlice(set, get), ...createTasksSlice(set, get), ...initial };
+  state = { ...defaults, ...createGamificationSlice(set, get), ...createNotesSlice(set, get), ...createTasksSlice(set, get), ...createLifecycleSlice(set, get), ...initial };
   const maxNoteId = Math.max(99, ...(state.qnotes || []).map((note) => Number(note.id) || 0));
   state.qnid = Math.max(100, maxNoteId + 1);
   state.alarmTaskIds = state.alarmTaskIds || [];
   state.getZoneOccurrenceKey = (zoneId, date) => `${fmtDate(date)}:${zoneId}:09:00`;
-  state.getActiveZones = () => [];
+  state.getActiveZones = () => {
+    const active = get().zones.find((candidate) => candidate.id === activeZoneId);
+    return active ? [active] : [];
+  };
   state.showToast = () => {};
   state.dayStats = (day) => ({
     tasksDone: completedTaskOccurrences(get().taskHistory, get().tasks)
@@ -102,6 +108,21 @@ function perform(store, command) {
 function performCompletion(store, command) {
   if (command.kind !== 'SetTaskDone') throw new Error(`Unsupported completion fixture command ${command.kind}`);
   return store.get().setTaskDone(command.taskId, command.done, command.completedAt);
+}
+
+function performEditor(store, command) {
+  if (command.kind === 'CreateTask') return store.get().saveTask(null, command.payload);
+  if (command.kind === 'UpdateTask') return store.get().saveTask(command.taskId, command.payload);
+  throw new Error(`Unsupported editor fixture command ${command.kind}`);
+}
+
+function performLifecycle(store, command) {
+  const api = store.get();
+  const date = new Date(command.at);
+  if (command.kind === 'ResetRepeating') return api.resetRepeatingTasksFor(date);
+  if (command.kind === 'CheckZoneRepeats') return api.checkZoneRepeats(date, command.taskId);
+  if (command.kind === 'DailyReset') return api.dailyResetIfNeeded(command.savedDate);
+  throw new Error(`Unsupported lifecycle fixture command ${command.kind}`);
 }
 
 function runFixture(scenario, initialData, commands) {
@@ -154,6 +175,23 @@ function runCompletionFixture(scenario, initialData, commands) {
   });
 }
 
+function runStateCommandFixture(scenario, initialData, command, performCommand) {
+  const input = capture(createStore(initialData).state());
+  const store = createStore(input);
+  performCommand(store, command);
+  return {
+    scenario,
+    initialState: input,
+    command: {
+      ...command,
+      now: fixedNow,
+      zone: fixedZone,
+      activeZoneId,
+    },
+    expectedState: capture(store.state()),
+  };
+}
+
 function taskState(task) {
   return {
     ...initial(), tasks: [task], taskHistory: [], nid: task.id + 1,
@@ -185,6 +223,137 @@ const initial = (overrides = {}) => ({
 const atToday = fixedNow;
 const atYesterday = dayAt('2026-10-15', 9);
 const todayLabel = new Date(fixedNow).toDateString();
+const editorZone = { id: 7, nm: 'Робота', color: '#7ed321', slots: [{ s: '09:00', e: '18:00' }], desc: '', prio: 1 };
+
+const editorInputs = [
+  { type: 'simple', payload: { title: 'Проста справа', type: 'simple', zoneId: null } },
+  { type: 'sched', payload: { title: 'Точний дзвінок', type: 'sched', zoneId: 7, schedDate: '2026-10-17', schedTime: '15:30', reminderEnabled: true, remindBeforeMinutes: 10 } },
+  { type: 'check', payload: { title: 'Перед виходом', type: 'check', items: [{ text: 'Документи' }, { text: 'Ключі' }] } },
+  { type: 'counter', payload: { title: 'Прочитані сторінки', type: 'counter', counterStep: 2, counterTarget: 12, counterUnit: 'pages', counterEnabled: true } },
+  { type: 'note', payload: { title: 'З деталями', type: 'note', note: 'Рядок перший\nРядок другий' } },
+  { type: 'alarm', payload: { title: 'Нагадування', type: 'alarm', zoneId: 7, alarmTime: '09:05', reminderEnabled: true } },
+  { type: 'timewin', payload: { title: 'Нічне вікно', type: 'timewin', zoneId: 7, windowStart: '22:00', windowEnd: '02:00' } },
+  { type: 'ctx', payload: { title: 'Позначене', type: 'ctx', tags: ['вдома', 'тихо'] } },
+  { type: 'negative', payload: { title: 'Журнал', type: 'negative', negXp: 0 } },
+  { type: 'zonelinked', payload: { title: 'Справа для зони', type: 'zonelinked', zoneId: null, repeat: 'everyzone' } },
+];
+const editorCases = editorInputs.map(({ type, payload }) => runStateCommandFixture(
+  `create-${type}`, initial({ zones: [editorZone], nid: 900 }),
+  { kind: 'CreateTask', payload, id: `editor-create-${type}`, activityAt: atToday }, performEditor,
+));
+
+const schedToSimple = {
+  ...createTaskRecord(910, 'Запланована', 'sched', 7, editorZone, '', iso(atYesterday)),
+  schedDate: '2026-10-17', schedTime: '15:30', planDate: '2026-10-17', reminderEnabled: true,
+  remindBeforeMinutes: 10, firedSched: true, firedPre: true,
+};
+const counterToNote = {
+  ...createTaskRecord(911, 'Лічильник', 'counter', null, null, '', iso(atYesterday)),
+  counter: 7, counterCreditedProgress: 5, counterStep: 2, counterTarget: 8, counterUnit: 'pages', counterEnabled: true,
+};
+const noteWithUnknowns = {
+  ...createTaskRecord(912, 'Нотатка', 'note', null, null, '', iso(atYesterday)),
+  note: 'Початковий рядок', customTaskData: { keep: true, nested: ['a', 2] },
+};
+const checkWithProgress = {
+  ...createTaskRecord(913, 'Чекліст', 'check', null, null, '', iso(atYesterday)),
+  items: [{ text: 'Готово', done: true, credited: true }, { text: 'Ще ні', done: false, credited: false }],
+};
+const editorUpdates = [
+  runStateCommandFixture('update-sched-to-simple', initial({ zones: [editorZone], tasks: [schedToSimple], nid: 914 }), {
+    kind: 'UpdateTask', taskId: 910, payload: { title: 'Звичайна справа', type: 'simple', zoneId: null, tags: [] }, id: 'editor-update-sched-simple', activityAt: atToday,
+  }, performEditor),
+  runStateCommandFixture('update-counter-to-note-with-attached-counter', initial({ tasks: [counterToNote], nid: 914 }), {
+    kind: 'UpdateTask', taskId: 911, payload: { title: 'Нотатка з лічильником', type: 'note', note: 'Зберегти поступ', counterEnabled: true, counterTarget: 9, counterStep: 1, counterUnit: 'pages', tags: [] }, id: 'editor-update-counter-note', activityAt: atToday,
+  }, performEditor),
+  runStateCommandFixture('update-note-preserves-unknown-task-and-root-fields', initial({
+    tasks: [noteWithUnknowns], nid: 914, customRootData: { revision: 4, nested: { preserve: 'yes' } },
+  }), {
+    kind: 'UpdateTask', taskId: 912, payload: { title: 'Нотатка оновлена', type: 'note', note: 'Оновлена\nбагаторядкова примітка', tags: [] }, id: 'editor-update-note-unknowns', activityAt: atToday,
+  }, performEditor),
+  runStateCommandFixture('update-check-keeps-existing-steps-and-progress', initial({ tasks: [checkWithProgress], nid: 914 }), {
+    kind: 'UpdateTask', taskId: 913, payload: { title: 'Чекліст оновлено', type: 'check', items: [{ text: 'Замінити не можна' }], tags: [] }, id: 'editor-update-check-keeps-steps', activityAt: atToday,
+  }, performEditor),
+];
+
+const yesterdayString = new Date(atYesterday).toDateString();
+const lifecycleCases = [
+  runStateCommandFixture('daily-unfinished-counter-progress-resets', initial({ tasks: [{
+    ...createTaskRecord(920, 'Щоденний лічильник', 'counter', null, null, '', iso(atYesterday)),
+    repeat: 'daily', counter: 3, counterCreditedProgress: 3, cntHit: true, counterDay: '2026-10-15',
+  }] }), { kind: 'ResetRepeating', at: atToday }, performLifecycle),
+  runStateCommandFixture('weekdays-repeat-unchanged-on-weekend', initial({ tasks: [{
+    ...createTaskRecord(921, 'Будні', 'counter', null, null, '', iso(atYesterday)),
+    repeat: 'weekdays', counter: 4, counterDay: '2026-10-16',
+  }] }), { kind: 'ResetRepeating', at: dayAt('2026-10-17') }, performLifecycle),
+  runStateCommandFixture('interval-due-resets-future-stays-done', initial({ tasks: [
+    { ...createTaskRecord(922, 'Інтервал настав', 'simple', null, null, '', iso(atYesterday)), repeat: 'interval', repeatMs: 3600000, done: true, nextRepeatAt: atToday - 1, counterDay: '2026-10-15' },
+    { ...createTaskRecord(923, 'Інтервал попереду', 'simple', null, null, '', iso(atYesterday)), repeat: 'interval', repeatMs: 3600000, done: true, nextRepeatAt: atToday + 3600000, counterDay: '2026-10-15' },
+  ] }), { kind: 'ResetRepeating', at: atToday }, performLifecycle),
+  runStateCommandFixture('everyzone-first-observation-only-sets-key', initial({ tasks: [{
+    ...createTaskRecord(924, 'Перша зона', 'zonelinked', 7, editorZone, '', iso(atYesterday)),
+    repeat: 'everyzone', counter: 3, zoneOccurrenceKey: undefined,
+  }] }), { kind: 'CheckZoneRepeats', at: atToday, taskId: 924 }, performLifecycle),
+  runStateCommandFixture('everyzone-new-slot-resets-occurrence', initial({ tasks: [{
+    ...createTaskRecord(925, 'Нова зона', 'zonelinked', 7, editorZone, '', iso(atYesterday)),
+    repeat: 'everyzone', done: true, counter: 3, zoneOccurrenceKey: '2026-10-16:7:06:00',
+  }] }), { kind: 'CheckZoneRepeats', at: atToday, taskId: 925 }, performLifecycle),
+  runStateCommandFixture('midnight-preserves-past-preset-negative-log', initial({ tasks: [{
+    ...createTaskRecord(926, 'Збережений журнал', 'negative', null, null, '', iso(atYesterday)),
+    dayPresetKey: 'preset:2026-10-15', planDate: '2026-10-15', repeat: 'none', counter: 4, counterDay: '2026-10-15', counterCreditedProgress: 4,
+  }] }), { kind: 'DailyReset', at: atToday, savedDate: yesterdayString }, performLifecycle),
+];
+
+function scheduleFixture(scenario, method, task, { at = fixedNow, day, history = [], timeline = [] } = {}) {
+  let value;
+  switch (method) {
+    case 'taskDoneOn': value = taskDoneOn(task, day, history); break;
+    case 'isTaskInInbox': value = isTaskInInbox(task); break;
+    case 'isTaskInTimeWindow': value = isTaskInTimeWindow(task, new Date(at)); break;
+    case 'nextTaskReminderAt': value = nextTaskReminderAt(task, new Date(at), timeline); break;
+    case 'repeatDueOn': value = repeatDueOn(task, new Date(at)); break;
+    case 'taskPreReminderAt': value = taskPreReminderAt(task, at); break;
+    default: throw new Error(`Unsupported schedule fixture method ${method}`);
+  }
+  return {
+    scenario, method, task, ...(day === undefined ? {} : { day }), at,
+    zone: fixedZone, history, timeline,
+    expectedValue: value === undefined ? null : value,
+  };
+}
+
+const scheduleCases = [
+  scheduleFixture('once-task-done-today-is-not-done-yesterday-with-empty-history', 'taskDoneOn', {
+    id: 950, title: 'Сьогодні виконано', type: 'simple', done: true, doneDate: '2026-10-16',
+    created: iso(atYesterday), repeat: 'none',
+  }, { day: '2026-10-15', history: [] }),
+  scheduleFixture('zero-zone-id-remains-unscheduled-inbox-task', 'isTaskInInbox', {
+    id: 951, title: 'У вхідних', type: 'simple', done: false, trashed: false, someday: false,
+    zoneId: 0, created: iso(atYesterday), repeat: 'none',
+  }),
+  scheduleFixture('fired-one-shot-alarm-has-no-next-reminder', 'nextTaskReminderAt', {
+    id: 952, title: 'Вже спрацював', type: 'alarm', done: false, alarmTime: '09:05', alarmFired: true,
+    created: iso(atYesterday), repeat: 'none',
+  }),
+  scheduleFixture('legacy-single-digit-hour-window-at-0930', 'isTaskInTimeWindow', {
+    id: 953, title: 'Вікно', type: 'timewin', windowStart: '9:00', windowEnd: '10:00',
+  }, { at: Date.parse('2026-10-16T06:30:00.000Z') }),
+  scheduleFixture('weekly-repeat-matches-valid-monday-anchor', 'repeatDueOn', {
+    id: 954, title: 'Щотижня', type: 'simple', repeat: 'weekly', planDate: '2026-10-12',
+    created: iso(atYesterday),
+  }, { at: dayAt('2026-10-19') }),
+  scheduleFixture('overnight-window-includes-0100', 'isTaskInTimeWindow', {
+    id: 955, title: 'Нічне вікно', type: 'timewin', windowStart: '22:00', windowEnd: '02:00',
+  }, { at: Date.parse('2026-10-15T22:00:00.000Z') }),
+  scheduleFixture('scheduled-reminder-uses-exact-local-date-and-time', 'nextTaskReminderAt', {
+    id: 956, title: 'Заплановано', type: 'sched', schedDate: '2026-10-17', planDate: '2026-10-17',
+    schedTime: '15:30', reminderEnabled: true, remindBeforeMinutes: 10, repeat: 'none',
+  }),
+  scheduleFixture('scheduled-pre-reminder-is-ten-minutes-before-due', 'taskPreReminderAt', {
+    id: 957, title: 'Попереднє нагадування', type: 'sched', schedDate: '2026-10-17', schedTime: '15:30',
+    reminderEnabled: true, remindBeforeMinutes: 10,
+  }, { at: Date.parse('2026-10-17T12:30:00.000Z') }),
+];
 
 const xpInputs = [
   {
@@ -313,6 +482,10 @@ const fixture = {
   now: fixedNow,
   taskXp: Object.fromEntries(Object.entries(taskTypes).map(([type, definition]) => [type, definition.xp])),
   taskFactoryCases,
+  activeZoneId,
+  editorCases: [...editorCases, ...editorUpdates],
+  lifecycleCases,
+  scheduleCases,
   notes,
   xpCases,
   energyCases,
@@ -321,4 +494,4 @@ const fixture = {
 
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(fixture, null, 2)}\n`, 'utf8');
-console.log(`Wrote ${taskFactoryCases.length} task cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, and ${completionCases.length} completion fixtures to ${path.relative(root, outputPath)}`);
+console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, and ${completionCases.length} completion fixtures to ${path.relative(root, outputPath)}`);
