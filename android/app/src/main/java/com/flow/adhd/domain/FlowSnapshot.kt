@@ -44,6 +44,11 @@ class FlowSnapshot private constructor(val data: JsonObject) {
                 throw SnapshotFormatException("Invalid JSON", e)
             }
 
+            return fromData(root)
+        }
+
+        /** Reducers already have a JSON tree; validate it without a full text round trip. */
+        internal fun fromData(root: JsonObject): FlowSnapshot {
             val version = root["formatVersion"]
             if (version != null && version != JsonPrimitive(2)) {
                 throw SnapshotFormatException("Unsupported formatVersion")
