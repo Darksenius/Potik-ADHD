@@ -20,6 +20,15 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
             CounterReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.SetTaskDone -> TaskCompletionReducer.reduce(snapshot, command, zone, taskXp, now, zoneOccurrenceKey)
         is FlowCommand.DeferTask -> TaskDeferralReducer.reduce(snapshot, command, zone, zoneOccurrenceKey)
+        is FlowCommand.MoveTaskToSomeday, is FlowCommand.RestoreTaskFromSomeday, is FlowCommand.TrashTask,
+        is FlowCommand.RestoreTrashedTask, is FlowCommand.HardDeleteTask, is FlowCommand.SetPriority ->
+            TaskManagementReducer.reduce(snapshot, command, zone, now)
+        is FlowCommand.CreateZone, is FlowCommand.UpdateZone, is FlowCommand.DeleteZone ->
+            ZoneReducer.reduce(snapshot, command, zone, now)
+        is FlowCommand.SetPlanDay, is FlowCommand.SetPlanRestDay, is FlowCommand.AddPlanItem,
+        is FlowCommand.UpdatePlanItem, is FlowCommand.DeletePlanItem -> PlannerReducer.reduce(snapshot, command, zone, now)
+        is FlowCommand.SetFocus, is FlowCommand.ClearFocus, is FlowCommand.AddFocusChip, is FlowCommand.RemoveFocusChip ->
+            FocusReducer.reduce(snapshot, command, zone)
         is FlowCommand.SetEnergy -> Experience.setEnergy(snapshot.data, command.value, command.activityAt, zone, now)
             .let { FlowCommandResult.Applied(FlowSnapshot.fromData(it.state), it.events) }
         is FlowCommand.CaptureTask -> capture(snapshot, command, zone, now)

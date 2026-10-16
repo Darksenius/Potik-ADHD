@@ -39,6 +39,7 @@ export const createFocusSlice: AppSlice<FocusSlice> = (set, get) => ({
 
   setFocus: (val) => {
     const s = get();
+    if (s.currentFocus === val) return;
     const now = new Date();
     let focusLog = s.focusLog;
     if (s.currentFocus && s.currentFocus !== val) {

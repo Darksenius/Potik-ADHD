@@ -29,6 +29,47 @@ import org.junit.runner.RunWith
 /** Runs only the pure native engine: no Activity, WebView, Room writes, or network. */
 @RunWith(AndroidJUnit4::class)
 class NativeCoreTest {
+    @Test fun taskAndDayManagementPreserveCompletionCreditAndDeletedZoneReferences() {
+        val zone = ZoneId.of("UTC")
+        val at = Instant.parse("2026-10-16T19:00:00Z").toEpochMilli()
+        val engine = FlowEngine(mapOf("simple" to 10.0, "sched" to 15.0, "zonelinked" to 10.0))
+        var state = FlowSnapshot.parse("""{"formatVersion":2,"tasks":[],"zones":[],"nid":300,
+          "priorities":[null,null,null],"xp":0,"xpTotal":0,"level":1,"done":0,
+          "progressionVersion":2,"progressDays":[],"dailyInsightClaims":[],"unlocked":[],"custom":"keep"}""")
+        fun json(text: String) = Json.parseToJsonElement(text) as JsonObject
+        fun apply(command: FlowCommand) {
+            val result = engine.apply(state, command, zone, at)
+            check(result is FlowCommandResult.Applied) { "Native command rejected: $result" }
+            state = result.snapshot
+        }
+        apply(FlowCommand.CreateZone(json("""{"nm":"Вечір"}"""), "zone", at))
+        apply(FlowCommand.UpdateZone(1, json("""{"nm":"Вечір","color":"#ff6b35","desc":"Вдома","prio":3,"slots":[{"s":"18:00","e":"22:00"}]}"""), "zone-edit", at))
+        apply(FlowCommand.AddPlanItem("2026-10-16", json("""{"text":"18:30 Прибрати кухню"}"""), "planned", at))
+        val id = state.tasks.single().id
+        apply(FlowCommand.SetPriority(0, id, "priority", at))
+        assertEquals(id.toString(), (state.data["priorities"] as JsonArray)[0].toString())
+        apply(FlowCommand.SetPriority(0, null, "clear-priority", at))
+        assertEquals("null", (state.data["priorities"] as JsonArray)[0].toString())
+        apply(FlowCommand.SetTaskDone(id, true, at, "done", at))
+        val credited = state.data["xpTotal"]
+        apply(FlowCommand.TrashTask(id, "trash", at))
+        apply(FlowCommand.RestoreTrashedTask(id, "restore", at))
+        apply(FlowCommand.MoveTaskToSomeday(id, "someday", at))
+        apply(FlowCommand.RestoreTaskFromSomeday(id, "return", at))
+        apply(FlowCommand.SetTaskDone(id, true, at, "done-again", at))
+        assertEquals(credited, state.data["xpTotal"])
+        assertEquals(1, TaskHistory.completedOccurrences(state.data["taskHistory"] as JsonArray, zone = zone).size)
+
+        val blocks = json("""{"blocks":[{"zoneId":1,"s":"09:00","e":"10:00","custom":"keep"}]}""")
+        apply(FlowCommand.SetPlanDay("2026-10-17", blocks, "day", at))
+        val manual = state.data["planDayZones"]
+        apply(FlowCommand.DeleteZone(1, "delete-zone", at))
+        assertEquals(manual, state.data["planDayZones"])
+        apply(FlowCommand.CreateZone(json("""{"nm":"Інша зона"}"""), "new-zone", at))
+        assertEquals("2", state.zones.single()["id"].toString())
+        assertEquals("\"keep\"", state.data["custom"].toString())
+    }
+
     @Test fun lastNamedZoneUsesTheSameFallbackInNotificationsAndNativeCore() {
         val zone = ZoneId.of("UTC")
         val at = Instant.parse("2026-10-16T21:30:00Z").toEpochMilli()

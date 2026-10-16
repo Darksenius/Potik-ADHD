@@ -57,11 +57,14 @@ sealed class FlowCommand(
     data class UpdateNoteFolder(val folderId: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteNoteFolder(val folderId: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
 
+    /** Payload: nm. Updates additionally require color, desc, prio and slots. */
     data class CreateZone(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateZone(val zoneId: Long, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteZone(val zoneId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    /** Payload: blocks array. An empty array is an explicit override of the day's template. */
     data class SetPlanDay(val date: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetPlanRestDay(val date: String, val isRest: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    /** Payload: text, optional isEvent. Tasks and calendar annotations have distinct behavior. */
     data class AddPlanItem(val date: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdatePlanItem(val date: String, val index: Int, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeletePlanItem(val date: String, val index: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
@@ -71,6 +74,9 @@ sealed class FlowCommand(
     data class ApplyTemplate(val templateId: String, val startDate: String, val spanDays: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
 
     data class SetFocus(val value: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class ClearFocus(override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class AddFocusChip(val value: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class RemoveFocusChip(val value: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetEnergy(val value: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
         init { require(value in 0..5) { "energy must be between 0 and 5" } }
     }
