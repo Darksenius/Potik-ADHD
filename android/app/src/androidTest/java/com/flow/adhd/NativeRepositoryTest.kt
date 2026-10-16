@@ -35,7 +35,7 @@ class NativeRepositoryTest {
     }
     @After fun closeDatabase() { database.close() }
     private fun repository(afterCommit: (String) -> Unit = {}) = NativeCommandRepository(
-        RoomCommandStore(database), FlowEngine(mapOf("simple" to 10.0)), { ZoneId.of("UTC") }, { at }, afterCommit = afterCommit,
+        RoomCommandStore(database), FlowEngine(mapOf("simple" to 10.0, "counter" to 2.0, "sched" to 10.0)), { ZoneId.of("UTC") }, { at }, afterCommit = afterCommit,
     )
     private fun state() = FlowDatabase.callStorage { FlowSnapshot.parse(database.flowDao().stateJson) }
     private fun pending() = FlowDatabase.callStorage { database.flowDao().pendingEvents.map { it.id } }
@@ -134,5 +134,45 @@ class NativeRepositoryTest {
         assertEquals(JsonPrimitive("light"), state().data["theme"])
         assertEquals(JsonPrimitive(true), state().data["preferences"]!!.jsonObject["reduceMotion"])
         assertEquals(JsonPrimitive(0), state().data["xpTotal"])
+    }
+
+    @Test fun everydayActionsAndLateNotificationTapRemainDurableWithoutTouchingTodaysProgress() = runBlocking {
+        val counter = JsonObject(TaskFactory.create(300, "Розминка", "counter", at - 3 * 86_400_000L) + mapOf(
+            "repeat" to JsonPrimitive("daily"), "counter" to JsonPrimitive(2), "counterDay" to JsonPrimitive("2026-10-16"),
+        ))
+        val reminder = JsonObject(TaskFactory.create(301, "Подзвонити", "sched", at - 86_400_000L) + mapOf(
+            "schedDate" to JsonPrimitive("2026-10-16"), "schedTime" to JsonPrimitive("09:00"),
+        ))
+        FlowDatabase.callStorage { database.flowDao().writeState(JsonObject(FlowDefaults.create() + mapOf(
+            "tasks" to JsonArray(listOf(counter, reminder)), "nid" to JsonPrimitive(302),
+        )).toString()) }
+        val repo = repository()
+        suspend fun commit(command: FlowCommand) { assertTrue(repo.dispatch(command) is CommandCommit.Committed) }
+        commit(FlowCommand.SetTaskEditorDraft("Не втратити чернетку", "draft", at))
+        commit(FlowCommand.SetPlanDayNote("2026-10-16", "День без поспіху", "day-note", at))
+        commit(FlowCommand.EditPlanZoneForDay("2026-10-16", 5, "edit-zone", at))
+        commit(FlowCommand.SetPlanZoneOff("2026-10-16", 5, false, "restore-zone", at))
+        commit(FlowCommand.SetZoneOff(5, true, "global-off", at))
+        commit(FlowCommand.SetZoneOff(5, false, "global-on", at))
+        commit(FlowCommand.CreateRareEvent("Перерва", "up", "rare", at))
+        val rareId = state().data["rareEvents"]!!.jsonArray.single().jsonObject["id"]!!.jsonPrimitive.long
+        commit(FlowCommand.ChangeRareEvent(rareId, 3.0, "rare-inc", at))
+        val capture = FlowCommand.CaptureNote("Ідея зі шторки", "capture-note", at)
+        commit(capture)
+        assertTrue((repository().dispatch(capture) as CommandCommit.Committed).replayed)
+        val past = FlowCommand.RecordPastTaskDone(300, at - 86_400_000L, "past-done", at - 86_400_000L)
+        commit(past)
+        commit(FlowCommand.RecordPastTaskDone(300, at - 86_400_000L, "past-done-again", at - 86_400_000L))
+        commit(FlowCommand.MarkTaskReminderFired(301, at, false, "reminder", at))
+        commit(FlowCommand.ResetPlanDay("2026-10-16", "reset-plan", at))
+        val saved = (repository().read() as SnapshotRead.Ready).snapshot
+        assertEquals(counter, saved.tasks.first { it.id == 300L }.raw)
+        assertEquals(JsonPrimitive(true), saved.tasks.first { it.id == 301L }.raw["firedSched"])
+        assertEquals(JsonPrimitive(3), saved.data["xpTotal"])
+        assertEquals(1, saved.qnotes.size)
+        assertEquals(JsonPrimitive("Не втратити чернетку"), saved.data["taskEditorDraft"])
+        assertEquals(JsonPrimitive("День без поспіху"), saved.data["planDayLog"]!!.jsonObject["2026-10-16"]!!.jsonObject["note"])
+        assertFalse(saved.data["planDayZones"]!!.jsonObject.containsKey("2026-10-16"))
+        assertEquals(1, saved.data["taskHistory"]!!.jsonArray.size)
     }
 }

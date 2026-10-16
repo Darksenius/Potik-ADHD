@@ -51,6 +51,9 @@ sealed class FlowCommand(
     }
 
     data class AddQuickNote(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class CaptureNote(val text: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class RecordPastTaskDone(val taskId: Long, val completedAt: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class MarkTaskReminderFired(val taskId: Long, val reminderAt: Long, val preReminder: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateQuickNote(val noteId: Long, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteQuickNote(val noteId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetNotepad(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
@@ -64,9 +67,14 @@ sealed class FlowCommand(
     data class CreateZone(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateZone(val zoneId: Long, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteZone(val zoneId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class SetZoneOff(val zoneId: Long, val off: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     /** Payload: blocks array. An empty array is an explicit override of the day's template. */
     data class SetPlanDay(val date: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetPlanRestDay(val date: String, val isRest: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class SetPlanDayNote(val date: String, val text: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class ResetPlanDay(val date: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class SetPlanZoneOff(val date: String, val zoneId: Long, val off: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class EditPlanZoneForDay(val date: String, val zoneId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     /** Payload: text, optional isEvent. Tasks and calendar annotations have distinct behavior. */
     data class AddPlanItem(val date: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdatePlanItem(val date: String, val index: Int, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
@@ -89,6 +97,12 @@ sealed class FlowCommand(
         init { require(value in 0..5) { "energy must be between 0 and 5" } }
     }
     data class SetPreferences(val values: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class SetTaskEditorDraft(val text: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class CreateRareEvent(val name: String, val direction: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class ChangeRareEvent(val eventId: Long, val delta: Double, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
+        init { require(delta.isFinite()) { "event delta must be finite" } }
+    }
+    data class DeleteRareEvent(val eventId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class LifecycleTick(override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class ImportSnapshot(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class RestoreSnapshot(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)

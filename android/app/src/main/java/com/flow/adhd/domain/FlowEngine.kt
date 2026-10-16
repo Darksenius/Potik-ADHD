@@ -30,6 +30,9 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
             TaskManagementReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.CreateZone, is FlowCommand.UpdateZone, is FlowCommand.DeleteZone ->
             ZoneReducer.reduce(snapshot, command, zone, now)
+        is FlowCommand.SetZoneOff -> ZoneActivationReducer.reduce(snapshot, command, zone, now)
+        is FlowCommand.SetPlanDayNote, is FlowCommand.ResetPlanDay, is FlowCommand.SetPlanZoneOff,
+        is FlowCommand.EditPlanZoneForDay -> PlannerDayActions.reduce(snapshot, command, zone, now)
         is FlowCommand.SetPlanDay, is FlowCommand.SetPlanRestDay, is FlowCommand.AddPlanItem,
         is FlowCommand.UpdatePlanItem, is FlowCommand.DeletePlanItem -> PlannerReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.CreateTemplate, is FlowCommand.UpdateTemplate, is FlowCommand.DeleteTemplate,
@@ -44,6 +47,10 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.CreateTask, is FlowCommand.UpdateTask -> TaskEditorReducer.reduce(snapshot, command, zone, taskXp.keys, now, activeZoneId)
         is FlowCommand.LifecycleTick -> TaskLifecycle.tick(snapshot, now, zone, zoneOccurrenceKey)
         is FlowCommand.SetPreferences -> PreferencesReducer.reduce(snapshot, command)
+        is FlowCommand.SetTaskEditorDraft, is FlowCommand.CreateRareEvent, is FlowCommand.ChangeRareEvent,
+        is FlowCommand.DeleteRareEvent -> MiscStateReducer.reduce(snapshot, command)
+        is FlowCommand.CaptureNote, is FlowCommand.RecordPastTaskDone, is FlowCommand.MarkTaskReminderFired ->
+            NotificationTaskActions.reduce(snapshot, command, zone, now, taskXp, zoneOccurrenceKey)
         is FlowCommand.ImportSnapshot, is FlowCommand.RestoreSnapshot -> import(snapshot, command, zone, now)
     }
 

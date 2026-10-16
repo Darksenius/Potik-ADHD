@@ -30,6 +30,9 @@ object FlowCommandCodec {
             is FlowCommand.HardDeleteTask -> fields("HardDeleteTask", command, "taskId" to id(command.taskId))
             is FlowCommand.SetPriority -> fields("SetPriority", command, "slot" to num(command.slot), "taskId" to nullableId(command.taskId))
             is FlowCommand.AddQuickNote -> fields("AddQuickNote", command, "payload" to command.payload)
+            is FlowCommand.CaptureNote -> fields("CaptureNote", command, "text" to str(command.text))
+            is FlowCommand.RecordPastTaskDone -> fields("RecordPastTaskDone", command, "taskId" to id(command.taskId), "completedAt" to time(command.completedAt))
+            is FlowCommand.MarkTaskReminderFired -> fields("MarkTaskReminderFired", command, "taskId" to id(command.taskId), "reminderAt" to time(command.reminderAt), "preReminder" to bool(command.preReminder))
             is FlowCommand.UpdateQuickNote -> fields("UpdateQuickNote", command, "noteId" to id(command.noteId), "payload" to command.payload)
             is FlowCommand.DeleteQuickNote -> fields("DeleteQuickNote", command, "noteId" to id(command.noteId))
             is FlowCommand.SetNotepad -> fields("SetNotepad", command, "payload" to command.payload)
@@ -41,8 +44,13 @@ object FlowCommandCodec {
             is FlowCommand.CreateZone -> fields("CreateZone", command, "payload" to command.payload)
             is FlowCommand.UpdateZone -> fields("UpdateZone", command, "zoneId" to id(command.zoneId), "payload" to command.payload)
             is FlowCommand.DeleteZone -> fields("DeleteZone", command, "zoneId" to id(command.zoneId))
+            is FlowCommand.SetZoneOff -> fields("SetZoneOff", command, "zoneId" to id(command.zoneId), "off" to bool(command.off))
             is FlowCommand.SetPlanDay -> fields("SetPlanDay", command, "date" to str(command.date), "payload" to command.payload)
             is FlowCommand.SetPlanRestDay -> fields("SetPlanRestDay", command, "date" to str(command.date), "isRest" to bool(command.isRest))
+            is FlowCommand.SetPlanDayNote -> fields("SetPlanDayNote", command, "date" to str(command.date), "text" to str(command.text))
+            is FlowCommand.ResetPlanDay -> fields("ResetPlanDay", command, "date" to str(command.date))
+            is FlowCommand.SetPlanZoneOff -> fields("SetPlanZoneOff", command, "date" to str(command.date), "zoneId" to id(command.zoneId), "off" to bool(command.off))
+            is FlowCommand.EditPlanZoneForDay -> fields("EditPlanZoneForDay", command, "date" to str(command.date), "zoneId" to id(command.zoneId))
             is FlowCommand.AddPlanItem -> fields("AddPlanItem", command, "date" to str(command.date), "payload" to command.payload)
             is FlowCommand.UpdatePlanItem -> fields("UpdatePlanItem", command, "date" to str(command.date), "index" to num(command.index), "payload" to command.payload)
             is FlowCommand.DeletePlanItem -> fields("DeletePlanItem", command, "date" to str(command.date), "index" to num(command.index))
@@ -61,6 +69,10 @@ object FlowCommandCodec {
             is FlowCommand.RemoveFocusChip -> fields("RemoveFocusChip", command, "value" to str(command.value))
             is FlowCommand.SetEnergy -> fields("SetEnergy", command, "value" to num(command.value))
             is FlowCommand.SetPreferences -> fields("SetPreferences", command, "values" to command.values)
+            is FlowCommand.SetTaskEditorDraft -> fields("SetTaskEditorDraft", command, "text" to str(command.text))
+            is FlowCommand.CreateRareEvent -> fields("CreateRareEvent", command, "name" to str(command.name), "direction" to str(command.direction))
+            is FlowCommand.ChangeRareEvent -> fields("ChangeRareEvent", command, "eventId" to id(command.eventId), "delta" to num(command.delta))
+            is FlowCommand.DeleteRareEvent -> fields("DeleteRareEvent", command, "eventId" to id(command.eventId))
             is FlowCommand.LifecycleTick -> fields("LifecycleTick", command)
             is FlowCommand.ImportSnapshot -> fields("ImportSnapshot", command, "payload" to command.payload)
             is FlowCommand.RestoreSnapshot -> fields("RestoreSnapshot", command, "payload" to command.payload)
@@ -91,6 +103,9 @@ object FlowCommandCodec {
                 "HardDeleteTask" -> read(value, "taskId") { c -> FlowCommand.HardDeleteTask(c.id("taskId"), c.commandId, c.activityAt) }
                 "SetPriority" -> read(value, "slot", "taskId") { c -> FlowCommand.SetPriority(c.int("slot"), c.nullableId("taskId"), c.commandId, c.activityAt) }
                 "AddQuickNote" -> read(value, "payload") { c -> FlowCommand.AddQuickNote(c.obj("payload"), c.commandId, c.activityAt) }
+                "CaptureNote" -> read(value, "text") { c -> FlowCommand.CaptureNote(c.string("text"), c.commandId, c.activityAt) }
+                "RecordPastTaskDone" -> read(value, "taskId", "completedAt") { c -> FlowCommand.RecordPastTaskDone(c.id("taskId"), c.time("completedAt"), c.commandId, c.activityAt) }
+                "MarkTaskReminderFired" -> read(value, "taskId", "reminderAt", "preReminder") { c -> FlowCommand.MarkTaskReminderFired(c.id("taskId"), c.time("reminderAt"), c.bool("preReminder"), c.commandId, c.activityAt) }
                 "UpdateQuickNote" -> read(value, "noteId", "payload") { c -> FlowCommand.UpdateQuickNote(c.id("noteId"), c.obj("payload"), c.commandId, c.activityAt) }
                 "DeleteQuickNote" -> read(value, "noteId") { c -> FlowCommand.DeleteQuickNote(c.id("noteId"), c.commandId, c.activityAt) }
                 "SetNotepad" -> read(value, "payload") { c -> FlowCommand.SetNotepad(c.obj("payload"), c.commandId, c.activityAt) }
@@ -102,8 +117,13 @@ object FlowCommandCodec {
                 "CreateZone" -> read(value, "payload") { c -> FlowCommand.CreateZone(c.obj("payload"), c.commandId, c.activityAt) }
                 "UpdateZone" -> read(value, "zoneId", "payload") { c -> FlowCommand.UpdateZone(c.id("zoneId"), c.obj("payload"), c.commandId, c.activityAt) }
                 "DeleteZone" -> read(value, "zoneId") { c -> FlowCommand.DeleteZone(c.id("zoneId"), c.commandId, c.activityAt) }
+                "SetZoneOff" -> read(value, "zoneId", "off") { c -> FlowCommand.SetZoneOff(c.id("zoneId"), c.bool("off"), c.commandId, c.activityAt) }
                 "SetPlanDay" -> read(value, "date", "payload") { c -> FlowCommand.SetPlanDay(c.string("date"), c.obj("payload"), c.commandId, c.activityAt) }
                 "SetPlanRestDay" -> read(value, "date", "isRest") { c -> FlowCommand.SetPlanRestDay(c.string("date"), c.bool("isRest"), c.commandId, c.activityAt) }
+                "SetPlanDayNote" -> read(value, "date", "text") { c -> FlowCommand.SetPlanDayNote(c.string("date"), c.string("text"), c.commandId, c.activityAt) }
+                "ResetPlanDay" -> read(value, "date") { c -> FlowCommand.ResetPlanDay(c.string("date"), c.commandId, c.activityAt) }
+                "SetPlanZoneOff" -> read(value, "date", "zoneId", "off") { c -> FlowCommand.SetPlanZoneOff(c.string("date"), c.id("zoneId"), c.bool("off"), c.commandId, c.activityAt) }
+                "EditPlanZoneForDay" -> read(value, "date", "zoneId") { c -> FlowCommand.EditPlanZoneForDay(c.string("date"), c.id("zoneId"), c.commandId, c.activityAt) }
                 "AddPlanItem" -> read(value, "date", "payload") { c -> FlowCommand.AddPlanItem(c.string("date"), c.obj("payload"), c.commandId, c.activityAt) }
                 "UpdatePlanItem" -> read(value, "date", "index", "payload") { c -> FlowCommand.UpdatePlanItem(c.string("date"), c.int("index"), c.obj("payload"), c.commandId, c.activityAt) }
                 "DeletePlanItem" -> read(value, "date", "index") { c -> FlowCommand.DeletePlanItem(c.string("date"), c.int("index"), c.commandId, c.activityAt) }
@@ -122,6 +142,10 @@ object FlowCommandCodec {
                 "RemoveFocusChip" -> read(value, "value") { c -> FlowCommand.RemoveFocusChip(c.string("value"), c.commandId, c.activityAt) }
                 "SetEnergy" -> read(value, "value") { c -> FlowCommand.SetEnergy(c.int("value"), c.commandId, c.activityAt) }
                 "SetPreferences" -> read(value, "values") { c -> FlowCommand.SetPreferences(c.obj("values"), c.commandId, c.activityAt) }
+                "SetTaskEditorDraft" -> read(value, "text") { c -> FlowCommand.SetTaskEditorDraft(c.string("text"), c.commandId, c.activityAt) }
+                "CreateRareEvent" -> read(value, "name", "direction") { c -> FlowCommand.CreateRareEvent(c.string("name"), c.string("direction"), c.commandId, c.activityAt) }
+                "ChangeRareEvent" -> read(value, "eventId", "delta") { c -> FlowCommand.ChangeRareEvent(c.id("eventId"), c.double("delta"), c.commandId, c.activityAt) }
+                "DeleteRareEvent" -> read(value, "eventId") { c -> FlowCommand.DeleteRareEvent(c.id("eventId"), c.commandId, c.activityAt) }
                 "LifecycleTick" -> read(value) { c -> FlowCommand.LifecycleTick(c.commandId, c.activityAt) }
                 "ImportSnapshot" -> read(value, "payload") { c -> FlowCommand.ImportSnapshot(c.obj("payload"), c.commandId, c.activityAt) }
                 "RestoreSnapshot" -> read(value, "payload") { c -> FlowCommand.RestoreSnapshot(c.obj("payload"), c.commandId, c.activityAt) }
@@ -137,10 +161,10 @@ object FlowCommandCodec {
     private val kinds = setOf(
         "CaptureTask", "CreateTask", "UpdateTask", "SetTaskDone", "UndoTask", "SetChecklistItem", "ChangeCounter", "RecordNegative", "DeferTask",
         "MoveTaskToSomeday", "RestoreTaskFromSomeday", "TrashTask", "RestoreTrashedTask", "HardDeleteTask", "SetPriority",
-        "AddQuickNote", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
-        "CreateZone", "UpdateZone", "DeleteZone", "SetPlanDay", "SetPlanRestDay", "AddPlanItem", "UpdatePlanItem", "DeletePlanItem",
+        "AddQuickNote", "CaptureNote", "RecordPastTaskDone", "MarkTaskReminderFired", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
+        "CreateZone", "UpdateZone", "DeleteZone", "SetZoneOff", "SetPlanDay", "SetPlanRestDay", "SetPlanDayNote", "ResetPlanDay", "SetPlanZoneOff", "EditPlanZoneForDay", "AddPlanItem", "UpdatePlanItem", "DeletePlanItem",
         "CreateTemplate", "UpdateTemplate", "DeleteTemplate", "ApplyTemplate", "CreateWeekTemplate", "UpdateWeekTemplate", "DeleteWeekTemplate", "ApplyWeekTemplate", "DeletePlanRule",
-        "SetFocus", "ClearFocus", "AddFocusChip", "RemoveFocusChip", "SetEnergy", "SetPreferences", "LifecycleTick", "ImportSnapshot", "RestoreSnapshot",
+        "SetFocus", "ClearFocus", "AddFocusChip", "RemoveFocusChip", "SetEnergy", "SetPreferences", "SetTaskEditorDraft", "CreateRareEvent", "ChangeRareEvent", "DeleteRareEvent", "LifecycleTick", "ImportSnapshot", "RestoreSnapshot",
     )
 
     private fun fields(kind: String, command: FlowCommand, vararg values: Pair<String, JsonElement>) = JsonObject(

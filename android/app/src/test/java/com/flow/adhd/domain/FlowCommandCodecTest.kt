@@ -64,6 +64,12 @@ class FlowCommandCodecTest {
         val at = 123L
         val p = obj("value")
         return listOf(
+            FlowCommand.CaptureNote("note", id, at), FlowCommand.RecordPastTaskDone(7, at, id, at),
+            FlowCommand.MarkTaskReminderFired(7, at, true, id, at),
+            FlowCommand.SetZoneOff(7, true, id, at), FlowCommand.SetPlanDayNote("2026-10-16", "note", id, at),
+            FlowCommand.ResetPlanDay("2026-10-16", id, at), FlowCommand.SetPlanZoneOff("2026-10-16", 7, true, id, at),
+            FlowCommand.EditPlanZoneForDay("2026-10-16", 7, id, at), FlowCommand.SetTaskEditorDraft("draft", id, at),
+            FlowCommand.CreateRareEvent("Event", "up", id, at), FlowCommand.ChangeRareEvent(7, 1.0, id, at), FlowCommand.DeleteRareEvent(7, id, at),
             FlowCommand.CaptureTask("capture", id, at, CaptureOrigin.APP, null),
             FlowCommand.CreateTask(p, id, at), FlowCommand.UpdateTask(7, p, id, at),
             FlowCommand.SetTaskDone(7, true, null, id, at), FlowCommand.UndoTask(7, id, at, p, null),
