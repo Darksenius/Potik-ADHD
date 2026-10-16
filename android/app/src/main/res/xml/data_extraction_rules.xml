@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 31+: these sections replace fullBackupContent for cloud/device transfer.
+     No database exclusion: flow_db remains eligible for Android backup. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="recovery/" />
+        <exclude domain="file" path="backup-tmp/" />
+        <exclude domain="file" path="backups/flow_backup.json.tmp" />
+        <exclude domain="file" path="backups/flow_backup.json.new" />
+        <exclude domain="file" path="backups/flow_backup.json.bak" />
+        <exclude domain="sharedpref" path="flow_backup_destination.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="recovery/" />
+        <exclude domain="file" path="backup-tmp/" />
+        <exclude domain="file" path="backups/flow_backup.json.tmp" />
+        <exclude domain="file" path="backups/flow_backup.json.new" />
+        <exclude domain="file" path="backups/flow_backup.json.bak" />
+        <exclude domain="sharedpref" path="flow_backup_destination.xml" />
+    </device-transfer>
+</data-extraction-rules>

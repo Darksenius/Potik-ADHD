@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 23-30: keep the Room database and ordinary user files eligible.
+     Paths are literal, not glob patterns; recovery contains its own sidecars. -->
+<full-backup-content>
+    <exclude domain="file" path="recovery/" />
+    <exclude domain="file" path="backup-tmp/" />
+    <exclude domain="file" path="backups/flow_backup.json.tmp" />
+    <exclude domain="file" path="backups/flow_backup.json.new" />
+    <exclude domain="file" path="backups/flow_backup.json.bak" />
+    <!-- A copied URI string cannot recreate a persisted SAF grant. -->
+    <exclude domain="sharedpref" path="flow_backup_destination.xml" />
+</full-backup-content>
