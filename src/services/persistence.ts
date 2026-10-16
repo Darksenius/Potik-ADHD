@@ -8,6 +8,7 @@ import { normalizePlannerTasks } from './plannerMigration';
 import { normalizeRoutineTasks } from './routineMigration';
 import { markSaveError, markSaveSaved } from './saveStatus';
 import { initializeProgression } from '../utils/progression';
+import { archiveInsightClaims } from '../utils/dailyInsights';
 
 /** Stable storage slot. formatVersion distinguishes the persisted domain schema. */
 export const LS_KEY = 'flow_v2';
@@ -31,6 +32,7 @@ export function collectState(): AppState {
     level: s.level,
     progressionVersion: s.progressionVersion,
     progressDays: s.progressDays,
+    dailyInsightClaims: s.dailyInsightClaims,
     done: s.done,
     streak: s.streak,
     negCount: s.negCount,
@@ -102,6 +104,8 @@ export function applyState(raw: unknown, replace = false): boolean {
       patch.progressionVersion = 0;
     }
     Object.assign(patch, initializeProgression({ ...current, ...patch }));
+    patch.dailyInsightClaims = archiveInsightClaims(patch.progressDays || current.progressDays,
+      patch.dailyInsightClaims || (replace ? [] : current.dailyInsightClaims));
     useStore.setState({ ...patch, nid, qnid });
     useStore.getState().checkAchievements();
     return true;

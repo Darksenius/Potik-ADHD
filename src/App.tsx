@@ -25,9 +25,9 @@ import AlarmBanner from './components/common/AlarmBanner';
 import MoreTab from './components/layout/MoreTab';
 import SettingsPage from './components/layout/SettingsPage';
 import WhatsNewPage from './components/layout/WhatsNewPage';
-import InboxTab from './components/tasks/InboxTab';
 import ZoneAccent from './components/layout/ZoneAccent';
 import RewardFeedback from './components/common/RewardFeedback';
+import DailyInsightCenter from './components/common/DailyInsightCenter';
 import ImpulseReview from './components/common/ImpulseReview';
 
 /** applyTheme() — рядки 1165–1170: data-theme на <html> тепер ефект, не імперативний виклик. */
@@ -77,7 +77,6 @@ export default function App() {
             {currentTab === 'ideas' && <IdeasTab />}
             {currentTab === 'stats' && <StatsTab />}
             {currentTab === 'more' && <MoreTab />}
-            {currentTab === 'inbox' && <InboxTab />}
             {currentTab === 'alltasks' && <TasksTab key="all" all />}
           </div>
         </div>
@@ -87,6 +86,7 @@ export default function App() {
       <AlarmBanner />
       <Toast />
       <RewardFeedback />
+      <DailyInsightCenter />
       <ImpulseReview />
       <BackupBanner />
       <KbdOverlay />

@@ -11,8 +11,8 @@ export default function Topbar() {
     <div id="topbar">
       <div id="logo"><span className="potik-brand-frame"><img className="potik-brand" src="/brand/potik-mark.png" alt="" /></span>Потік</div>
       {showXp && <div className="top-r">
-        <div id="xp-badge"><Icon name="chart" /> <span id="xpd">{xp}</span></div>
-        <div id="lvl-badge" title={titleForLevel(level)}>LVL {level}<span>{titleForLevel(level)}</span></div>
+        <div id="xp-badge" title="Очки досвіду" aria-label={`${xp} од. — очки досвіду`}><Icon name="chart" /> <span id="xpd">{xp} од.</span></div>
+        <div id="lvl-badge" title={titleForLevel(level)}>Рів. {level}<span>{titleForLevel(level)}</span></div>
       </div>}
     </div>
   );

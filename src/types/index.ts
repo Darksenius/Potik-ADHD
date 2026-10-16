@@ -1,6 +1,7 @@
 /** Current domain and persisted contracts. Historical source-line comments are
  * reference material, not a requirement to preserve the former HTML schema. */
 import type taskTypeCatalog from '../content/task-types.json';
+import type { DailyInsightClaim } from '../utils/dailyInsights';
 
 // ─────────────────────────────────────────────────────────────────────────
 // ЗОНИ  (оригінал: рядки 1185–1191, 1309–1517)
@@ -457,6 +458,7 @@ export interface ForegroundNotifPayload {
   total: number;
   energy: number;
   title: string;
+  dailyInsight?: { day: string; cardId: number; sequence: number; title: string; text: string };
 }
 
 export interface Preferences {
@@ -481,6 +483,7 @@ export interface AppState extends PlannerState {
   level: number;
   progressionVersion: number;
   progressDays: string[];
+  dailyInsightClaims: DailyInsightClaim[];
   done: number;
   streak: number;
   negCount: number;

@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.RemoteInput;
 
 import org.json.JSONArray;
@@ -30,6 +31,10 @@ public class FlowNotifService extends Service {
 
     public static final String CHANNEL_ID      = "flow_main";
     public static final String CHANNEL_TEMP     = "flow_temp";   // тимчасові (задачі/рутина)
+    static final String CHANNEL_DAILY_INSIGHT = "flow_daily_insight";
+    private static final String DAILY_INSIGHT_PREFS = "flow_daily_insight_delivery";
+    private static final String DAILY_INSIGHT_DAYS_KEY = "delivered_days";
+    static final int DAILY_INSIGHT_NOTIF_ID = 3000;
     public static final int    NOTIF_ID         = 42;
     public static final int    NOTIF_TASK_BASE  = 1000;          // 1000..1004 — задачі
     public static final int    NOTIF_RC_BASE    = 2000;          // 2000..2009 — рутина
@@ -443,6 +448,7 @@ public class FlowNotifService extends Service {
                         body = applyPendingDoneToBody(body, pendingDone);
                     }
                 }
+                maybeShowDailyInsight(j.optJSONObject("dailyInsight"));
                 QuestPolicy.Selection quests = currentQuestSelection(System.currentTimeMillis());
                 if (quests.valid) {
                     tasks = quests.tasks.isEmpty() ? "" : questTaskBrief(quests.tasks);
@@ -509,6 +515,128 @@ public class FlowNotifService extends Service {
                 c.get(java.util.Calendar.DAY_OF_MONTH));
     }
 
+    static Intent createDailyInsightOpenIntent(Context context, String day) {
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.setData(Uri.parse("flow://daily-insight/" + Uri.encode(day)));
+        intent.putExtra("openInsightDay", day);
+        return intent;
+    }
+    private void maybeShowDailyInsight(JSONObject insight) {
+        if (insight == null) return;
+        try {
+            Object dayValue = insight.opt("day");
+            Object cardIdValue = insight.opt("cardId");
+            Object sequenceValue = insight.opt("sequence");
+            Object titleValue = insight.opt("title");
+            Object textValue = insight.opt("text");
+            if (!(dayValue instanceof String) || !(cardIdValue instanceof Number)
+                    || !(sequenceValue instanceof Number) || !(titleValue instanceof String)
+                    || !(textValue instanceof String)) return;
+            String day = (String) dayValue;
+            Number cardNumber = (Number) cardIdValue;
+            Number sequenceNumber = (Number) sequenceValue;
+            double cardNumberValue = cardNumber.doubleValue();
+            double sequenceNumberValue = sequenceNumber.doubleValue();
+            if (Double.isNaN(cardNumberValue) || Double.isInfinite(cardNumberValue)
+                    || cardNumberValue != Math.rint(cardNumberValue) || cardNumberValue < 1 || cardNumberValue > 100
+                    || Double.isNaN(sequenceNumberValue) || Double.isInfinite(sequenceNumberValue)
+                    || sequenceNumberValue != Math.rint(sequenceNumberValue) || sequenceNumberValue <= 0
+                    || sequenceNumberValue > Integer.MAX_VALUE) return;
+            int cardId = cardNumber.intValue();
+            long sequence = sequenceNumber.longValue();
+            String title = ((String) titleValue).trim();
+            String text = ((String) textValue).trim();
+            if (!todayStr().equals(day) || !isIsoLocalDate(day) || title.isEmpty() || title.length() > 160
+                    || text.isEmpty() || text.length() > 2000) return;
+
+            // The projection is only a hint. Room remains authoritative for both
+            // the earned claim and active-day record before anything is shown.
+            String stateJson = bridge == null ? "" : bridge.load();
+            if (stateJson == null || stateJson.isEmpty()) return;
+            JSONObject state = new JSONObject(stateJson);
+            JSONArray progressDays = state.optJSONArray("progressDays");
+            JSONArray claims = state.optJSONArray("dailyInsightClaims");
+            if (!containsDay(progressDays, day) || !hasEarnedInsightClaim(claims, day, cardId, sequence)) return;
+
+            NotificationManagerCompat compat = NotificationManagerCompat.from(this);
+            if (!compat.areNotificationsEnabled()) return;
+            NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (manager == null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel channel = manager.getNotificationChannel(CHANNEL_DAILY_INSIGHT);
+                if (channel == null || channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return;
+            }
+
+            SharedPreferences prefs = getSharedPreferences(DAILY_INSIGHT_PREFS, Context.MODE_PRIVATE);
+            Set<String> storedDays = prefs.getStringSet(DAILY_INSIGHT_DAYS_KEY, java.util.Collections.<String>emptySet());
+            Set<String> delivered = storedDays == null ? new HashSet<>() : new HashSet<>(storedDays);
+            if (delivered.contains(day)) return;
+
+            Intent openIntent = createDailyInsightOpenIntent(this, day);
+            PendingIntent openPI = PendingIntent.getActivity(this, DAILY_INSIGHT_NOTIF_ID, openIntent,
+                    flagImmutable() | PendingIntent.FLAG_UPDATE_CURRENT);
+            Notification notification = new NotificationCompat.Builder(this, CHANNEL_DAILY_INSIGHT)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle("День " + sequence + " · " + title)
+                    .setContentText(text)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+                    .setContentIntent(openPI)
+                    .setAutoCancel(true)
+                    .setOngoing(false)
+                    .setOnlyAlertOnce(true)
+                    .setDefaults(0)
+                    .setSound(null)
+                    .setVibrate(new long[0])
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .build();
+            try {
+                manager.notify(DAILY_INSIGHT_NOTIF_ID, notification);
+            } catch (RuntimeException postFailure) {
+                android.util.Log.w("FlowNotifService", "Unable to post daily insight", postFailure);
+                return;
+            }
+            delivered.add(day);
+            if (!prefs.edit().putStringSet(DAILY_INSIGHT_DAYS_KEY, delivered).commit()) {
+                manager.cancel(DAILY_INSIGHT_NOTIF_ID);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("FlowNotifService", "Unable to prepare daily insight", e);
+        }
+    }
+
+    private static boolean containsDay(JSONArray days, String day) {
+        if (days == null) return false;
+        for (int i = 0; i < days.length(); i++) {
+            if (day.equals(days.optString(i, ""))) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasEarnedInsightClaim(JSONArray claims, String day, int cardId, long sequence) {
+        if (claims == null) return false;
+        for (int i = 0; i < claims.length(); i++) {
+            JSONObject claim = claims.optJSONObject(i);
+            if (claim == null) continue;
+            if (day.equals(claim.optString("day", ""))
+                    && claim.optInt("cardId", -1) == cardId
+                    && claim.optLong("sequence", 0L) == sequence
+                    && claim.optLong("earnedAt", 0L) > 0L) return true;
+        }
+        return false;
+    }
+
+    private static boolean isIsoLocalDate(String value) {
+        if (value == null || !value.matches("\\d{4}-\\d{2}-\\d{2}")) return false;
+        java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+        format.setLenient(false);
+        try {
+            java.util.Date parsed = format.parse(value);
+            return parsed != null && value.equals(format.format(parsed));
+        } catch (java.text.ParseException ignored) {
+            return false;
+        }
+    }
     private void buildMain(String zone, String slots, String desc, String tasks,
             String routine, String body, String time, int done, int total, int energy) {
         if (destroyed) return;
@@ -1572,6 +1700,15 @@ public class FlowNotifService extends Service {
                 NotificationChannel ch = new NotificationChannel(
                         CHANNEL_ID, "Потік — активний", NotificationManager.IMPORTANCE_DEFAULT);
                 ch.setDescription("Зона, задачі та рутина");
+                ch.setShowBadge(false);
+                ch.enableVibration(false);
+                ch.setSound(null, null);
+                nm.createNotificationChannel(ch);
+            }
+            if (nm.getNotificationChannel(CHANNEL_DAILY_INSIGHT) == null) {
+                NotificationChannel ch = new NotificationChannel(
+                        CHANNEL_DAILY_INSIGHT, "Потік — думка дня", NotificationManager.IMPORTANCE_DEFAULT);
+                ch.setDescription("Тихе сповіщення про отриману думку дня");
                 ch.setShowBadge(false);
                 ch.enableVibration(false);
                 ch.setSound(null, null);

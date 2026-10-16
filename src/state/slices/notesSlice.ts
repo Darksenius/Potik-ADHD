@@ -33,7 +33,7 @@ export interface NotesSlice {
   qnid: number;
 
   /** mkNote() + unshift — рядки 1257–1263, 4417, doAddQN рядок 2412 */
-  addQuickNote: (text: string, folder?: string) => QuickNote;
+  addQuickNote: (text: string, folder?: string, activityAt?: number) => QuickNote;
   /** editQN(id) — рядки 2446–2458 (без kbdOpen — текст приходить від компонента) */
   updateQuickNote: (id: number, text: string, folder?: string) => void;
   /** delQN(id) — рядок 2431 */
@@ -64,8 +64,9 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
   notepadFolder: 'thought',
   qnid: 100,
 
-  addQuickNote: (text, folder = 'impulse') => {
-    const now = new Date();
+  addQuickNote: (text, folder = 'impulse', activityAt) => {
+    const supplied = Number.isFinite(activityAt) ? new Date(activityAt!) : undefined;
+    const now = supplied && Number.isFinite(supplied.getTime()) ? supplied : new Date();
     const destination = validNoteFolder(folder, get().folders);
     const note: QuickNote = {
       id: get().qnid,
@@ -75,7 +76,7 @@ export const createNotesSlice: AppSlice<NotesSlice> = (set, get) => ({
       date: fmtDate(now),
     };
     set((s) => ({ qnotes: [note, ...s.qnotes], qnid: s.qnid + 1 }));
-    if (text.trim()) get().recordProgressDay();
+    if (text.trim()) get().recordProgressDay(activityAt);
     return note;
   },
 

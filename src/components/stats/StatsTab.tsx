@@ -2,6 +2,7 @@ import { useStore } from '../../state/store';
 import { ACHIEVEMENTS } from '../../state/slices/gamificationSlice';
 import { COLLECTIBLE_TOKENS, titleForLevel, tokensEarnedForActiveDays, xpForLevel } from '../../utils/progression';
 import Icon from '../common/Icon';
+import DailyInsightCalendar from './DailyInsightCalendar';
 import '../../styles/progression.css';
 import '../../styles/notes-focus-parity.css';
 
@@ -62,25 +63,26 @@ export default function StatsTab() {
             <div className="progression-eyebrow">Твій шлях</div>
             <h2 id="journey-title">Рівень {level} · {titleForLevel(level)}</h2>
           </div>
-          <div className="progression-total"><Icon name="chart" /> {xpTotal} XP</div>
+          <div className="progression-total" title="Очки досвіду"><Icon name="chart" /> {xpTotal} од.</div>
         </div>
-        <div className="progression-level-copy">{xp} / {xpNeeded} XP до наступного рівня</div>
+        <div className="progression-level-copy">{xp} / {xpNeeded} од. до наступного рівня</div>
         <div className="progression-track" role="progressbar" aria-label="Досвід до наступного рівня" aria-valuemin={0} aria-valuemax={xpNeeded} aria-valuenow={xp}>
           <div className="progression-fill" style={{ width: `${Math.min(100, (xp / xpNeeded) * 100)}%` }} />
         </div>
         <div className="journey-summary">
           <div><strong>{activeDays}<span> / 100</span></strong><span>активних днів</span></div>
-          <div className="journey-note">Прогрес накопичується без серій.</div>
+          <div className="journey-note">Активні дні накопичуються.</div>
         </div>
         <div className="journey-note journey-activity-note">Активний день зараховується за дію: створити або завершити задачу, записати нотатку чи спланувати справу. Саме відкриття застосунку не рахується. Перерви не віднімають дні.</div>
         <div className="progression-track journey-track" role="progressbar" aria-label="Шлях зі 100 активних днів" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, activeDays)}>
           <div className="journey-fill" style={{ width: `${journeyPct}%` }} />
         </div>
-        {activeDays < 100 && <div className="next-milestone">Наступна відзнака: <strong>{nextDayMilestone} активних днів</strong>{nextToken && <> · токен «{nextToken}»</>}</div>}
-        {activeDays >= 100 && <div className="next-milestone"><strong>Усі 20 токенів зібрано.</strong> Сто активних днів — твій великий шлях.</div>}
+        {activeDays < 100 && <div className="next-milestone">Наступна відзнака: <strong>{nextDayMilestone} активних днів</strong>{nextToken && <> · знак «{nextToken}»</>}</div>}
+        {activeDays >= 100 && <div className="next-milestone"><strong>Усі 20 знаків зібрано.</strong> Сто активних днів — твій великий шлях.</div>}
       </section>
 
-      <div className="progression-token-head"><div className="bl">Колекція токенів</div><span>{tokensEarned} / 20</span></div>
+      <DailyInsightCalendar />
+      <div className="progression-token-head"><div className="bl">Колекція знаків</div><span>{tokensEarned} / 20</span></div>
       <div className="token-grid" aria-label={`Зібрано ${tokensEarned} із 20 токенів`}>
         {COLLECTIBLE_TOKENS.map((token, index) => {
           const earned = index < tokensEarned;

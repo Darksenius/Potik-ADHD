@@ -294,8 +294,8 @@ test('native counters, snooze and explicit captures retry atomically and acknowl
   expect(saved.qnotes.some((n: any) => n.txt.includes('task_inc:501') && n.txt.includes('день уже змінився'))).toBe(true);
 
   await page.getByRole('button', { name: 'Ще', exact: true }).click();
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
-  await expect(page.locator('#inbox-sec')).toContainText('... Задача зі шторки');
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await expect(page.locator('#tasks-list')).toContainText('... Задача зі шторки');
   await page.evaluate(() => {
     window.__flowDrainEvents?.();
     sessionStorage.setItem('counter-command-test', JSON.stringify((window as any).__counterCommands));

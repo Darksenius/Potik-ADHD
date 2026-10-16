@@ -2,6 +2,13 @@
 .reward-gain{color:var(--xp)}
 .reward-loss{color:var(--neg)}
 .reward-muted{color:var(--t2)}
+.task-reward{position:fixed;bottom:auto;z-index:420;transform:translate(-50%,-50%);padding:5px 10px;border-radius:18px;background:var(--s2);border-color:var(--b2);color:var(--xp);box-shadow:0 3px 14px rgba(0,0,0,.24);font-size:15px;white-space:nowrap;animation:task-reward-float 1.6s ease-out both}
+@supports (background:color-mix(in srgb,var(--s2) 90%,transparent)){
+  .task-reward{background:color-mix(in srgb,var(--s2) 90%,transparent);border-color:color-mix(in srgb,var(--xp) 45%,var(--b2))}
+}
+.task-reward.reduced-motion{animation:none}
+@keyframes task-reward-float{0%{opacity:0;transform:translate(-50%,calc(-50% + 8px))}12%{opacity:1;transform:translate(-50%,-50%)}100%{opacity:0;transform:translate(-50%,calc(-50% - 40px))}}
+@media(prefers-reduced-motion:reduce){.task-reward{animation:none}}
 .level-reward{text-align:center;line-height:1.6}
 .level-reward>.potik-icon{width:36px;height:36px;color:var(--xp)}
 .level-reward p{margin:14px 0}

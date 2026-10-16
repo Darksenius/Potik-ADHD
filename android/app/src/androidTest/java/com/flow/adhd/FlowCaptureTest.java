@@ -565,9 +565,9 @@ public class FlowCaptureTest {
             awaitAcknowledged(new FlowBridge(context), taskEventId, noteEventId);
             evaluate(scenario, "document.querySelector('#tabs button:nth-child(4)').click();return true;");
             awaitWeb(scenario, "document.querySelector('.more-menu') !== null", "More sections open");
-            evaluate(scenario, "var b=Array.from(document.querySelectorAll('.more-menu button')).find(function(x){return x.getAttribute('aria-label')==='Вхідні';});if(!b)throw new Error('Inbox tab missing');b.click();return true;");
-            awaitWeb(scenario, "document.querySelector('#inbox-sec') && document.querySelector('#inbox-sec').textContent.indexOf("
-                + JSONObject.quote(taskText) + ")>=0", "Task is accessible from Inbox");
+            evaluate(scenario, "var b=Array.from(document.querySelectorAll('.more-menu button')).find(function(x){return x.getAttribute('aria-label')==='Усі задачі';});if(!b)throw new Error('All Tasks tab missing');b.click();return true;");
+            awaitWeb(scenario, "document.querySelector('#tasks-list') && document.querySelector('#tasks-list').textContent.indexOf("
+                + JSONObject.quote(taskText) + ")>=0", "Task is accessible in All Tasks");
             evaluate(scenario, "document.querySelector('#tabs button:nth-child(3)').click();return true;");
             awaitWeb(scenario, "document.querySelector('#qn-list') !== null", "Notes section opens");
             awaitWeb(scenario, "document.querySelector('#qn-list') && document.querySelector('#qn-list').textContent.indexOf("

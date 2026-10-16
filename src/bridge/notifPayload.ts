@@ -4,6 +4,7 @@ import { hasTaskCounter, taskCounterStep, taskCounterTarget } from '../utils/tas
 import { nowHM, fmtDate, hmToString, localDateTimeMs, normalizeTime, addDaysDs } from '../utils/date';
 import type { ForegroundNotifPayload, NotifSchedListItem, NotifZoneTimelineItem, Task } from '../types';
 import { buildQuestTimeline, buildQuestWallDays, getCurrentQuestSegment, selectQuestTasks } from '../utils/questPolicy';
+import { insightForClaim } from '../utils/dailyInsights';
 
 /** Native alarms retain their calendar rules when the WebView is absent. */
 export function recurringReminderRows(task: Task, now = new Date(), timeline?: readonly import('../types').QuestTimelineSegment[]): NotifSchedListItem[] {
@@ -136,6 +137,8 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
     return result;
   }, []);
 
+  const dailyClaim = s.dailyInsightClaims.find(claim => claim.day === todayStr && claim.earnedAt > 0);
+  const dailyCard = dailyClaim ? insightForClaim(dailyClaim) : undefined;
   return {
     zone: pz.nm,
     zoneColor: pz.color || '#4f8ef7',
@@ -164,5 +167,7 @@ export function buildForegroundNotifPayload(): ForegroundNotifPayload {
     total,
     energy: s.energy || 0,
     title: 'Потік · ' + pz.nm + (focus ? ' · ' + focus : ''),
+    ...(dailyClaim && dailyCard && s.preferences.showGamification !== false ? { dailyInsight: { day: dailyClaim.day, cardId: dailyClaim.cardId,
+      sequence: dailyClaim.sequence, title: dailyCard.title, text: dailyCard.text } } : {}),
   };
 }

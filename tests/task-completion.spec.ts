@@ -215,7 +215,10 @@ test('undoing a calendar repeat does not suppress credit on the next due day', (
 
 test('zone, calendar and task list share completion and undo after reopening', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-08T12:00:00+03:00') });
+  await page.clock.pauseAt(new Date('2026-10-08T12:00:00+03:00'));
   await page.addInitScript(() => {
+    (window as any).__taskRewards = [];
+    window.addEventListener('potik:task-reward', event => (window as any).__taskRewards.push((event as CustomEvent).detail));
     if (!localStorage.getItem('flow_v2')) localStorage.setItem('flow_v2', JSON.stringify({
       saveDate: new Date().toDateString(), weekTplSeeded: true, xp: 0, xpTotal: 0, done: 0,
       zones: [{ id: 17, nm: 'Тестова зона', color: '#4f8ef7', slots: [{ s: '00:00', e: '24:00' }] }],
@@ -224,8 +227,9 @@ test('zone, calendar and task list share completion and undo after reopening', a
     }));
   });
   await page.goto('/');
-  const todayTask = page.locator('#tasks-list .tc').filter({ has: page.getByRole('button', { name: 'Зональна справа', exact: true }) });
-  await todayTask.getByRole('button', { name: 'Виконати: Зональна справа', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
+  await page.getByRole('button', { name: 'Виконати: Зональна справа', exact: true }).click();
+  expect(await page.evaluate(() => (window as any).__taskRewards)).toMatchObject([{ amount: 8 }]);
   await page.clock.runFor(1000);
   await page.reload();
   await page.getByRole('button', { name: 'План', exact: true }).click();
@@ -233,8 +237,9 @@ test('zone, calendar and task list share completion and undo after reopening', a
   await page.getByRole('button', { name: 'Повернути: Зональна справа', exact: true }).click();
   await page.getByRole('button', { name: 'Зараз', exact: true }).click();
   await expect(page.locator('#tasks-list').getByRole('button', { name: 'Виконати: Зональна справа', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.getByRole('button', { name: 'Виконати: Зональна справа', exact: true }).click();
+  expect(await page.evaluate(() => (window as any).__taskRewards)).toHaveLength(0);
   await page.clock.runFor(1000);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(saved.tasks.find((t: any) => t.id === 91).done).toBe(true);

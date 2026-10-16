@@ -517,6 +517,7 @@ export function mergeState(raw: unknown): number {
     zones, folders, tasks, taskHistory, nid, priorities, qnotes, qnid, recur: [], rareEvents, focusChips,
     dayTemplates, weekTemplates, planRules, planItems, planDayZones, planDayOff,
     progressDays: [...s.progressDays, ...(d.progressDays || [])],
+    dailyInsightClaims: [...s.dailyInsightClaims, ...(d.dailyInsightClaims || [])],
   });
   useStore.getState().initializeProgression();
   useStore.getState().recalculateZoneUsage();

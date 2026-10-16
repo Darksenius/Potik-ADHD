@@ -68,7 +68,7 @@ body::before{content:'';position:fixed;top:-180px;left:50%;transform:translateX(
 .rt-sw.on::after{transform:translateX(16px)}
 .plan-task-row{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--b1)}
 .plan-task-row:last-child{border-bottom:none}
-.plan-ck{width:18px;height:18px;border-radius:50%;border:2px solid var(--b2);background:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:transparent;font-size:8px;transition:all .2s}
+.plan-ck{width:44px;height:44px;min-width:44px;max-width:44px;min-height:44px;max-height:44px;box-sizing:border-box;padding:0;border-radius:50%;border:2px solid var(--b2);background:none;cursor:pointer;flex:0 0 44px;display:flex;align-items:center;justify-content:center;color:transparent;font-size:18px;transition:all .2s}
 .plan-ck.on{background:var(--z);border-color:var(--z);color:#fff}
 .plan-task-nm{flex:1;font-size:12px;font-weight:600;color:var(--t1)}
 .plan-rm{background:none;border:none;color:var(--t3);cursor:pointer;font-size:10px;padding:2px 4px;border-radius:3px}

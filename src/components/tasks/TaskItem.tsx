@@ -9,6 +9,8 @@ import { questDeferralLabel } from '../../utils/questPolicy';
 import { fmtDate } from '../../utils/date';
 import { COUNTER_UNITS, hasTaskCounter, taskCounterTarget } from '../../utils/taskCounter';
 import type { TaskAvailabilityExplanation } from '../../utils/taskAvailabilityLabel';
+import type { MouseEvent } from 'react';
+import { runTaskCompletionWithReward } from '../../utils/taskRewardFeedback';
 
 const TXP: Record<string, number> = {
   simple: 10, check: 10, counter: 2, note: 5, alarm: 10, sched: 10,
@@ -49,6 +51,14 @@ export default function TaskItem({
   const folders = useStore((s) => s.folders);
   const zones = useStore((s) => s.zones);
 
+  function completeFromCheckbox(event: MouseEvent<HTMLButtonElement>) {
+    if (t.done || isNeg) {
+      toggleTask(t.id);
+      return;
+    }
+    runTaskCompletionWithReward(event, () => toggleTask(t.id));
+  }
+
   const isNeg = t.type === 'negative';
   const hasBody = t.type !== 'simple' || hasTaskCounter(t) || !!t.note || !!t.expanded;
   const folder = t.folderId ? folders.find((f) => f.id === t.folderId) : null;
@@ -67,7 +77,7 @@ export default function TaskItem({
       <div className="th">
         <button
           className={'ck' + (t.done && !isNeg ? ' on' : '') + (isNeg ? ' neg-ck' : '')}
-          onClick={() => toggleTask(t.id)}
+          onClick={completeFromCheckbox}
           aria-label={(isNeg ? 'Зафіксувати: ' : t.done ? 'Позначити невиконаною: ' : 'Виконати: ') + t.title}
           aria-pressed={t.done}
           style={{ marginTop: 2, flexShrink: 0 }}

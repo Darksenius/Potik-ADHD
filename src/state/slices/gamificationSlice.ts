@@ -1,6 +1,7 @@
 import type { AppSlice } from '../store';
 import type { AchievementCheckContext, Achievement, EnergyLevel, RareEvent } from '../../types';
 import { PROGRESSION_VERSION, initializeProgression as migrateProgression, recordProgressDay as addProgressDay, progressionFromXp, totalXpToReachLevel } from '../../utils/progression';
+import { archiveInsightClaims, claimDailyInsight, type DailyInsightClaim } from '../../utils/dailyInsights';
 
 /**
  * ══ XP ══ + ══ ENERGY ══  (перенесено з www/index.html, рядки 1546–1604)
@@ -27,7 +28,7 @@ const days = (s: AchievementCheckContext) => s.activeDays;
 export const ACHIEVEMENTS: Achievement[] = [
   achievement('first', '🎯', 'Перший крок', 'Заверши першу задачу.', done, 1),
   achievement('ten', '🔟', '10 задач', 'Заверши десять задач.', done, 10),
-  achievement('xp100', '🧘', '100 досвіду', 'Зароби загалом 100 XP.', xp, 100),
+  achievement('xp100', '🧘', '100 досвіду', 'Зароби загалом 100 од.', xp, 100),
   achievement('zones', '🗂', '5 зон', 'У твоєму просторі є п’ять зон.', (s) => s.zonesCount, 5),
   achievement('pro', '🏆', 'Рівень 5', 'Дійди до п’ятого рівня.', level, 5),
   achievement('habit', '🔁', 'П’ять завершень', 'Заверши п’ять задач.', done, 5),
@@ -36,10 +37,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   achievement('done100', '💯', 'Сотня справ', 'Заверши 100 задач.', done, 100),
   achievement('done250', '🌟', 'Чверть тисячі', 'Заверши 250 задач.', done, 250),
   achievement('done500', '🏅', 'П’ятсот перемог', 'Заверши 500 задач.', done, 500),
-  achievement('xp500', '✨', 'Зоряний запас', 'Зароби загалом 500 XP.', xp, 500),
-  achievement('xp1000', '🌠', 'Тисяча XP', 'Зароби загалом 1 000 XP.', xp, 1000),
-  achievement('xp2500', '🔥', 'Велике полум’я', 'Зароби загалом 2 500 XP.', xp, 2500),
-  achievement('xp5000', '💎', 'Скарб досвіду', 'Зароби загалом 5 000 XP.', xp, 5000),
+  achievement('xp500', '✨', 'Зоряний запас', 'Зароби загалом 500 од.', xp, 500),
+  achievement('xp1000', '🌠', 'Тисяча од.', 'Зароби загалом 1 000 од.', xp, 1000),
+  achievement('xp2500', '🔥', 'Велике полум’я', 'Зароби загалом 2 500 од.', xp, 2500),
+  achievement('xp5000', '💎', 'Скарб досвіду', 'Зароби загалом 5 000 од.', xp, 5000),
   achievement('level10', '🛠', 'Будівничий звичок', 'Дійди до рівня 10.', level, 10),
   achievement('level15', '🎼', 'Майстер ритму', 'Дійди до рівня 15.', level, 15),
   achievement('level20', '🪨', 'Витривалий', 'Дійди до рівня 20.', level, 20),
@@ -68,6 +69,12 @@ export interface GamificationSlice {
   level: number;
   progressionVersion: number;
   progressDays: string[];
+  dailyInsightClaims: DailyInsightClaim[];
+  dailyInsightNotice: string | null;
+  selectedInsightDay: string | null;
+  dismissDailyInsightNotice: () => void;
+  openDailyInsight: (day: string) => void;
+  closeDailyInsight: () => void;
   /** Кількість виконаних задач (було S.done — інкрементується з tasksSlice.toggleTask) */
   done: number;
   /** Кількість кліків по «шкідливих» задачах/звичках */
@@ -93,7 +100,7 @@ export interface GamificationSlice {
   rareEvents: RareEvent[];
 
   /** award() — рядки 1568–1584. Додає/віднімає XP з денним лімітом приросту +250. */
-  award: (amount: number) => void;
+  award: (amount: number, activityAt?: number) => void;
   /** setNrj() — рядки 1590–1602, БЕЗ queueSave()/logDayData() (див. persistence-шар) */
   setEnergy: (level: EnergyLevel) => void;
   /** checkAchs() — рядок 1586. Читає zones.length із іншого slice через get(). */
@@ -118,6 +125,15 @@ export const createGamificationSlice: AppSlice<GamificationSlice> = (set, get) =
   level: 1,
   progressionVersion: 0,
   progressDays: [],
+  dailyInsightClaims: [],
+  dailyInsightNotice: null,
+  selectedInsightDay: null,
+  dismissDailyInsightNotice: () => set({ dailyInsightNotice: null }),
+  openDailyInsight: (day) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+    set({ selectedInsightDay: day, dailyInsightNotice: null });
+  },
+  closeDailyInsight: () => set({ selectedInsightDay: null }),
   done: 0,
   negCount: 0,
   unlocked: [],
@@ -131,7 +147,7 @@ export const createGamificationSlice: AppSlice<GamificationSlice> = (set, get) =
   levelUpFlash: null,
   rareEvents: [],
 
-  award: (amountIn) => {
+  award: (amountIn, activityAt) => {
     if (!Number.isFinite(amountIn) || amountIn === 0) return;
     if (get().progressionVersion !== PROGRESSION_VERSION) set(migrateProgression(get()));
     let amount = amountIn;
@@ -149,11 +165,8 @@ export const createGamificationSlice: AppSlice<GamificationSlice> = (set, get) =
       const room = Math.max(0, XP_DAILY_CAP - safePriorGain);
       if (amount > room) amount = room;
       if (amount === 0) {
-        set((s) => ({
-          progressDays: addProgressDay(s.progressDays),
-          xpPopup: { text: 'Ліміт 250 досвіду/добу', tone: 'muted' },
-        }));
-        get().checkAchievements();
+        set({ xpPopup: { text: 'Ліміт 250 од. на добу', tone: 'muted' } });
+        get().recordProgressDay(activityAt);
         return;
       }
     }
@@ -181,16 +194,16 @@ export const createGamificationSlice: AppSlice<GamificationSlice> = (set, get) =
         xp,
         xpTotal,
         level,
-        ...(amount > 0 ? { progressDays: addProgressDay(s.progressDays) } : {}),
         xpPopup: {
-          text: (amount > 0 ? '+' : '') + amount + ' досвіду',
+          text: (amount > 0 ? '+' : '') + amount + '⚡',
           tone: amount < 0 ? 'loss' : 'gain',
         },
         ...(levelUpFlash ? { levelUpFlash } : {}),
       };
     });
 
-    get().checkAchievements();
+    if (amount > 0) get().recordProgressDay(activityAt);
+    else get().checkAchievements();
   },
 
   setEnergy: (level) => {
@@ -225,14 +238,18 @@ export const createGamificationSlice: AppSlice<GamificationSlice> = (set, get) =
   incrementNegCount: () => set((s) => ({ negCount: s.negCount + 1 })),
   initializeProgression: () => {
     const migration = migrateProgression(get());
-    set(migration);
+    set({ ...migration, dailyInsightClaims: archiveInsightClaims(migration.progressDays, get().dailyInsightClaims) });
     get().checkAchievements();
   },
   recordProgressDay: (at) => {
     if (get().progressionVersion !== PROGRESSION_VERSION) set(migrateProgression(get()));
     set((s) => {
       const progressDays = addProgressDay(s.progressDays, at);
-      return progressDays === s.progressDays ? s : { progressDays };
+      const reward = claimDailyInsight(progressDays, s.dailyInsightClaims, at);
+      return progressDays === s.progressDays && reward.claims === s.dailyInsightClaims ? s : {
+        progressDays, dailyInsightClaims: reward.claims,
+        ...(reward.earned ? { dailyInsightNotice: reward.earned.day } : {}),
+      };
     });
     get().checkAchievements();
   },

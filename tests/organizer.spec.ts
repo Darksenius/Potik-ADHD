@@ -6,9 +6,9 @@ async function boot(page: Page, data = {}) {
   await page.goto('/');
   await expect(page.locator('#add-fab')).toBeVisible();
 }
-async function openInbox(page: Page) {
+async function openAllTasks(page: Page) {
   await page.getByRole('button', { name: 'Ще', exact: true }).click();
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
 }
 async function scheduled(page: Page, title: string, day: string, time: string) {
   await page.locator('#add-fab').click();
@@ -90,11 +90,12 @@ test('week shift keeps selected weekday in view, Today restores current week', a
   await expect(page.locator('.pdd-date')).toContainText('8 Жов');
 });
 
-test('inbox capture is available immediately and settings persist independently of legacy theme', async ({ page }, info) => {
+test('quick task entry is available from All Tasks and settings persist independently of legacy theme', async ({ page }, info) => {
   await boot(page);
-  await openInbox(page);
-  await page.getByLabel('Нова проста задача').fill('Не забути зарядку');
-  await page.getByRole('button', { name: 'Додати', exact: true }).click();
+  await openAllTasks(page);
+  await page.locator('#add-fab').click();
+  await page.getByLabel('Що зробити?').fill('Не забути зарядку');
+  await page.locator('#edit-save-fab').click();
   await expect(page.locator('.tt')).toHaveText('Не забути зарядку');
   await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
   await page.locator('#settings-page details.settings-group').filter({ hasText: 'Вигляд' }).locator('summary').click();
@@ -137,20 +138,20 @@ test('day-only zone edit opens real inputs and cancel keeps original day rules',
   expect(data.zones.find((z: any) => z.id === data.planDayZones['2026-10-08'][0].zoneId).slots[0].s).not.toBe('05:00');
 });
 
-test('Inbox retains its capture while it is available immediately; date edits and clearing preserve the task', async ({ page }, info) => {
+test('an undated simple task remains available in All Tasks while date edits preserve the task', async ({ page }, info) => {
   await boot(page);
-  await openInbox(page);
-  await page.getByLabel('Нова проста задача').fill('Купити батарейки');
-  await page.getByRole('button', { name: 'Додати', exact: true }).click();
+  await openAllTasks(page);
+  await page.locator('#add-fab').click();
+  await page.getByLabel('Що зробити?').fill('Купити батарейки');
+  await page.locator('#edit-save-fab').click();
   const id = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!).tasks[0].id);
   await page.getByRole('button', { name: 'Зараз', exact: true }).click();
   await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
-  await openInbox(page);
   await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
   await expect(page.locator('.schedule-preview')).toContainText('Без дати: задача доступна у списку, коли виконуються вибрані умови.');
   await page.getByRole('button', { name: 'Завтра', exact: true }).click();
   await page.locator('#edit-save-fab').click();
-  await expect(page.locator('#inbox-sec .tc')).toHaveCount(0);
+  await expect(page.locator('#tasks-list .tc')).toHaveCount(0);
   await page.getByRole('button', { name: 'План', exact: true }).click();
   await page.getByRole('button', { name: '9 жовтня 2026 р., є задачі', exact: true }).click();
   await page.getByRole('button', { name: 'Купити батарейки', exact: true }).click();
@@ -164,13 +165,13 @@ test('Inbox retains its capture while it is available immediately; date edits an
   await page.locator('#edit-save-fab').click();
   await page.reload();
   await expect(page.locator('#tasks-list .tt')).toHaveText('Купити батарейки');
-  await openInbox(page);
-  await expect(page.locator('#inbox-sec .tt')).toHaveText('Купити батарейки');
+  await openAllTasks(page);
+  await expect(page.locator('#tasks-list .tt')).toContainText('Купити батарейки');
   const state = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
   expect(state.tasks).toHaveLength(1);
   expect(state.tasks[0].id).toBe(id);
   expect(state.tasks[0].planDate).toBeUndefined();
-  await page.screenshot({ path: info.outputPath('r2-inbox.png'), fullPage: true, animations: 'disabled' });
+  await page.screenshot({ path: info.outputPath('r2-all-tasks.png'), fullPage: true, animations: 'disabled' });
 });
 
 test('Today creation assigns today, removed types are absent and title-only save survives reload', async ({ page }) => {
@@ -215,7 +216,7 @@ test('scheduled and simple tasks reject dates outside repeat days, repeat edits 
   await expect(page.locator('#tasks-list .tt')).toHaveText('Перевірити пошту');
 });
 
-test('moving a task reorders neighbors in All tasks while Inbox keeps its capture', async ({ page }) => {
+test('moving a task reorders neighbors in All Tasks without changing the current task list', async ({ page }) => {
   await boot(page, { tasks: [task(1, 'Перша на сьогодні', { planDate: '2026-10-08' }), task(2, 'Ще не запланована'), task(3, 'На майбутнє', { planDate: '2026-10-12' }), task(4, 'Друга на сьогодні', { planDate: '2026-10-08' })] });
   await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   await page.getByRole('button', { name: 'Опустити: Перша на сьогодні', exact: true }).click();
@@ -225,8 +226,7 @@ test('moving a task reorders neighbors in All tasks while Inbox keeps its captur
   await page.getByRole('button', { name: 'Зараз', exact: true }).click();
   await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   await expect(page.locator('#tasks-list .tt')).toHaveText(['Ще не запланована', 'Перша на сьогодні', 'На майбутнє', 'Друга на сьогодні']);
-  await openInbox(page);
-  await expect(page.locator('#inbox-sec .tt')).toHaveText('Ще не запланована');
+  await expect(page.locator('#tasks-list .tt')).toHaveText(['Ще не запланована', 'Перша на сьогодні', 'На майбутнє', 'Друга на сьогодні']);
 });
 
 test('Today shows only an active-zone task and All tasks keeps today completion available for undo', async ({ page }) => {

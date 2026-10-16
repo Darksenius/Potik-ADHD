@@ -2,9 +2,8 @@ import { useStore } from '../../state/store';
 import type { TabId } from '../../state/slices/uiSlice';
 import Icon from '../common/Icon';
 
-const destinations: { id: TabId; icon: 'quest' | 'inbox' | 'note' | 'focus' | 'zones' | 'idea' | 'chart' | 'folder' | 'calendar'; label: string; description: string }[] = [
+const destinations: { id: TabId; icon: 'quest' | 'note' | 'focus' | 'zones' | 'idea' | 'chart' | 'folder' | 'calendar'; label: string; description: string }[] = [
   { id: 'alltasks', icon: 'quest', label: 'Усі задачі', description: 'Пошук, майбутні, відкладені й виконані справи' },
-  { id: 'inbox', icon: 'inbox', label: 'Вхідні', description: 'Незаплановані справи для розбору' },
   { id: 'state', icon: 'focus', label: 'Стан', description: 'Фокус, енергія, пріоритети й повсякденні задачі' },
   { id: 'zones', icon: 'zones', label: 'Зони', description: 'Розклад і контексти дня' },
   { id: 'notefolders', icon: 'folder', label: 'Папки нотаток', description: 'Створення та видалення папок' },

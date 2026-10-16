@@ -25,7 +25,7 @@ export interface TasksSlice {
   taskEditorDraft: string;
   setTaskEditorDraft: (draft: string) => void;
 
-  createTask: (title: string, type: TaskType, zoneId?: number | null, alarmTime?: string) => Task;
+  createTask: (title: string, type: TaskType, zoneId?: number | null, alarmTime?: string, activityAt?: number) => Task;
   toggleTask: (id: number) => void;
   setTaskDone: (id: number, done: boolean, completedAt?: number) => void;
   recordPastTaskDone: (id: number, completedAt: number) => boolean;
@@ -48,7 +48,7 @@ export interface TasksSlice {
   addChecklistItem: (taskId: number, text: string) => void;
   editChecklistItem: (taskId: number, index: number, text: string) => void;
   deleteChecklistItem: (taskId: number, index: number) => void;
-  changeCounter: (taskId: number, delta: number) => void;
+  changeCounter: (taskId: number, delta: number, activityAt?: number) => void;
   updateCounterTarget: (taskId: number, target: number) => void;
   toggleCtxTag: (taskId: number, tag: string) => void;
   saveTask: (id: number | null, patch: Partial<Task> & { title: string; type: TaskType }) => number;
@@ -70,12 +70,14 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
   taskEditorDraft: '',
   setTaskEditorDraft: (draft) => set({ taskEditorDraft: draft }),
 
-  createTask: (title, type, zoneId, alarmTime) => {
+  createTask: (title, type, zoneId, alarmTime, activityAt) => {
     const nid = get().nid;
     const zone = zoneId ? get().zones.find((z) => z.id === zoneId) : null;
-    const task = createTaskRecord(nid, title, type, zoneId ?? null, zone, alarmTime);
+    const created = Number.isFinite(activityAt) && Number.isFinite(new Date(activityAt!).getTime())
+      ? new Date(activityAt!).toISOString() : undefined;
+    const task = createTaskRecord(nid, title, type, zoneId ?? null, zone, alarmTime, created);
     set((s) => ({ tasks: [task, ...s.tasks], nid: s.nid + 1 }));
-    if (title.trim()) get().recordProgressDay();
+    if (title.trim()) get().recordProgressDay(activityAt);
     return task;
   },
 
@@ -144,7 +146,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
         [day]: { ...(s.planDayLog[day] || { focus: [], energy: 0, routineDone: {}, priorities: [], tasksDone: 0 }),
           tasksDone: get().dayStats(day).tasksDone } } }));
       get().incrementDoneCount();
-      get().award(TASK_XP[t.type] ?? 10);
+      get().award(TASK_XP[t.type] ?? 10, now.getTime());
     }
     if (done) {
       get().recordProgressDay(now.getTime());
@@ -172,7 +174,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       occurrenceId, nextHistorySequence(history))] });
     get().incrementDoneCount();
     get().recordProgressDay(completedAt);
-    get().award(TASK_XP[task.type]);
+    get().award(TASK_XP[task.type], completedAt);
     return true;
   },
 
@@ -213,18 +215,18 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     if (Number.isSafeInteger(requestedId) && requestedId! > 0) {
       // Room's durable capture id also identifies actions taken before the WebView opens.
       if (get().tasks.some(task => task.id === requestedId)) return;
-      const created = get().createTask(title, 'simple', null, '');
+      const created = get().createTask(title, 'simple', null, '', createdAt);
       set(state => ({
         tasks: state.tasks.map(task => task.id === created.id ? {
           ...task, id: requestedId!, created: Number.isFinite(createdAt) ? new Date(createdAt!).toISOString() : task.created,
         } : task),
         nid: Math.max(state.nid, requestedId! + 1),
       }));
-      get().award(10);
+      get().award(10, createdAt);
       return;
     }
-    get().createTask(title, 'simple', null, '');
-    get().award(10);
+    get().createTask(title, 'simple', null, '', createdAt);
+    get().award(10, createdAt);
   },
 
   markScheduledFired: (id) => {
@@ -358,7 +360,7 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
       ? { ...t, items: t.items?.filter((_, i) => i !== index) } : t) }));
   },
 
-  changeCounter: (taskId, delta) => {
+  changeCounter: (taskId, delta, activityAt) => {
     const t = get().tasks.find((x) => x.id === taskId);
     if (!t || t.trashed || t.done || !hasTaskCounter(t) || !Number.isFinite(delta) || !delta) return;
     const next = Math.max(0, (t.counter || 0) + delta);
@@ -367,11 +369,13 @@ export const createTasksSlice: AppSlice<TasksSlice> = (set, get) => ({
     const justHit = target > 0 && next >= target && !t.cntHit;
     const credited = Math.max(t.counterCreditedProgress ?? (t.counter || 0), next);
     const shouldCredit = next > (t.counterCreditedProgress ?? (t.counter || 0));
+    const suppliedAt = Number.isFinite(activityAt) ? new Date(activityAt!) : undefined;
+    const counterAt = suppliedAt && Number.isFinite(suppliedAt.getTime()) ? suppliedAt : new Date();
     set((s) => ({
-      tasks: s.tasks.map((x) => (x.id === taskId ? { ...x, counter: next, counterDay: fmtDate(new Date()), counterCreditedProgress: credited, cntHit: justHit ? true : x.cntHit } : x)),
+      tasks: s.tasks.map((x) => (x.id === taskId ? { ...x, counter: next, counterDay: fmtDate(counterAt), counterCreditedProgress: credited, cntHit: justHit ? true : x.cntHit } : x)),
     }));
-    if (shouldCredit) get().award(2);
-    if (justHit) get().award(15);
+    if (shouldCredit) get().award(2, activityAt);
+    if (justHit) get().award(15, activityAt);
   },
 
   updateCounterTarget: (taskId, target) => {

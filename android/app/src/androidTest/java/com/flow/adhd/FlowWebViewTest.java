@@ -86,15 +86,17 @@ public class FlowWebViewTest {
         }
     }
 
-    @Test public void undatedInboxCaptureAppearsInNowAndRemainsInInboxUntilPlanned() throws Exception {
-        String title = "Android r2 Inbox " + UUID.randomUUID();
+    @Test public void undatedAllTasksCaptureAppearsInNowAndRemainsAvailableUntilPlanned() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             awaitReady(scenario);
             click(scenario, "#tabs button:nth-child(4)");
-            click(scenario, "button[aria-label=\"Вхідні\"]");
-            await(scenario, "document.querySelector('#quick-task') !== null", "Inbox opens");
-            input(scenario, "#quick-task", title);
-            click(scenario, ".quick-capture button");
+            click(scenario, "button[aria-label=\"Усі задачі\"]");
+            await(scenario, "document.querySelector('#add-fab') !== null", "All Tasks opens");
+            click(scenario, "#add-fab");
+            await(scenario, "document.querySelector('#task-title') !== null", "Quick task editor opens");
+            String title = "Android r23 All Tasks " + UUID.randomUUID();
+            input(scenario, "#task-title", title);
+            click(scenario, "#edit-save-fab");
             JSONObject captured = awaitTask(scenario, title, null);
             long id = captured.getLong("id");
             assertFalse("Capture must not silently assign today", captured.has("planDate"));
@@ -103,14 +105,13 @@ public class FlowWebViewTest {
             await(scenario, "Array.prototype.some.call(document.querySelectorAll('#tasks-list .tc .tt'),"
                 + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";})",
                 "Undated simple capture is immediately available in Now");
-            click(scenario, "#tabs button:nth-child(4)");
-            click(scenario, "button[aria-label=\"Вхідні\"]");
-            await(scenario, "Array.prototype.some.call(document.querySelectorAll('#inbox-sec .tt'),"
+            click(scenario, "#tasks-sec .section-title button");
+            await(scenario, "Array.prototype.some.call(document.querySelectorAll('#tasks-list .tt'),"
                 + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";})",
-                "Unplanned capture remains in Inbox for planning");
-            value(scenario, "var button=Array.prototype.find.call(document.querySelectorAll('#inbox-sec .tt'),"
+                "Unplanned capture remains in All Tasks for planning");
+            value(scenario, "var button=Array.prototype.find.call(document.querySelectorAll('#tasks-list .tt'),"
                 + "function(e){return e.textContent.trim()===" + JSONObject.quote(title) + ";});"
-                + "if(!button)throw new Error('Inbox task missing');button.click();return true;");
+                + "if(!button)throw new Error('All Tasks item missing');button.click();return true;");
             await(scenario, "document.querySelector('#task-date') !== null", "Title opens editor");
             click(scenario, ".editor-actions button:nth-child(2)"); // Explicit Today
             String day = value(scenario, "return document.querySelector('#task-date').value;").getString("value");

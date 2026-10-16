@@ -24,7 +24,7 @@ button{cursor:pointer}
 .ctx-filter .ctxf{font-family:inherit;min-height:40px;font-size:12px}
 .task-title-button{display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;font:inherit;min-height:36px;overflow-wrap:anywhere}
 .task-schedule-label{color:var(--t2);font-size:12px;line-height:1.45;margin:3px 0}
-.tc .ck{width:48px;height:48px;min-width:48px;flex-shrink:0;background:var(--s2);border-width:2px}
+.tc .ck{width:48px;height:48px;min-width:48px;aspect-ratio:1;flex:0 0 48px;box-sizing:border-box;padding:0;background:var(--s2);border-width:2px}
 .tc .ck.on{background:var(--z);border-color:var(--z)}
 .tc .ck:not(.on):hover{background:color-mix(in srgb,var(--z) 12%,var(--s2));border-color:var(--z)}
 .tc .ck.neg-ck:not(.on):hover{background:color-mix(in srgb,var(--neg) 12%,var(--s2));border-color:var(--neg)}

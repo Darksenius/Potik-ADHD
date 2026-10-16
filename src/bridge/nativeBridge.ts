@@ -205,7 +205,14 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
 
   // Only explicit task IDs may complete tasks. The obsolete done_first event
   // cannot safely identify which row the user saw and is deliberately ignored.
-  if (event.indexOf('task_undo:') === 0) {
+  if (event.indexOf('open_insight:') === 0) {
+    const day = event.slice('open_insight:'.length);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+    store.showPage('main');
+    store.switchTab('stats');
+    store.openDailyInsight(day);
+    changed = true;
+  } else if (event.indexOf('task_undo:') === 0) {
     changed = applyNativeTaskUndo(event.slice('task_undo:'.length));
   } else if (event.indexOf('task_done:') === 0) {
     const tid = event.slice(10);
@@ -240,7 +247,7 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
   } else if (/^task_(inc|dec):/.test(event)) {
     const task = store.tasks.find(t => String(t.id) === event.split(':')[1]);
     if (task && belongsToTask(task) && !task.trashed && !task.done && !task.someday && hasTaskCounter(task)) {
-      store.changeCounter(task.id, taskCounterStep(task) * (event.startsWith('task_inc:') ? 1 : -1));
+      store.changeCounter(task.id, taskCounterStep(task) * (event.startsWith('task_inc:') ? 1 : -1), createdAt);
       changed = true;
     }
   } else if (event.indexOf('rc_inc:') === 0) {
@@ -302,13 +309,13 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
   } else if (event.indexOf('capture_task:') === 0) {
     const title = event.slice('capture_task:'.length).trim();
     if (!title) return false;
-    store.addQuickTaskFromShade(title);
+    store.addQuickTaskFromShade(title, undefined, createdAt);
     changed = true;
   } else if (event.indexOf('share_text:') === 0) {
     const txt = event.slice('share_text:'.length).trim().slice(0, 12000);
     if (!txt) return false;
     const folder = store.folders.some(f => f.id === 'thought') ? 'thought' : store.folders[0]?.id || '';
-    const note = store.addQuickNote(txt, folder);
+    const note = store.addQuickNote(txt, folder, createdAt);
     store.enqueueSharedNote(note.id);
     store.showPage('main');
     store.switchTab('notes');
@@ -316,15 +323,15 @@ export function handleNativeEvent(event: string | null | undefined, createdAt?: 
   } else if (event.indexOf('capture_note:') === 0) {
     const txt = event.slice('capture_note:'.length).trim();
     if (!txt) return false;
-    const note = store.addQuickNote(txt, 'impulse');
-    store.award(1);
+    const note = store.addQuickNote(txt, 'impulse', createdAt);
+    store.award(1, createdAt);
     store.scheduleNoteReview(note.id);
     changed = true;
   } else if (event.indexOf('note:') === 0) {
     const txt = event.slice(5).trim();
     if (!txt) return false;
-    const note = store.addQuickNote(txt, 'impulse');
-    store.award(1);
+    const note = store.addQuickNote(txt, 'impulse', createdAt);
+    store.award(1, createdAt);
     store.scheduleNoteReview(note.id);
     changed = true;
   }
@@ -363,7 +370,7 @@ export function drainNativeEvents(onChanged: () => void): void {
               continue;
             }
             // A stale toggle must never silently change today's reset routine.
-            useStore.getState().addQuickNote('Дія зі сповіщення ' + new Date(e.createdAt).toLocaleString('uk') + ': ' + e.event + (task ? ' · ' + task.title : '') + '. Перевір і застосуй вручну: день уже змінився.', 'impulse');
+            useStore.getState().addQuickNote('Дія зі сповіщення ' + new Date(e.createdAt).toLocaleString('uk') + ': ' + e.event + (task ? ' · ' + task.title : '') + '. Перевір і застосуй вручну: день уже змінився.', 'impulse', e.createdAt);
           } else handleNativeEvent(e.event, e.createdAt);
         }
         useStore.getState().resetRepeatingTasksFor(new Date());

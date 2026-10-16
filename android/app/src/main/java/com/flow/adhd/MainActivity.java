@@ -128,6 +128,7 @@ public class MainActivity extends BridgeActivity {
                 FlowDatabase.executeStorage(() -> flowBridge.pushEvent(event));
             }
         }
+        queueInsightOpenIntent(flowBridge, intent);
         if (intent != null && "tasks".equals(intent.getStringExtra("nav"))) {
             android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
             h.postDelayed(new Runnable() {
@@ -139,6 +140,26 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    static boolean queueInsightOpenIntent(FlowBridge bridge, Intent intent) {
+        if (bridge == null || intent == null) return false;
+        String day = intent.getStringExtra("openInsightDay");
+        if (!isIsoLocalDate(day)) return false;
+        // Room keeps the navigation durable if the WebView is not ready yet.
+        String event = "open_insight:" + day;
+        FlowDatabase.executeStorage(() -> bridge.pushEvent(event));
+        return true;
+    }
+    private static boolean isIsoLocalDate(String value) {
+        if (value == null || !value.matches("\\d{4}-\\d{2}-\\d{2}")) return false;
+        java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+        format.setLenient(false);
+        try {
+            java.util.Date parsed = format.parse(value);
+            return parsed != null && value.equals(format.format(parsed));
+        } catch (java.text.ParseException ignored) {
+            return false;
+        }
+    }
     /** Last native snapshot save error for the settings diagnostics screen. */
     public String getLastSaveError() {
         return flowBridge == null ? "" : flowBridge.getLastSaveError();

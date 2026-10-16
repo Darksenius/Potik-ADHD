@@ -264,8 +264,8 @@ function baseAvailability(task: Task, context: QuestContext, currentZoneId: numb
     return { eligible: false, reason: 'outside-time-window', currentZoneId };
   }
 
-  // The simple quick-capture path is intentionally universal immediately while
-  // retaining the task in Inbox for later planning.
+  // Simple quick-captured tasks without a date or zone can appear in Now
+  // immediately; users can add planning details later in All Tasks.
   const quickUnplanned = ['simple', 'check', 'counter', 'note', 'ctx'].includes(task.type)
     && !planDate && task.zoneId == null;
   if (isTaskInInbox(task) && !quickUnplanned) {

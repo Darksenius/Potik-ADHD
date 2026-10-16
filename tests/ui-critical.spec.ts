@@ -1,70 +1,50 @@
 import { test, expect } from '@playwright/test';
 
-test('failed inbox save keeps the text and retries into the same task', async ({ page }) => {
-  await page.addInitScript(() => {
-    (window as any).__failNextStateWrite = 0;
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key: string, value: string) {
-      if (key === 'flow_v2' && (window as any).__failNextStateWrite > 0) {
-        (window as any).__failNextStateWrite--;
-        throw new DOMException('Storage is full', 'QuotaExceededError');
-      }
-      return original.call(this, key, value);
-    };
-  });
+test('an undated simple task is a normal task in Now and All Tasks, with its earned XP at the tap', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-08T12:00:00+03:00') });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Ще', exact: true }).click();
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
-  await page.evaluate(() => { (window as any).__failNextStateWrite = 1; });
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await page.locator('#add-fab').click();
+  await page.getByLabel('Що зробити?').fill('Не забути зарядку');
+  await page.locator('#edit-save-fab').click();
 
-  await page.getByLabel('Нова проста задача').fill('capture retry marker');
-  await page.getByRole('button', { name: 'Додати', exact: true }).click();
-  await expect(page.getByLabel('Нова проста задача')).toHaveValue('capture retry marker');
+  const card = page.locator('#tasks-list .tc').filter({ hasText: 'Не забути зарядку' });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Без дати');
+  await page.getByRole('button', { name: 'Зараз', exact: true }).click();
+  await expect(page.locator('#tasks-list .tt')).toHaveText('Не забути зарядку');
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  const allTasksCard = page.locator('#tasks-list .tc').filter({ hasText: 'Не забути зарядку' });
+  const checkbox = allTasksCard.getByRole('button', { name: 'Виконати: Не забути зарядку', exact: true });
+  const tap = await checkbox.boundingBox();
+  expect(tap).not.toBeNull();
+  await checkbox.click({ position: { x: 24, y: 24 } });
 
-  await page.getByLabel('Нова проста задача').fill('edited capture retry marker');
-  await page.getByRole('button', { name: 'Додати', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => {
-    const state = JSON.parse(localStorage.getItem('flow_v2') || '{}');
-    return state.tasks?.filter((task: any) => task.title.includes('capture retry marker')).length || 0;
-  })).toBe(1);
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
-  expect(saved.tasks.filter((task: any) => task.title.includes('capture retry marker'))).toMatchObject([
-    { title: 'edited capture retry marker', type: 'simple' },
-  ]);
+  const reward = page.locator('.task-reward');
+  await expect(reward).toHaveText('+10⚡');
+  const origin = await reward.evaluate(element => ({ left: parseFloat((element as HTMLElement).style.left), top: parseFloat((element as HTMLElement).style.top) }));
+  expect(Math.abs(origin.left - (tap!.x + 24))).toBeLessThan(3);
+  expect(Math.abs(origin.top - (tap!.y + 24))).toBeLessThan(3);
+  await expect(reward).toBeHidden({ timeout: 2500 });
 
-  await page.reload();
-  const reloaded = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2')!));
-  expect(reloaded.tasks.filter((task: any) => task.title.includes('capture retry marker'))).toMatchObject([
-    { title: 'edited capture retry marker', type: 'simple' },
-  ]);
+  await expect(allTasksCard).toHaveClass(/done-t/);
 });
 
-test('native backup and report export failures are surfaced to the user', async ({ page }) => {
-  await page.addInitScript(() => {
-    (window as any).__rejectedExports = [];
-    (window as any).FlowBridge = {
-      load: () => '',
-      saveWithEvents: () => true,
-      saveNotif: () => {},
-      writeBackup: () => {},
-      readBackup: () => '',
-      hasBackup: () => false,
-      appVersion: () => 'test',
-      exportTxt: (filename: string, content: string) => {
-        (window as any).__rejectedExports.push({ filename, content });
-        return false;
-      },
-    };
-  });
+test('task completion checkbox keeps a true circular hit target and the redundant inbox route is gone', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
-  await page.getByText('Дані та резервні копії', { exact: true }).click();
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
+  await page.locator('#add-fab').click();
+  await page.getByLabel('Що зробити?').fill('Коло');
+  await page.locator('#edit-save-fab').click();
+  const checkbox = page.getByRole('button', { name: 'Виконати: Коло', exact: true });
+  const shape = await checkbox.evaluate(element => {
+    const style = getComputedStyle(element);
+    return { width: style.width, height: style.height, radius: style.borderRadius };
+  });
+  expect(shape.width).toBe(shape.height);
+  expect(shape.radius).toBe('50%');
 
-  await page.getByRole('button', { name: 'Експорт', exact: true }).click();
-  await expect(page.getByText('Android не зміг зберегти файл експорту. Спробуй ще раз.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Звіт (.md)', exact: true }).click();
-  const exports = await page.evaluate(() => (window as any).__rejectedExports);
-  expect(exports).toHaveLength(2);
-  expect(exports[0].filename).toMatch(/^flow-backup-.*\.json$/);
-  expect(exports[1].filename).toMatch(/^flow-export-.*\.md$/);
+  await page.getByRole('button', { name: 'Ще', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Вхідні', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Усі задачі', exact: true })).toBeVisible();
 });

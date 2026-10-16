@@ -19,9 +19,9 @@ async function selectTaskType(page: Page, type: string) {
   await page.getByLabel('Тип задачі', { exact: true }).selectOption(type);
 }
 
-async function openInbox(page: Page) {
+async function openAllTasks(page: Page) {
   await page.getByRole('button', { name: 'Ще', exact: true }).click();
-  await page.getByRole('button', { name: 'Вхідні', exact: true }).click();
+  await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
 }
 
 async function savedTask(page: Page, title: string) {
@@ -123,7 +123,7 @@ test('simple optional note survives type changes, reload, inline edit, and inten
   expect(task.schedDate).toBeFalsy();
   const taskId = task.id;
   await page.reload();
-  await openInbox(page);
+  await openAllTasks(page);
   const card = page.locator('.tc').filter({ has: page.getByRole('button', { name: title, exact: true }) });
   await expandIfNeeded(card, title);
   const note = page.locator('#task-note-' + taskId);
@@ -133,7 +133,7 @@ test('simple optional note survives type changes, reload, inline edit, and inten
   await note.fill(changed);
   await page.clock.runFor(700);
   await page.reload();
-  await openInbox(page);
+  await openAllTasks(page);
   const reopened = page.locator('.tc').filter({ has: page.getByRole('button', { name: title, exact: true }) });
   await expandIfNeeded(reopened, title);
   await expect(page.locator('#task-note-' + taskId)).toHaveValue(changed);
@@ -144,7 +144,7 @@ test('simple optional note survives type changes, reload, inline edit, and inten
   await page.clock.runFor(700);
   expect((await savedTask(page, title)).note).toBe('');
   await page.reload();
-  await openInbox(page);
+  await openAllTasks(page);
   const clearedCard = page.locator('.tc').filter({ has: page.getByRole('button', { name: title, exact: true }) });
   await expandIfNeeded(clearedCard, title);
   await expect(page.locator('#task-note-' + taskId)).toBeVisible();

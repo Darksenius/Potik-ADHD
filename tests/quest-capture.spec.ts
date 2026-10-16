@@ -6,13 +6,14 @@ import { collectState, applyState } from '../src/services/persistence';
 test('a closed-app capture and Done from yesterday commit once after midnight', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-15T08:00:00+03:00') });
   await page.addInitScript(() => {
-    const createdAt = new Date('2026-10-14T21:00:00+03:00').getTime();
+    const createdAt = Date.now() - 30 * 60 * 60 * 1000;
     const taskId = createdAt * 1024;
     const mock = (window as any).__lateCapture = {
       state: JSON.stringify({ saveDate: new Date().toDateString(), tasks: [], weekTplSeeded: true }),
       pending: [
         { id: 1, event: 'capture_task_v2:' + taskId + ':' + JSON.stringify({ title: 'Учора зі шторки', createdAt }), createdAt },
         { id: 2, event: 'task_done:' + taskId, createdAt: createdAt + 60000 },
+        { id: 3, event: 'capture_note:Учорашня нотатка', createdAt: createdAt + 120000 },
       ],
     };
     (window as any).FlowBridge = {
@@ -37,8 +38,22 @@ test('a closed-app capture and Done from yesterday commit once after midnight', 
     saved: JSON.parse((window as any).__lateCapture.state), pending: (window as any).__lateCapture.pending,
   }));
   expect(result.saved.tasks).toHaveLength(1);
-  expect(result.saved.qnotes || []).toHaveLength(0);
+  expect(result.saved.qnotes).toMatchObject([{ txt: 'Учорашня нотатка', date: '2026-10-14' }]);
+  expect(result.saved.progressDays).toEqual(['2026-10-14']);
+  expect(result.saved.dailyInsightClaims).toMatchObject([{ day: '2026-10-14', earnedAt: 0 }]);
   expect(result.pending).toHaveLength(0);
+
+  await page.evaluate(() => {
+    const mock = (window as any).__lateCapture;
+    const createdAt = Date.now();
+    mock.pending = [{ id: 4, event: 'capture_note:Сьогоднішня дія', createdAt }];
+    (window as any).__flowDrainEvents();
+  });
+  await expect.poll(() => page.evaluate(() => JSON.parse((window as any).__lateCapture.state).dailyInsightClaims))
+    .toMatchObject([{ day: '2026-10-14', earnedAt: 0 }, { day: '2026-10-15', earnedAt: expect.any(Number) }]);
+  const afterToday = await page.evaluate(() => JSON.parse((window as any).__lateCapture.state));
+  expect(afterToday.progressDays).toEqual(['2026-10-14', '2026-10-15']);
+  expect(afterToday.qnotes).toContainEqual(expect.objectContaining({ txt: 'Сьогоднішня дія', date: '2026-10-15' }));
 });
 
 test('a native quick capture keeps its id through pre-open actions and JSON reload without duplicates', () => {

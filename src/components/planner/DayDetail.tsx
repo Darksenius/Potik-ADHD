@@ -10,6 +10,7 @@ import { useTaskProjection } from '../../hooks/useTaskProjection';
 import { questDeferralLabel } from '../../utils/questPolicy';
 import { completedTaskOccurrences } from '../../utils/taskHistory';
 import Icon from '../common/Icon';
+import { runTaskCompletionWithReward } from '../../utils/taskRewardFeedback';
 
 export default function DayDetail({ ds }: { ds: DateKey }) {
   const dayIsRest = useStore((s) => s.dayIsRest);
@@ -86,7 +87,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
         const canToggle = !isPast && canTogglePlannedTask(t, ds, projection.now);
         return (
           <div className="plan-task-row" key={t.id}>
-            <button disabled={!canToggle} title={isPast ? 'Історичне виконання не змінює поточну задачу' : !canToggle ? 'Це майбутнє виконання повтору' : undefined} aria-label={(t.type === 'negative' ? 'Зафіксувати: ' : done ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (done ? ' on' : '')} onClick={() => { useStore.getState().resetRepeatingTasksFor(new Date()); toggleTask(t.id); }}>{done ? '✓' : ''}</button>
+            <button disabled={!canToggle} title={isPast ? 'Історичне виконання не змінює поточну задачу' : !canToggle ? 'Це майбутнє виконання повтору' : undefined} aria-label={(t.type === 'negative' ? 'Зафіксувати: ' : done ? 'Повернути: ' : 'Виконати: ') + t.title} className={'plan-ck' + (done ? ' on' : '')} onClick={event => runTaskCompletionWithReward(event, () => { useStore.getState().resetRepeatingTasksFor(new Date()); toggleTask(t.id); })}>{done ? '✓' : ''}</button>
             <button onClick={() => editTask(t.id)} className="plan-task-nm" style={done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{t.title}{isCalendarRepeat(t) ? ' ↺' : ''}</button>
             {isDeferredOccurrenceOn(t, ds, projection)
               ? <span className="plan-task-deferral" title={questDeferralLabel(t, zones)}>Перенесено</span>
@@ -114,7 +115,7 @@ export default function DayDetail({ ds }: { ds: DateKey }) {
           </div>
         ) : (
           <div className={'plan-task-row' + (it.isEvent ? ' plan-event' : '')} key={i}>
-            <button className={'plan-ck' + (it.done ? ' on' : '')} onClick={() => togglePlanItem(ds, i)}>
+            <button className={'plan-ck' + (it.done ? ' on' : '')} onClick={event => runTaskCompletionWithReward(event, () => togglePlanItem(ds, i))}>
               {it.done ? <Icon name="check" /> : it.isEvent ? <Icon name="idea" /> : ''}
             </button>
             <span className="plan-task-nm" style={it.done ? { textDecoration: 'line-through', opacity: 0.5 } : undefined}>{it.title || ''}</span>
