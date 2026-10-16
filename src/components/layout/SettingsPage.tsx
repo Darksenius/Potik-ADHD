@@ -4,6 +4,7 @@ import OssPage, { useAppVersion } from '../oss/OssPage';
 import ExportImportSection from '../notes/ExportImportSection';
 import NotificationDiagnostics from './NotificationDiagnostics';
 import AppUpdates from './AppUpdates';
+import BackupFolderSettings from './BackupFolderSettings';
 import { requestAndShowNotification } from '../../services/webNotifications';
 import { getSaveErrorMessage, listRecoveryArchives, saveIsBlocked, showRecoveryBanner } from '../../services/persistence';
 import type { RecoveryArchive } from '../../services/persistence';
@@ -123,6 +124,7 @@ export default function SettingsPage() {
     <details className="settings-group">
       <summary><span><strong>Дані та резервні копії</strong><small>Експорт, імпорт і архів несумісних даних</small></span></summary>
       <div className="settings-group-content">
+        <BackupFolderSettings />
         <ExportImportSection />
         <section className="settings-archive" aria-labelledby="incompatible-archives-title">
           <h2 id="incompatible-archives-title">Архів несумісних даних</h2>

@@ -1,6 +1,7 @@
 import { useStore } from '../state/store';
 import { collectState, saveState } from './persistence';
 import { markSavePending } from './saveStatus';
+import { flushNativeBackup } from '../bridge/nativeBridge';
 
 let registeredFlush: (() => boolean) | undefined;
 
@@ -28,14 +29,17 @@ export function startAutosave(): () => void {
       if (pending === undefined) pending = setTimeout(flush, 500);
     }
   });
-  const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
-  window.addEventListener('pagehide', flush);
+  const flushOnBackground = () => {
+    if (flush()) void flushNativeBackup().catch(() => { /* Native status retains the backup error. */ });
+  };
+  const onVisibility = () => { if (document.visibilityState === 'hidden') flushOnBackground(); };
+  window.addEventListener('pagehide', flushOnBackground);
   document.addEventListener('visibilitychange', onVisibility);
   return () => {
     flush();
     unsubscribe();
     if (registeredFlush === flush) registeredFlush = undefined;
-    window.removeEventListener('pagehide', flush);
+    window.removeEventListener('pagehide', flushOnBackground);
     document.removeEventListener('visibilitychange', onVisibility);
   };
 }

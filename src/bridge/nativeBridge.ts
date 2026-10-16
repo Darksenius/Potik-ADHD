@@ -58,6 +58,44 @@ export interface FlowNotifPlugin {
   openExactAlarmSettings?: () => Promise<void>;
   openBatterySettings?: () => Promise<void>;
   scheduleDiagnosticReminder?: () => Promise<{ scheduled: boolean; firesAt: number | null }>;
+  chooseBackupFolder?: (options: { purpose: 'backup' | 'restore' }) => Promise<BackupFolderSelection>;
+  backupStatus?: () => Promise<BackupFolderStatus>;
+  flushBackup?: () => Promise<BackupFolderStatus>;
+  confirmBackupReplacement?: () => Promise<BackupFolderStatus>;
+}
+
+export interface BackupFolderStatus {
+  configured: boolean;
+  folderName: string;
+  lastSuccessfulWrite: number;
+  lastError: string;
+}
+
+export interface BackupFolderSelection {
+  cancelled: boolean;
+  folderName?: string;
+  hasBackup?: boolean;
+  raw?: string;
+}
+
+export async function getBackupFolderStatus(): Promise<BackupFolderStatus> {
+  return await flowNotif()?.backupStatus?.() ?? { configured: false, folderName: '', lastSuccessfulWrite: 0, lastError: '' };
+}
+
+export async function chooseBackupFolder(purpose: 'backup' | 'restore'): Promise<BackupFolderSelection> {
+  const plugin = flowNotif();
+  if (!plugin?.chooseBackupFolder) throw new Error('Вибір папки доступний в Android-застосунку.');
+  return plugin.chooseBackupFolder({ purpose });
+}
+
+export async function flushNativeBackup(): Promise<BackupFolderStatus | undefined> {
+  return flowNotif()?.flushBackup?.();
+}
+
+export async function confirmBackupReplacement(): Promise<BackupFolderStatus> {
+  const plugin = flowNotif();
+  if (!plugin?.confirmBackupReplacement) throw new Error('Android не підтримує запис у вибрану папку.');
+  return plugin.confirmBackupReplacement();
 }
 
 export interface NotificationDiagnostics {

@@ -9,6 +9,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.app.Activity;
+import android.net.Uri;
 import android.Manifest;
 import android.app.AlarmManager;
 import android.app.NotificationChannel;
@@ -20,9 +22,11 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.core.content.ContextCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.activity.result.ActivityResult;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import com.getcapacitor.annotation.ActivityCallback;
 
 @CapacitorPlugin(name = "FlowNotif", permissions = {
     @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
@@ -30,6 +34,7 @@ import com.getcapacitor.annotation.PermissionCallback;
 public class FlowPlugin extends Plugin {
 
     private BroadcastReceiver receiver;
+    private volatile boolean backupPickerActive;
 
     @Override
     public void load() {
@@ -216,6 +221,97 @@ public class FlowPlugin extends Plugin {
                 rejectOnMain(call, "Unable to drain queued events");
             }
         });
+    }
+
+    /** Ask the user to select one folder for portable backup or restore. */
+    @PluginMethod
+    public void chooseBackupFolder(PluginCall call) {
+        if (backupPickerActive) { call.reject("A backup folder picker is already open"); return; }
+        String purpose = call.getString("purpose", "backup");
+        if (!"backup".equals(purpose) && !"restore".equals(purpose)) {
+            call.reject("Invalid backup folder purpose");
+            return;
+        }
+        backupPickerActive = true;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        try {
+            startActivityForResult(call, intent, "backupFolderResult");
+        } catch (Exception e) {
+            backupPickerActive = false;
+            call.reject("Unable to open folder picker");
+        }
+    }
+
+    @ActivityCallback
+    private void backupFolderResult(PluginCall call, ActivityResult result) {
+        if (call == null) { backupPickerActive = false; return; }
+        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null
+                || result.getData().getData() == null) {
+            backupPickerActive = false;
+            JSObject cancelled = new JSObject();
+            cancelled.put("cancelled", true);
+            call.resolve(cancelled);
+            return;
+        }
+        Uri tree = result.getData().getData();
+        String purpose = call.getString("purpose", "backup");
+        FlowBackupStore store = FlowBackupStore.get(getContext());
+        store.chooseFolder(tree, purpose, selected -> {
+            backupPickerActive = false;
+            if (!selected.success) {
+                rejectOnMain(call, "Не вдалося прочитати вибрану папку резервної копії.");
+                return;
+            }
+            JSObject response = new JSObject();
+            response.put("cancelled", false);
+            response.put("folderName", selected.folderName);
+            response.put("hasBackup", selected.hasBackup);
+            if ("restore".equals(purpose) && selected.hasBackup) response.put("raw", selected.raw);
+            resolveOnMain(call, response);
+        });
+    }
+
+    @PluginMethod
+    public void backupStatus(PluginCall call) {
+        call.resolve(backupStatusObject());
+    }
+
+    @PluginMethod
+    public void flushBackup(PluginCall call) {
+        FlowBackupStore.get(getContext()).flush(() -> resolveBackupStatus(call));
+    }
+
+    @PluginMethod
+    public void confirmBackupReplacement(PluginCall call) {
+        FlowBackupStore.get(getContext()).confirmReplacement(() -> resolveBackupStatus(call));
+    }
+
+    private void resolveBackupStatus(PluginCall call) {
+        resolveOnMain(call, backupStatusObject());
+    }
+
+    private JSObject backupStatusObject() {
+        org.json.JSONObject status = FlowBackupStore.get(getContext()).status();
+        JSObject result = new JSObject();
+        result.put("configured", status.optBoolean("configured", false));
+        result.put("folderName", status.optString("folderName", ""));
+        result.put("lastSuccessfulWrite", status.optLong("lastSuccessfulWrite", 0L));
+        String error = status.optString("lastError", "");
+        switch (error) {
+            case "replacement_confirmation_required": error = "Файл резервної копії вже є в папці. Підтвердьте заміну після відновлення або окремо."; break;
+            case "folder_access_failed": error = "Не вдалося отримати доступ до вибраної папки."; break;
+            case "internal_write_failed": error = "Не вдалося зберегти внутрішню копію на пристрої."; break;
+            case "saf_write_failed": error = "Не вдалося оновити копію у вибраній папці."; break;
+            case "saf_read_failed": error = "Не вдалося прочитати копію з вибраної папки."; break;
+            case "hash_failed": error = "Не вдалося перевірити цілісність резервної копії."; break;
+        }
+        result.put("lastError", error);
+        return result;
     }
 
     private static void resolveOnMain(PluginCall call, JSObject result) {

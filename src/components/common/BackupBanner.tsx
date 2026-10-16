@@ -1,11 +1,17 @@
 import { useStore } from '../../state/store';
 import { continueWithCurrentState } from '../../services/persistence';
 import { importState, exportRecoveryFile } from '../../services/exportImport';
+import { restoreFromBackupFolder } from '../../services/backupFolder';
+import { isCapacitor } from '../../bridge/nativeBridge';
 
 export default function BackupBanner() {
   const banner = useStore((s) => s.backupBanner);
   const dismiss = useStore((s) => s.dismissBackupBanner);
   const showToast = useStore((s) => s.showToast);
+  const restoreFolder = async () => {
+    try { const message = await restoreFromBackupFolder(); if (message) showToast(message); }
+    catch (error) { showToast(error instanceof Error ? error.message : 'Не вдалося відновити дані.'); }
+  };
 
   if (!banner) return null;
 
@@ -25,6 +31,7 @@ export default function BackupBanner() {
             <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>Не вдалося записати архів або нові дані. Старі оригінали не перезаписано. Повтори спробу або збережи їх у файл.</div>
             <button onClick={() => exportRecoveryFile()}>Зберегти оригінали</button>
             <button onClick={() => continueWithCurrentState()}>Повторити архівацію</button>
+            {isCapacitor() && <button onClick={() => void restoreFolder()}>Відновити з папки резервних копій</button>}
           </div>
           <button
             onClick={dismiss}
@@ -55,6 +62,7 @@ export default function BackupBanner() {
           Імпорт
         </button>
         <button onClick={() => continueWithCurrentState()}>Повторити архівацію</button>
+        {isCapacitor() && <button onClick={() => void restoreFolder()}>Відновити з папки резервних копій</button>}
         <button
           onClick={dismiss}
           style={{ background: 'none', border: '1px solid rgba(255,255,255,.2)', borderRadius: 7, padding: '5px 10px', color: '#e0e0e0', cursor: 'pointer', fontFamily: "'Syne',sans-serif", marginLeft: 6 }}

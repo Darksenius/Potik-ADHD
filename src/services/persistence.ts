@@ -242,7 +242,7 @@ export function saveState(eventIds?: number[]): boolean {
   try { localStorage.setItem(LS_KEY, json); localSaved = true; } catch { /* Native saving still works when browser quota is exhausted. */ }
   if (fb && nativeSaved) {
     try { fb.saveNotif(JSON.stringify(buildForegroundNotifPayload())); } catch { /* Snapshot can be refreshed later. */ }
-    try { fb.writeBackup(json); } catch { /* Does not invalidate Room state. */ }
+    // Android queues local and SAF copies after its confirmed Room commit.
   }
   if (!nativeSaved && !localSaved) {
     lastSaveFailure = 'browser';
@@ -289,7 +289,15 @@ export type BackupCheckResult =
   | { kind: 'valid'; data: unknown; taskCount: number; saveDate: string; raw: string }
   | { kind: 'unreadable'; raw: string };
 
-export function checkBackupRecovery(): BackupCheckResult {
+export function checkBackupRecovery(candidateRaw?: string): BackupCheckResult {
+  // A user-selected file is validated through the same schema without locking
+  // the current workspace or automatically replacing the chosen source file.
+  if (candidateRaw !== undefined) {
+    try {
+      const data = validateBackup(JSON.parse(candidateRaw));
+      return { kind: 'valid', data, taskCount: (data.tasks || []).filter(task => !task.trashed).length, saveDate: data.saveDate || '?', raw: candidateRaw };
+    } catch { return { kind: 'unreadable', raw: candidateRaw }; }
+  }
   if (loadedSuccessfully && !saveBlocked) return { kind: 'none' };
   const fb = flowBridge();
   if (fb) {

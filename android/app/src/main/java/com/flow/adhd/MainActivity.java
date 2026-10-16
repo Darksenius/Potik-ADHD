@@ -186,6 +186,12 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    public void onStop() {
+        if (flowBridge != null) flowBridge.flushBackup();
+        super.onStop();
+    }
+
+    @Override
     public void onDestroy() {
         if (pollHandler != null) pollHandler.removeCallbacks(eventPoller);
         super.onDestroy();

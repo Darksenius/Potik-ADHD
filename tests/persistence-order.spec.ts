@@ -67,7 +67,7 @@ test('ordinary save commits with no acknowledgement ids and succeeds when browse
   expect(commits).toHaveLength(1);
   expect(commits[0].ids).toEqual([]);
   expect(JSON.parse(commits[0].json).notepad).toBe('Збережено у Room');
-  expect(calls).toEqual(['notification', 'backup']);
+  expect(calls).toEqual(['notification']); // Android owns backups after its commit.
 });
 
 test('event acknowledgement failure leaves mirror and queue intact until retry succeeds', () => {

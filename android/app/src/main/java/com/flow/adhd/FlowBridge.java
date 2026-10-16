@@ -27,6 +27,7 @@ public class FlowBridge {
 
     private final FlowDao dao;
     private final Context ctx;
+    // Injection is retained for recovery-archive tests and legacy read-only import.
     private final File publicBackupOverride;
     private final File privateBackupOverride;
     private volatile String lastSaveError = "";
@@ -49,7 +50,11 @@ public class FlowBridge {
     /** window.FlowBridge.save(json) — зберігає повний стан */
     @JavascriptInterface
     public void save(String json) {
-        callStorage(() -> { dao.writeState(json); return null; });
+        callStorage(() -> {
+            dao.writeState(json);
+            scheduleBackupAfterCommit(json);
+            return null;
+        });
     }
 
     /** Acknowledgement cannot become durable without its resulting state. */
@@ -75,6 +80,7 @@ public class FlowBridge {
             try {
                 dao.commitEvents(json, ids);
                 lastSaveError = "";
+                scheduleBackupAfterCommit(json);
                 return true;
             } catch (SQLiteFullException e) {
                 lastSaveError = "storage_full";
@@ -91,6 +97,12 @@ public class FlowBridge {
     /** Sanitized code for the most recent failed snapshot commit. */
     @JavascriptInterface
     public String getLastSaveError() { return lastSaveError; }
+
+    private void scheduleBackupAfterCommit(String json) {
+        if (publicBackupOverride != null || privateBackupOverride != null) return;
+        try { FlowBackupStore.get(ctx).onRoomCommit(json); }
+        catch (Exception e) { android.util.Log.w("FlowBridge", "Unable to queue backup snapshot", e); }
+    }
 
     /** Preserve all recovery inputs in a new archive; never alters Room or backups. */
     @JavascriptInterface
@@ -110,8 +122,8 @@ public class FlowBridge {
             archive.put("originalState", originalState == null ? org.json.JSONObject.NULL : originalState);
             archive.put("originalNotif", originalNotif == null ? org.json.JSONObject.NULL : originalNotif);
             org.json.JSONObject backups = new org.json.JSONObject();
-            putBackupBytes(backups, "public", new File(getPublicBackupDir(), BACKUP_FILE));
-            putBackupBytes(backups, "private", new File(getPrivateBackupDir(), BACKUP_FILE));
+            putBackupBytes(backups, "public", new File(getLegacyPublicBackupDir(), FlowBackupStore.BACKUP_FILE));
+            putBackupBytes(backups, "private", new File(getLegacyPrivateBackupDir(), FlowBackupStore.BACKUP_FILE));
             archive.put("backups", backups);
 
             File directory = new File(ctx.getFilesDir(), "recovery");
@@ -405,52 +417,36 @@ public class FlowBridge {
         return BuildConfig.VERSION_NAME;
     }
 
-    /**
-     * Повертає папку для резервного копіювання.
-     * Пріоритет: Documents/FLOW (публічна, виживає після переустановки)
-     * Fallback: getExternalFilesDir (без дозволу, але стирається при деінсталяції)
-     */
-    private File getPublicBackupDir() {
+    /** Historical locations are kept read-only so older installs can recover existing files. */
+    private File getLegacyPublicBackupDir() {
         if (publicBackupOverride != null) return publicBackupOverride;
-        File pub = new File(Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_DOCUMENTS), "FLOW");
-        return pub;
+        return new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "FLOW");
     }
 
-    private File getPrivateBackupDir() {
+    private File getLegacyPrivateBackupDir() {
         if (privateBackupOverride != null) return privateBackupOverride;
         File base = ctx.getExternalFilesDir(null);
         return new File(base != null ? base : ctx.getFilesDir(), "FLOW-backup");
     }
 
-    private static final String BACKUP_FILE = "flow_backup.json";
-
-    /** window.FlowBridge.writeBackup(json) — записує резервну копію на диск */
+    /** Compatibility entry point; only the internal last-good store is written directly. */
     @JavascriptInterface
     public boolean writeBackup(String json) {
-        return callStorage(() -> writeBackupOnStorage(json));
+        return FlowBackupStore.get(ctx).writeCompatibilitySnapshot(json);
     }
 
-    private boolean writeBackupOnStorage(String json) {
-        // Attempt the private fallback even when a public directory exists but is unwritable.
-        return writeAtomicBackup(getPublicBackupDir(), json)
-                || writeAtomicBackup(getPrivateBackupDir(), json);
-    }
-
-    private boolean writeAtomicBackup(File directory, String json) {
-        AtomicFile file = new AtomicFile(new File(directory, BACKUP_FILE));
-        FileOutputStream stream = null;
-        try {
-            new org.json.JSONObject(json);
-            if (!directory.isDirectory() && !directory.mkdirs()) return false;
-            stream = file.startWrite();
-            stream.write(json.getBytes(StandardCharsets.UTF_8));
-            file.finishWrite(stream);
-            return true;
-        } catch (Exception e) {
-            if (stream != null) file.failWrite(stream);
-            return false;
-        }
+    /** Force queued backup output when the app leaves the foreground. */
+    public void flushBackup() {
+        FlowDatabase.executeStorage(() -> {
+            try {
+                String current = dao.getStateJson();
+                if (current != null && !current.isEmpty()) scheduleBackupAfterCommit(current);
+            } catch (Exception e) {
+                android.util.Log.w("FlowBridge", "Unable to refresh backup snapshot", e);
+            }
+            try { FlowBackupStore.get(ctx).flush(); }
+            catch (Exception e) { android.util.Log.w("FlowBridge", "Unable to flush backup", e); }
+        });
     }
 
     /**
@@ -459,12 +455,16 @@ public class FlowBridge {
      */
     @JavascriptInterface
     public String readBackup() {
-        return callStorage(this::readBackupOnStorage);
+        return callStorage(() -> {
+            String local = FlowBackupStore.get(ctx).localBackup();
+            if (!local.isEmpty()) return local;
+            return readLegacyBackupOnStorage();
+        });
     }
 
-    private String readBackupOnStorage() {
-        File pub = new File(getPublicBackupDir(), BACKUP_FILE);
-        File priv = new File(getPrivateBackupDir(), BACKUP_FILE);
+    private String readLegacyBackupOnStorage() {
+        File pub = new File(getLegacyPublicBackupDir(), FlowBackupStore.BACKUP_FILE);
+        File priv = new File(getLegacyPrivateBackupDir(), FlowBackupStore.BACKUP_FILE);
         File[] candidates = pub.lastModified() >= priv.lastModified()
                 ? new File[] {pub, priv} : new File[] {priv, pub};
         String unreadable = "";
