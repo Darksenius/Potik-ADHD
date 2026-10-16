@@ -10,7 +10,7 @@ import kotlinx.serialization.json.longOrNull
 class FlowEngine(private val taskXp: Map<String, Double>) {
     fun apply(
         snapshot: FlowSnapshot, command: FlowCommand, zone: ZoneId, now: Long,
-        zoneOccurrenceKey: (Long, Long) -> String? = { _, _ -> null },
+        zoneOccurrenceKey: (Long, Long) -> String? = { id, at -> ZoneCalendar.occurrenceKey(snapshot.data, id, at, zone) },
         activeZoneId: Long? = null,
     ): FlowCommandResult = when (command) {
         is FlowCommand.AddQuickNote, is FlowCommand.UpdateQuickNote, is FlowCommand.DeleteQuickNote,
@@ -19,6 +19,7 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.ChangeCounter, is FlowCommand.SetChecklistItem, is FlowCommand.RecordNegative ->
             CounterReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.SetTaskDone -> TaskCompletionReducer.reduce(snapshot, command, zone, taskXp, now, zoneOccurrenceKey)
+        is FlowCommand.DeferTask -> TaskDeferralReducer.reduce(snapshot, command, zone, zoneOccurrenceKey)
         is FlowCommand.SetEnergy -> Experience.setEnergy(snapshot.data, command.value, command.activityAt, zone, now)
             .let { FlowCommandResult.Applied(FlowSnapshot.fromData(it.state), it.events) }
         is FlowCommand.CaptureTask -> capture(snapshot, command, zone, now)

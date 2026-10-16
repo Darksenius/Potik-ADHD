@@ -23,9 +23,10 @@ const entry = `
   import { completedTaskOccurrences } from './src/utils/taskHistory.ts';
   import { fmtDate } from './src/utils/date.ts';
   import { dayBlocksFor, dayIsRestFor } from './src/state/slices/plannerHelpers.ts';
+  import { buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks } from './src/utils/questPolicy.ts';
   import { isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt } from './src/utils/taskSchedule.ts';
   import taskTypes from './src/content/task-types.json' with { type: 'json' };
-  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes };
+  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes };
 `;
 const bundled = await build({
   stdin: { contents: entry, resolveDir: root, sourcefile: 'native-parity-entry.ts' },
@@ -46,7 +47,7 @@ const bundled = await build({
   }],
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`;
-const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes } = await import(moduleUrl);
+const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes } = await import(moduleUrl);
 
 const transientFields = new Set(['qnid', 'dailyInsightNotice', 'selectedInsightDay', 'xpPopup', 'levelUpFlash', 'alarmTaskIds']);
 const fixedZone = 'Europe/Kyiv';
@@ -109,6 +110,29 @@ function perform(store, command) {
 function performCompletion(store, command) {
   if (command.kind !== 'SetTaskDone') throw new Error(`Unsupported completion fixture command ${command.kind}`);
   return store.get().setTaskDone(command.taskId, command.done, command.completedAt);
+}
+
+function runDeferralFixture(name, initialData, taskId, kind, requestedAt, timezone = fixedZone) {
+  process.env.TZ = timezone;
+  const input = capture(createStore(initialData).state());
+  const store = createStore(input);
+  const api = store.get();
+  api.dayBlocks = (day) => dayBlocksFor(day, api.planDayZones || {}, api.planRules || [], api.dayTemplates || []);
+  api.getZoneOccurrenceKey = (zoneId, date) => {
+    const day = fmtDate(date);
+    const minute = date.getHours() * 60 + date.getMinutes();
+    const range = getAssignedZoneOccurrences({ zones: api.zones, planDayOff: api.planDayOff, dayBlocks: api.dayBlocks }, day)
+      .find((slot) => slot.zoneId === zoneId && minute >= slot.startMinute && minute < slot.endMinute);
+    return range ? `${day}:${zoneId}:${String(Math.floor(range.startMinute / 60)).padStart(2, '0')}:${String(range.startMinute % 60).padStart(2, '0')}` : undefined;
+  };
+  api.deferTask(taskId, kind, requestedAt);
+  const result = {
+    name, initialState: input,
+    command: { kind, taskId, requestedAt, activityAt: requestedAt, now: fixedNow, zone: timezone },
+    expectedState: capture(store.state()),
+  };
+  process.env.TZ = fixedZoneEnvironment;
+  return result;
 }
 
 function performEditor(store, command) {
@@ -551,6 +575,154 @@ const notes = [
   ]),
 ];
 
+const questZoneCasesInput = [
+  {
+    name: 'planned-ranges-override-baseline-and-tie-by-order', day: '2026-10-16', now: Date.parse('2026-10-16T06:00:00.000Z'), zone: fixedZone, days: 1,
+    state: {
+      zones: [
+        { id: 1, nm: 'Перша', prio: 2, slots: [{ s: '09:00', e: '12:00' }] },
+        { id: 2, nm: 'Друга', prio: 5, slots: [{ s: '10:00', e: '11:00' }] },
+      ], planDayOff: {}, planDayZones: { '2026-10-16': [{ zoneId: 1, s: '10:00', e: '11:00' }] }, planRules: [], dayTemplates: [],
+    },
+  },
+  {
+    name: 'planned-zones-override-inactive-bound-and-dayoff-baselines', day: '2026-10-16', now: Date.parse('2026-10-16T06:00:00.000Z'), zone: fixedZone, days: 1,
+    state: {
+      zones: [
+        { id: 3, nm: 'Неактивна', active: false, prio: 1, slots: [{ s: '08:00', e: '10:00' }] },
+        { id: 4, nm: 'Прихована', bound: true, prio: 2, slots: [{ s: '10:00', e: '12:00' }] },
+        { id: 5, nm: 'Вихідний', prio: 3, slots: [{ s: '12:00', e: '14:00' }] },
+      ], planDayOff: { '2026-10-16': [5] }, planDayZones: {},
+      planRules: [{ start: '2026-10-16', end: '2026-10-16', days: [{ tplId: 'plans' }] }],
+      dayTemplates: [{ id: 'plans', name: 'План', blocks: [
+        { zoneId: 3, s: '08:30', e: '09:30' }, { zoneId: 4, s: '10:30', e: '11:30' }, { zoneId: 5, s: '12:30', e: '13:30' },
+      ] }],
+    },
+  },
+  {
+    name: 'off-zones-have-no-baseline-or-planned-ranges', day: '2026-10-16', now: Date.parse('2026-10-16T06:00:00.000Z'), zone: fixedZone, days: 1,
+    state: { zones: [{ id: 6, nm: 'Вимкнена', off: true, prio: 1, slots: [{ s: '09:00', e: '12:00' }] }], planDayOff: {}, planDayZones: { '2026-10-16': [{ zoneId: 6, s: '10:00', e: '11:00' }] }, planRules: [], dayTemplates: [] },
+  },
+  {
+    name: 'touching-assigned-ranges-merge-within-zone', day: '2026-10-16', now: Date.parse('2026-10-16T06:00:00.000Z'), zone: fixedZone, days: 1,
+    state: { zones: [{ id: 8, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '09:00' }, { s: '09:00', e: '10:00' }, { s: '09:30', e: '11:00' }] }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] },
+  },
+  {
+    name: 'assigned-overlay-retains-each-zone-range', day: '2026-10-16', now: Date.parse('2026-10-16T06:00:00.000Z'), zone: fixedZone, days: 1,
+    state: { zones: [{ id: 9, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '12:00' }] }, { id: 10, nm: 'Робота', prio: 4, slots: [{ s: '09:00', e: '11:00' }] }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] },
+  },
+  {
+    name: 'zone-id-above-signed-int-range', day: '2026-10-16', now: Date.parse('2026-10-16T06:00:00.000Z'), zone: fixedZone, days: 1,
+    state: { zones: [{ id: 4294967297, nm: 'Великий ID', prio: 1, slots: [{ s: '09:00', e: '10:00' }] }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] },
+  },
+  {
+    name: 'new-york-spring-forward-is-23-hours', day: '2026-03-08', now: Date.parse('2026-03-08T12:00:00.000Z'), zone: 'America/New_York', days: 1,
+    state: { zones: [{ id: 11, nm: 'Ранок', prio: 1, slots: [{ s: '01:00', e: '04:00' }] }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] },
+  },
+  {
+    name: 'new-york-fall-back-is-25-hours', day: '2026-11-01', now: Date.parse('2026-11-01T12:00:00.000Z'), zone: 'America/New_York', days: 1,
+    state: { zones: [{ id: 12, nm: 'Ніч', prio: 1, slots: [{ s: '00:30', e: '02:30' }] }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] },
+  },
+];
+
+const fixedZoneEnvironment = process.env.TZ;
+const zoneCases = questZoneCasesInput.map(({ name, state, now, zone: timezone, days, day }) => {
+  process.env.TZ = timezone;
+  const input = {
+    zones: state.zones,
+    planDayOff: state.planDayOff,
+    now: new Date(now),
+    days,
+    dayBlocks: (date) => dayBlocksFor(date, state.planDayZones || {}, state.planRules || [], state.dayTemplates || []),
+  };
+  const result = {
+    name, state, now, zone: timezone, days, day,
+    expectedTimeline: buildQuestTimeline(input),
+    expectedRanges: getQuestDayRanges(input, day),
+    expectedAssigned: getAssignedZoneOccurrences(input, day),
+  };
+  process.env.TZ = fixedZoneEnvironment;
+  return result;
+});
+process.env.TZ = fixedZone;
+
+const questCaseInputs = [
+  {
+    name: 'priority-cannot-bypass-wrong-zone', zone: fixedZone, now: Date.parse('2026-10-16T06:30:00.000Z'), days: 1,
+    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '10:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '10:00', e: '12:00' }] }], priorities: [101], tasks: [{ id: 101, title: 'Робоча справа', type: 'simple', done: false, someday: false, zoneId: 2, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 101,
+  },
+  {
+    name: 'next-zone-expiry-returns-to-source-zone', zone: fixedZone, now: Date.parse('2026-10-16T07:30:00.000Z'), requestedAt: Date.parse('2026-10-16T05:30:00.000Z'), days: 1,
+    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '09:00' }, { s: '10:00', e: '12:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '09:00', e: '10:00' }] }], priorities: [], tasks: [{ id: 102, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 102, kind: 'next-zone',
+  },
+  {
+    name: 'last-zone-next-deferral-falls-back-to-not-today', zone: fixedZone, now: Date.parse('2026-10-16T08:30:00.000Z'), days: 1,
+    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '10:00' }] }], priorities: [], tasks: [{ id: 103, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 103, kind: 'next-zone',
+  },
+  {
+    name: 'linked-not-today-starts-tomorrow-in-own-zone', zone: fixedZone, now: Date.parse('2026-10-16T08:30:00.000Z'), days: 2,
+    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '10:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '10:00', e: '12:00' }] }], priorities: [], tasks: [{ id: 104, title: 'Робоча справа', type: 'simple', done: false, someday: false, zoneId: 2, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 104, kind: 'not-today',
+  },
+  {
+    name: 'unbound-not-today-uses-23-hours-across-spring-dst', zone: 'America/New_York', now: Date.parse('2026-03-07T17:00:00.000Z'), days: 2,
+    state: { zones: [], priorities: [], tasks: [{ id: 105, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-03-06T15:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 105, kind: 'not-today',
+  },
+  {
+    name: 'next-zone-deferral-keeps-linked-task-original-zone', zone: fixedZone, now: Date.parse('2026-10-16T06:30:00.000Z'), days: 1,
+    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '09:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '09:00', e: '10:00' }] }], priorities: [106], tasks: [{ id: 106, title: 'Домашня справа', type: 'simple', done: false, someday: false, zoneId: 1, repeat: 'none', created: '2026-10-15T09:00:00.000Z', questDeferral: { kind: 'next-zone', requestedAt: Date.parse('2026-10-16T06:00:00.000Z'), sourceZoneId: 0, targetZoneId: 2, startAt: Date.parse('2026-10-16T06:00:00.000Z'), endAt: Date.parse('2026-10-16T07:00:00.000Z') } }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 106,
+  },
+];
+
+const questCases = questCaseInputs.map(({ name, state, now, requestedAt, zone: timezone, days, taskId, kind }) => {
+  process.env.TZ = timezone;
+  const input = {
+    zones: state.zones,
+    planDayOff: state.planDayOff,
+    now: new Date(now),
+    days,
+    dayBlocks: (day) => dayBlocksFor(day, state.planDayZones || {}, state.planRules || [], state.dayTemplates || []),
+  };
+  const timeline = buildQuestTimeline(input);
+  let task = state.tasks.find((candidate) => candidate.id === taskId);
+  const context = { now: new Date(now), timeline, zones: state.zones, priorities: state.priorities };
+  const expectedDeferral = kind
+    ? createQuestDeferral(task, kind, { timeline, zones: state.zones, requestedAt: requestedAt ?? now })
+    : undefined;
+  if (requestedAt !== undefined) task = { ...task, questDeferral: expectedDeferral };
+  const tasks = state.tasks.map((candidate) => candidate.id === taskId ? task : candidate);
+  const result = {
+    name, state: { ...state, tasks }, now, ...(requestedAt === undefined ? {} : { requestedAt }), zone: timezone, timeline, task,
+    expectedAvailability: getQuestTaskAvailability(task, context),
+    expectedSelected: selectQuestTasks(tasks, context),
+  };
+  if (kind) {
+    result.kind = kind;
+    result.expectedDeferral = expectedDeferral;
+  }
+  process.env.TZ = fixedZoneEnvironment;
+  return result;
+});
+process.env.TZ = fixedZone;
+
+const deferCommandCases = [
+  runDeferralFixture('defer-linked-task-to-next-zone-persists-zone-occurrence', {
+    zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '10:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '10:00', e: '12:00' }] }],
+    tasks: [{ id: 111, title: 'Домашня справа', type: 'zonelinked', done: false, someday: false, zoneId: 1, repeat: 'everyzone', created: '2026-10-15T09:00:00.000Z' }],
+    priorities: [111], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [],
+  }, 111, 'next-zone', Date.parse('2026-10-16T05:30:00.000Z')),
+  runDeferralFixture('defer-linked-task-until-tomorrow-own-zone', {
+    zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '10:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '10:00', e: '12:00' }] }],
+    tasks: [{ id: 112, title: 'Робоча справа', type: 'simple', done: false, someday: false, zoneId: 2, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }],
+    priorities: [112], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [],
+  }, 112, 'not-today', Date.parse('2026-10-16T05:30:00.000Z')),
+  runDeferralFixture('defer-unbound-task-across-spring-dst', {
+    zones: [],
+    tasks: [{ id: 113, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-03-06T15:00:00.000Z' }],
+    priorities: [113], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [],
+  }, 113, 'not-today', Date.parse('2026-03-07T17:00:00.000Z'), 'America/New_York'),
+];
+process.env.TZ = fixedZone;
+
 const fixture = {
   fixtureVersion: 1,
   generatedAt: '2026-10-16T12:00:00+03:00',
@@ -568,8 +740,11 @@ const fixture = {
   xpCases,
   energyCases,
   completionCases,
+  zoneCases,
+  questCases,
+  deferCommandCases,
 };
 
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(fixture, null, 2)}\n`, 'utf8');
-console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${plannerCases.length} planner cases, ${captureCases.length} capture cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, and ${completionCases.length} completion fixtures to ${path.relative(root, outputPath)}`);
+console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${plannerCases.length} planner cases, ${captureCases.length} capture cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, ${completionCases.length} completion fixtures, ${zoneCases.length} zone cases, ${questCases.length} quest cases, and ${deferCommandCases.length} defer-command cases to ${path.relative(root, outputPath)}`);

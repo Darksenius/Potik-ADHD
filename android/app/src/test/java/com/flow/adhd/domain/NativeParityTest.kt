@@ -9,6 +9,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,6 +44,51 @@ class NativeParityTest(private val name: String, private val group: String, priv
                 FlowSnapshot.parse(fixture["initialState"].toString()), command,
                 ZoneId.of(data.text("zone")), data.number("now"),
             )
+            check(result is FlowCommandResult.Applied) { "$name rejected: $result" }
+            assertEquals(name, fixture["expectedState"], result.snapshot.data)
+        } else if (group == "zone") {
+            val state = fixture["state"] as JsonObject
+            val day = fixture.text("day")!!
+            val timeline = ZoneCalendar.timeline(state, fixture.number("now"), ZoneId.of(fixture.text("zone")), fixture.number("days").toInt())
+            assertEquals(name, fixture["expectedTimeline"], JsonArray(timeline.map { row -> buildJsonObject {
+                put("zoneId", row.zoneId); put("startAt", row.startAt); put("endAt", row.endAt)
+            } }))
+            assertEquals(name, fixture["expectedRanges"], JsonArray(ZoneCalendar.dayRanges(state, day).map { row -> buildJsonObject {
+                put("zoneId", row.zoneId); put("start", row.start); put("end", row.end); put("order", row.order)
+                put("priority", if (row.priority % 1.0 == 0.0) JsonPrimitive(row.priority.toLong()) else JsonPrimitive(row.priority))
+                if (row.planned) put("planned", true)
+            } }))
+            assertEquals(name, fixture["expectedAssigned"], JsonArray(ZoneCalendar.assignedOccurrences(state, day).map { row -> buildJsonObject {
+                put("zoneId", row.zoneId); put("startMinute", row.startMinute); put("endMinute", row.endMinute)
+            } }))
+        } else if (group == "quest") {
+            val state = fixture["state"] as JsonObject
+            val task = fixture["task"] as JsonObject
+            val context = QuestPolicy.Context(now = fixture.number("now"), timeline = timeline(fixture["timeline"] as JsonArray),
+                zones = (state["zones"] as JsonArray).map { it as JsonObject },
+                priorities = (state["priorities"] as JsonArray).map { (it as? JsonPrimitive)?.takeUnless { p -> p == JsonNull }?.long },
+                zone = ZoneId.of(fixture.text("zone")))
+            fixture["expectedAvailability"]?.let { expected ->
+                val value = QuestPolicy.availability(task, context)
+                assertEquals(name, expected, buildJsonObject {
+                    put("eligible", value.eligible); put("currentZoneId", value.currentZoneId)
+                    value.reason?.let { put("reason", it) }; value.availableAt?.let { put("availableAt", it) }
+                })
+            }
+            fixture["expectedSelected"]?.let { expected ->
+                assertEquals(name, expected, JsonArray(QuestPolicy.select((state["tasks"] as JsonArray).map { it as JsonObject }, context)))
+            }
+            fixture["expectedDeferral"]?.let { expected ->
+                val kind = if (fixture.text("kind") == "next-zone") QuestDeferralKind.NEXT_ZONE else QuestDeferralKind.NOT_TODAY
+                val at = (fixture["requestedAt"] as? JsonPrimitive)?.long ?: context.now
+                assertEquals(name, expected, QuestPolicy.createDeferral(task, kind, context, at))
+            }
+        } else if (group == "defer") {
+            val data = fixture["command"] as JsonObject
+            val kind = if (data.text("kind") == "next-zone") QuestDeferralKind.NEXT_ZONE else QuestDeferralKind.NOT_TODAY
+            val result = FlowEngine(taskXp).apply(FlowSnapshot.parse(fixture["initialState"].toString()),
+                FlowCommand.DeferTask(data.number("taskId"), kind, data.number("requestedAt"), data["details"] as? JsonObject, name, data.number("activityAt")),
+                ZoneId.of(data.text("zone")), data.number("now"))
             check(result is FlowCommandResult.Applied) { "$name rejected: $result" }
             assertEquals(name, fixture["expectedState"], result.snapshot.data)
         } else if (group == "planner") {
@@ -143,7 +190,7 @@ class NativeParityTest(private val name: String, private val group: String, priv
                     val item = entry as JsonObject
                     add(arrayOf("notes-$index-${item.text("scenario")}", "notes", item))
                 }
-                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion", "editorCases" to "editor", "lifecycleCases" to "lifecycle", "scheduleCases" to "schedule", "captureCases" to "capture", "plannerCases" to "planner")) {
+                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion", "editorCases" to "editor", "lifecycleCases" to "lifecycle", "scheduleCases" to "schedule", "captureCases" to "capture", "plannerCases" to "planner", "zoneCases" to "zone", "questCases" to "quest", "deferCommandCases" to "defer")) {
                     (root[key] as JsonArray).forEachIndexed { index, entry ->
                         val item = entry as JsonObject
                         add(arrayOf("$group-$index-${item.text("name") ?: item.text("scenario")}", group, item))
@@ -154,5 +201,9 @@ class NativeParityTest(private val name: String, private val group: String, priv
 
         private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
         private fun JsonObject.number(key: String): Long = (this[key] as JsonPrimitive).long
+        private fun timeline(rows: JsonArray): List<TimelineSegment> = rows.map { row ->
+            val item = row as JsonObject
+            TimelineSegment(item.number("zoneId"), item.number("startAt"), item.number("endAt"))
+        }
     }
 }

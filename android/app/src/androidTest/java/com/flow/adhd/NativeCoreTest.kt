@@ -10,6 +10,9 @@ import com.flow.adhd.domain.FlowSnapshot
 import com.flow.adhd.domain.TaskFactory
 import com.flow.adhd.domain.TaskHistory
 import com.flow.adhd.domain.PlannerProjection
+import com.flow.adhd.domain.ZoneCalendar
+import com.flow.adhd.domain.QuestPolicy
+import com.flow.adhd.domain.QuestDeferralKind
 import java.time.ZoneId
 import java.time.Instant
 import kotlinx.serialization.json.Json
@@ -26,6 +29,52 @@ import org.junit.runner.RunWith
 /** Runs only the pure native engine: no Activity, WebView, Room writes, or network. */
 @RunWith(AndroidJUnit4::class)
 class NativeCoreTest {
+    @Test fun zoneOverlaysDoNotResetCreditAndDeferredTasksReturnToTheirSourceZone() {
+        val zone = ZoneId.of("UTC")
+        val engine = FlowEngine(mapOf("simple" to 10.0))
+        fun at(text: String) = Instant.parse(text).toEpochMilli()
+        var state = FlowSnapshot.parse("""{
+          "formatVersion":2,"xp":0,"xpTotal":0,"level":1,"done":0,
+          "progressionVersion":2,"progressDays":[],"dailyInsightClaims":[],"unlocked":[],
+          "tasks":[
+            {"id":300,"title":"Провітрити","type":"simple","repeat":"everyzone","zoneId":7,"done":false,"created":"2026-10-16T09:00:00.000Z"},
+            {"id":301,"title":"Підмести","type":"simple","repeat":"everyzone","zoneId":7,"done":false,"created":"2026-10-16T09:00:00.000Z"}],
+          "zones":[{"id":7,"slots":[{"s":"18:00","e":"20:00"}]},
+            {"id":8,"slots":[{"s":"20:00","e":"22:00"}]},
+            {"id":9,"prio":5,"slots":[{"s":"19:00","e":"19:30"}]}]
+        }""")
+        fun apply(command: FlowCommand, now: Long = command.activityAt) {
+            val result = engine.apply(state, command, zone, now)
+            check(result is FlowCommandResult.Applied) { "Native command rejected: $result" }
+            state = result.snapshot
+        }
+        val first = at("2026-10-16T18:05:00Z")
+        apply(FlowCommand.LifecycleTick("first", first))
+        apply(FlowCommand.SetTaskDone(300, true, first, "done", first))
+        val overlay = at("2026-10-16T19:05:00Z")
+        apply(FlowCommand.LifecycleTick("overlay", overlay))
+        assertEquals(9L, ZoneCalendar.currentZoneId(ZoneCalendar.timeline(state.data, overlay, zone, 1), overlay))
+        assertEquals(true, state.tasks.first { it.id == 300L }.done)
+        assertEquals("10", state.data["xpTotal"].toString())
+
+        val request = at("2026-10-16T19:45:00Z")
+        apply(FlowCommand.DeferTask(301, QuestDeferralKind.NEXT_ZONE, request, null, "defer", request))
+        fun available(now: Long): Boolean = QuestPolicy.availability(state.tasks.first { it.id == 301L }.raw,
+            QuestPolicy.Context(now = now, timeline = ZoneCalendar.timeline(state.data, now, zone, 2), zones = state.zones, zone = zone)).eligible
+        assertFalse(available(request))
+        assertEquals(true, available(at("2026-10-16T20:15:00Z")))
+        assertFalse(available(at("2026-10-16T22:15:00Z")))
+        val returned = at("2026-10-17T18:05:00Z")
+        apply(FlowCommand.LifecycleTick("returned", returned))
+        assertEquals(true, available(returned))
+        apply(FlowCommand.SetTaskDone(301, true, returned, "deferred-done", returned))
+        val task = state.tasks.first { it.id == 301L }.raw
+        assertEquals(true, task["completionDeferral"] is JsonObject)
+        assertFalse(task.containsKey("questDeferral"))
+        assertEquals(true, task["occurrenceId"].toString().contains("zone:2026-10-16:7:18:00"))
+        assertEquals("20", state.data["xpTotal"].toString())
+    }
+
     @Test fun plannerManualOverridesAndCivilDayCyclesRemainIndependentOfDst() {
         val state = Json.parseToJsonElement("""{
           "planDayZones":{"2026-10-25":[]},"planRestDays":{"2026-10-25":false},
