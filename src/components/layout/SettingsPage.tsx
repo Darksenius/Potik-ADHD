@@ -5,9 +5,12 @@ import ExportImportSection from '../notes/ExportImportSection';
 import NotificationDiagnostics from './NotificationDiagnostics';
 import AppUpdates from './AppUpdates';
 import { requestAndShowNotification } from '../../services/webNotifications';
-import { listRecoveryArchives, saveIsBlocked, showRecoveryBanner } from '../../services/persistence';
+import { getSaveErrorMessage, listRecoveryArchives, saveIsBlocked, showRecoveryBanner } from '../../services/persistence';
 import type { RecoveryArchive } from '../../services/persistence';
+import { flushAutosave } from '../../services/autosave';
 import { exportRecoveryFile } from '../../services/exportImport';
+import { applyDemoPreset } from '../../services/demoPreset';
+import { addDaysDs, fmtDate } from '../../utils/date';
 import { getNativeNotificationPermission, requestNativeNotificationPermission, openNativeNotificationSettings, updateForegroundService } from '../../bridge/nativeBridge';
 import '../../styles/compact-settings.css';
 import '../../styles/whats-new.css';
@@ -19,6 +22,42 @@ export default function SettingsPage() {
   const version = useAppVersion();
   const [permission, setPermission] = useState('unavailable');
   const [recoveryArchives, setRecoveryArchives] = useState<RecoveryArchive[]>([]);
+  const demoTaskCount = useStore(s => s.tasks.filter(task => task.dayPresetKey?.startsWith('potik-intro-v1:')).length);
+  const today = fmtDate(new Date());
+  const tomorrow = addDaysDs(today, 1);
+  const applyDemo = () => {
+    if (saveIsBlocked() || useStore.getState().backupBanner) {
+      showRecoveryBanner();
+      useStore.getState().showToast(getSaveErrorMessage());
+      return;
+    }
+    const state = useStore.getState();
+    const result = applyDemoPreset(state);
+    useStore.setState({ tasks: result.tasks, nid: result.nid, zones: result.zones, folders: result.folders, qnotes: result.qnotes, qnid: result.qnid, planDayZones: result.planDayZones });
+    if (!flushAutosave()) {
+      useStore.getState().showToast(getSaveErrorMessage());
+      return;
+    }
+    const added = result.tasks.length - state.tasks.length;
+    const labels = result.dates.map(date => new Date(`${date}T12:00:00`).toLocaleDateString('uk-UA'));
+    useStore.getState().showToast(added
+      ? `Демо-пресет: додано ${added} задач на ${labels[0]} і ${labels[1]}.`
+      : 'Демо-пресет уже додано на ці дати.');
+  };
+  const clearDemoTasks = () => {
+    if (saveIsBlocked() || useStore.getState().backupBanner) {
+      showRecoveryBanner();
+      useStore.getState().showToast(getSaveErrorMessage());
+      return;
+    }
+    const ids = useStore.getState().tasks.filter(task => task.dayPresetKey?.startsWith('potik-intro-v1:')).map(task => task.id);
+    ids.forEach(id => useStore.getState().hardDeleteTask(id));
+    if (!flushAutosave()) {
+      useStore.getState().showToast(getSaveErrorMessage());
+      return;
+    }
+    useStore.getState().showToast('Ознайомчі задачі прибрано.');
+  };
   useEffect(() => {
     const refresh = () => { void getNativeNotificationPermission().then(setPermission); };
     refresh(); window.addEventListener('focus', refresh);
@@ -38,6 +77,15 @@ export default function SettingsPage() {
     <button type="button" className="settings-whats-new" aria-label="Що нового" onClick={() => useStore.getState().showPage('whatsnew')}>
       <strong>Що нового</strong><small>{version} · Для тебе</small>
     </button>
+
+    <details className="settings-group settings-demo">
+      <summary><span><strong>Ознайомчий пресет завдань</strong><small>Приклади на сьогодні й завтра</small></span></summary>
+      <div className="settings-group-content">
+        <p>10 типів задач, 8 варіантів повторення, нотатки й дві зони на сьогодні ({new Date(`${today}T12:00:00`).toLocaleDateString('uk-UA')}) та завтра ({new Date(`${tomorrow}T12:00:00`).toLocaleDateString('uk-UA')}). Повторення тривають, доки задачі не прибрати; сигнали вимкнені.</p>
+        <button type="button" onClick={applyDemo}>Додати ознайомчі приклади</button>
+        {demoTaskCount > 0 && <button type="button" onClick={clearDemoTasks}>Прибрати ознайомчі задачі ({demoTaskCount})</button>}
+      </div>
+    </details>
 
     {saveIsBlocked() && <div className="settings-storage-alert" role="alert">
       <p>Не вдалося автоматично архівувати старі дані. Оригінали збережено; повтори архівацію або експортуй копію.</p>
