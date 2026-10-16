@@ -18,8 +18,13 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.CreateNoteFolder, is FlowCommand.DeleteNoteFolder -> NotesReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.ChangeCounter, is FlowCommand.SetChecklistItem, is FlowCommand.RecordNegative ->
             CounterReducer.reduce(snapshot, command, zone, now)
-        is FlowCommand.SetTaskDone -> TaskCompletionReducer.reduce(snapshot, command, zone, taskXp, now, zoneOccurrenceKey)
-        is FlowCommand.DeferTask -> TaskDeferralReducer.reduce(snapshot, command, zone, zoneOccurrenceKey)
+        is FlowCommand.SetTaskDone -> TaskCompletionReducer.reduce(snapshot, command, zone, taskXp, now, zoneOccurrenceKey).let { result ->
+            if (command.done && result is FlowCommandResult.Applied) TaskUndo.offer(snapshot, result, "done", command.taskId, command.completedAt ?: command.activityAt) else result
+        }
+        is FlowCommand.DeferTask -> TaskDeferralReducer.reduce(snapshot, command, zone, zoneOccurrenceKey).let { result ->
+            if (result is FlowCommandResult.Applied) TaskUndo.offer(snapshot, result, "defer", command.taskId, command.requestedAt) else result
+        }
+        is FlowCommand.UndoTask -> TaskUndo.reduce(snapshot, command, zone, now)
         is FlowCommand.MoveTaskToSomeday, is FlowCommand.RestoreTaskFromSomeday, is FlowCommand.TrashTask,
         is FlowCommand.RestoreTrashedTask, is FlowCommand.HardDeleteTask, is FlowCommand.SetPriority ->
             TaskManagementReducer.reduce(snapshot, command, zone, now)
@@ -27,6 +32,10 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
             ZoneReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.SetPlanDay, is FlowCommand.SetPlanRestDay, is FlowCommand.AddPlanItem,
         is FlowCommand.UpdatePlanItem, is FlowCommand.DeletePlanItem -> PlannerReducer.reduce(snapshot, command, zone, now)
+        is FlowCommand.CreateTemplate, is FlowCommand.UpdateTemplate, is FlowCommand.DeleteTemplate,
+        is FlowCommand.ApplyTemplate -> TemplateReducer.reduce(snapshot, command, zone, now, taskXp.keys)
+        is FlowCommand.CreateWeekTemplate, is FlowCommand.UpdateWeekTemplate, is FlowCommand.DeleteWeekTemplate,
+        is FlowCommand.ApplyWeekTemplate, is FlowCommand.DeletePlanRule -> WeekTemplateReducer.reduce(snapshot, command, zone, now, taskXp.keys)
         is FlowCommand.SetFocus, is FlowCommand.ClearFocus, is FlowCommand.AddFocusChip, is FlowCommand.RemoveFocusChip ->
             FocusReducer.reduce(snapshot, command, zone)
         is FlowCommand.SetEnergy -> Experience.setEnergy(snapshot.data, command.value, command.activityAt, zone, now)

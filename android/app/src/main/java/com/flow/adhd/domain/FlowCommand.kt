@@ -27,7 +27,10 @@ sealed class FlowCommand(
     data class CreateTask(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateTask(val taskId: Long, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetTaskDone(val taskId: Long, val done: Boolean, val completedAt: Long?, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
-    data class UndoTask(val taskId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class UndoTask(
+        val taskId: Long, override val commandId: String, override val activityAt: Long,
+        val receipt: JsonObject? = null, val nativePayload: JsonObject? = null,
+    ) : FlowCommand(commandId, activityAt)
     data class SetChecklistItem(val taskId: Long, val index: Int, val checked: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
         init { require(index >= 0) { "checklist index must be non-negative" } }
     }
@@ -72,6 +75,11 @@ sealed class FlowCommand(
     data class UpdateTemplate(val templateId: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteTemplate(val templateId: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class ApplyTemplate(val templateId: String, val startDate: String, val spanDays: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class CreateWeekTemplate(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class UpdateWeekTemplate(val templateId: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class DeleteWeekTemplate(val templateId: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class ApplyWeekTemplate(val templateId: String, val startDate: String, val spanDays: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class DeletePlanRule(val index: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
 
     data class SetFocus(val value: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class ClearFocus(override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
@@ -93,6 +101,7 @@ sealed interface FlowCommandResult {
     data class Applied(
         val snapshot: FlowSnapshot,
         val events: List<FlowEvent>,
+        val undoReceipt: JsonObject? = null,
     ) : FlowCommandResult
 
     data class Rejected(val code: String, val message: String) : FlowCommandResult

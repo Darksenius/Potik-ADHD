@@ -14390,5 +14390,1422 @@
         "notepadFolder": "thought"
       }
     }
+  ],
+  "presetCases": [
+    {
+      "name": "catalog-simple",
+      "entry": {
+        "id": "preset-simple-0",
+        "task": {
+          "title": "План simple",
+          "type": "simple",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "counterEnabled": true,
+          "counterTarget": 4,
+          "counterStep": 2,
+          "counterUnit": "pages"
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1300,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-simple-0",
+        "task": {
+          "title": "План simple",
+          "type": "simple",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "counterTarget": 4,
+          "counterEnabled": true,
+          "counterStep": 2,
+          "counterUnit": "pages"
+        }
+      },
+      "expectedTask": {
+        "id": 1300,
+        "title": "План simple",
+        "type": "simple",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterTarget": 4,
+        "counterEnabled": true,
+        "counterStep": 2,
+        "counterUnit": "pages",
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-simple-0:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-sched",
+      "entry": {
+        "id": "preset-sched-1",
+        "task": {
+          "title": "План sched",
+          "type": "sched",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "schedDate": "2020-01-02",
+          "schedTime": "10:30",
+          "reminderEnabled": true,
+          "remindBeforeMinutes": 10
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1301,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-sched-1",
+        "task": {
+          "title": "План sched",
+          "type": "sched",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "schedTime": "10:30",
+          "reminderEnabled": true,
+          "remindBeforeMinutes": 10
+        }
+      },
+      "expectedTask": {
+        "id": 1301,
+        "title": "План sched",
+        "type": "sched",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "schedDate": "2026-10-16",
+        "schedTime": "10:30",
+        "firedSched": false,
+        "firedPre": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-sched-1:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0,
+        "reminderEnabled": true,
+        "remindBeforeMinutes": 10
+      }
+    },
+    {
+      "name": "catalog-check",
+      "entry": {
+        "id": "preset-check-2",
+        "task": {
+          "title": "План check",
+          "type": "check",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "items": [
+            {
+              "text": "  Ключі  ",
+              "done": true,
+              "id": "old"
+            },
+            {
+              "text": " ",
+              "done": true
+            }
+          ]
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1302,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-check-2",
+        "task": {
+          "title": "План check",
+          "type": "check",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "items": [
+            {
+              "text": "Ключі",
+              "done": false
+            }
+          ]
+        }
+      },
+      "expectedTask": {
+        "id": 1302,
+        "title": "План check",
+        "type": "check",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "items": [
+          {
+            "text": "Ключі",
+            "done": false
+          }
+        ],
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-check-2:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-counter",
+      "entry": {
+        "id": "preset-counter-3",
+        "task": {
+          "title": "План counter",
+          "type": "counter",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "counterEnabled": true,
+          "counterTarget": 12,
+          "counterStep": 3,
+          "counterUnit": "pages"
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1303,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-counter-3",
+        "task": {
+          "title": "План counter",
+          "type": "counter",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "counterTarget": 12,
+          "counterEnabled": true,
+          "counterStep": 3,
+          "counterUnit": "pages"
+        }
+      },
+      "expectedTask": {
+        "id": 1303,
+        "title": "План counter",
+        "type": "counter",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counter": 0,
+        "counterTarget": 12,
+        "counterEnabled": true,
+        "counterStep": 3,
+        "counterUnit": "pages",
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-counter-3:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "counterDay": "2026-10-16",
+        "counterCreditedProgress": 0,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-note",
+      "entry": {
+        "id": "preset-note-4",
+        "task": {
+          "title": "План note",
+          "type": "note",
+          "zoneId": 7,
+          "note": "Нотатка для задачі",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1304,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-note-4",
+        "task": {
+          "title": "План note",
+          "type": "note",
+          "zoneId": 7,
+          "note": "Нотатка для задачі",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ]
+        }
+      },
+      "expectedTask": {
+        "id": 1304,
+        "title": "План note",
+        "type": "note",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "note": "Нотатка для задачі",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-note-4:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-alarm",
+      "entry": {
+        "id": "preset-alarm-5",
+        "task": {
+          "title": "План alarm",
+          "type": "alarm",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "alarmTime": "9:00",
+          "reminderEnabled": true
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1305,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-alarm-5",
+        "task": {
+          "title": "План alarm",
+          "type": "alarm",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "alarmTime": "09:00"
+        }
+      },
+      "expectedTask": {
+        "id": 1305,
+        "title": "План alarm",
+        "type": "alarm",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "note": "  Деталі  ",
+        "alarmTime": "09:00",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-alarm-5:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-timewin",
+      "entry": {
+        "id": "preset-timewin-6",
+        "task": {
+          "title": "План timewin",
+          "type": "timewin",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "windowStart": "22:00",
+          "windowEnd": "02:00"
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1306,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-timewin-6",
+        "task": {
+          "title": "План timewin",
+          "type": "timewin",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "windowStart": "22:00",
+          "windowEnd": "02:00"
+        }
+      },
+      "expectedTask": {
+        "id": 1306,
+        "title": "План timewin",
+        "type": "timewin",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "windowStart": "22:00",
+        "windowEnd": "02:00",
+        "completedToday": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-timewin-6:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-ctx",
+      "entry": {
+        "id": "preset-ctx-7",
+        "task": {
+          "title": "План ctx",
+          "type": "ctx",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "ctxTags": [
+            "  вдома ",
+            "",
+            "тихо"
+          ]
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1307,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-ctx-7",
+        "task": {
+          "title": "План ctx",
+          "type": "ctx",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "ctxTags": [
+            "вдома",
+            "тихо"
+          ]
+        }
+      },
+      "expectedTask": {
+        "id": 1307,
+        "title": "План ctx",
+        "type": "ctx",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "ctxTags": [
+          "вдома",
+          "тихо"
+        ],
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-ctx-7:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-negative",
+      "entry": {
+        "id": "preset-negative-8",
+        "task": {
+          "title": "План negative",
+          "type": "negative",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "daily",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "negXp": 3,
+          "counterEnabled": false,
+          "counterStep": 1,
+          "counterUnit": "count"
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1308,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-negative-8",
+        "task": {
+          "title": "План negative",
+          "type": "negative",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ],
+          "counterEnabled": false,
+          "counterStep": 1,
+          "counterUnit": "count",
+          "negXp": 3
+        }
+      },
+      "expectedTask": {
+        "id": 1308,
+        "title": "План negative",
+        "type": "negative",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counter": 0,
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "negXp": 3,
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-negative-8:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "counterDay": "2026-10-16",
+        "counterCreditedProgress": 0,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "catalog-zonelinked",
+      "entry": {
+        "id": "preset-zonelinked-9",
+        "task": {
+          "title": "План zonelinked",
+          "type": "zonelinked",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "  важливо ",
+            "",
+            "дорога"
+          ],
+          "created": "2020-01-01T00:00:00.000Z",
+          "done": true,
+          "doneDate": "2020-01-02",
+          "completionCredited": true,
+          "completionCreditDate": "2020-01-02",
+          "occurrenceId": "old-occurrence",
+          "repeat": "everyzone",
+          "repeatDays": [
+            true,
+            true
+          ],
+          "snoozeUntil": 123,
+          "trashed": true,
+          "expanded": true,
+          "counter": 99,
+          "counterDay": "2020-01-02",
+          "counterCreditedProgress": 9,
+          "cntHit": true,
+          "alarmFired": true,
+          "firedSched": true,
+          "firedPre": true,
+          "questDeferral": {
+            "kind": "not-today"
+          },
+          "completionDeferral": {
+            "kind": "not-today"
+          },
+          "zoneOccurrenceKey": "old-zone-slot",
+          "nextRepeatAt": 456,
+          "zoneDoneToday": true
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1309,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-zonelinked-9",
+        "task": {
+          "title": "План zonelinked",
+          "type": "zonelinked",
+          "zoneId": 7,
+          "note": "  Деталі  ",
+          "folderId": "work",
+          "tags": [
+            "важливо",
+            "дорога"
+          ]
+        }
+      },
+      "expectedTask": {
+        "id": 1309,
+        "title": "План zonelinked",
+        "type": "zonelinked",
+        "done": false,
+        "someday": false,
+        "zoneId": 7,
+        "zoneColor": "#7ed321",
+        "zoneName": "Робота",
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "note": "  Деталі  ",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "zoneDoneToday": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [
+          "важливо",
+          "дорога"
+        ],
+        "dayPresetKey": "native-parity-preset:preset-zonelinked-9:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": "work",
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "empty-time-window-uses-defaults",
+      "entry": {
+        "id": "preset-empty-timewin",
+        "task": {
+          "title": "Порожнє вікно",
+          "type": "timewin",
+          "windowStart": "",
+          "windowEnd": ""
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1310,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": {
+        "id": "preset-empty-timewin",
+        "task": {
+          "title": "Порожнє вікно",
+          "type": "timewin",
+          "windowStart": "07:00",
+          "windowEnd": "09:00"
+        }
+      },
+      "expectedTask": {
+        "id": 1310,
+        "title": "Порожнє вікно",
+        "type": "timewin",
+        "done": false,
+        "someday": false,
+        "zoneId": null,
+        "zoneColor": null,
+        "zoneName": null,
+        "expanded": false,
+        "created": "2026-10-16T09:00:00.000Z",
+        "counterEnabled": false,
+        "counterStep": 1,
+        "counterUnit": "count",
+        "alarmFired": false,
+        "firedSched": false,
+        "firedPre": false,
+        "windowStart": "07:00",
+        "windowEnd": "09:00",
+        "completedToday": false,
+        "repeat": "none",
+        "repeatDays": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "tags": [],
+        "dayPresetKey": "native-parity-preset:preset-empty-timewin:2026-10-16",
+        "planDate": "2026-10-16",
+        "folderId": null,
+        "trashed": false,
+        "snoozeUntil": 0,
+        "completionCredited": false,
+        "cntHit": false,
+        "nextRepeatAt": 0
+      }
+    },
+    {
+      "name": "whitespace-alarm-is-rejected",
+      "entry": {
+        "id": "preset-invalid-alarm",
+        "task": {
+          "title": "Некоректний сигнал",
+          "type": "alarm",
+          "alarmTime": "   "
+        }
+      },
+      "templateId": "native-parity-preset",
+      "date": "2026-10-16",
+      "id": 1311,
+      "zones": [
+        {
+          "id": 7,
+          "nm": "Робота",
+          "color": "#7ed321",
+          "desc": "",
+          "prio": 1,
+          "slots": [
+            {
+              "s": "08:00",
+              "e": "18:00"
+            }
+          ]
+        }
+      ],
+      "at": 1792141200000,
+      "expectedSanitized": null,
+      "expectedTask": null
+    }
   ]
 }

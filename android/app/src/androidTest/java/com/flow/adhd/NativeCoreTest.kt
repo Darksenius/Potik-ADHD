@@ -29,6 +29,44 @@ import org.junit.runner.RunWith
 /** Runs only the pure native engine: no Activity, WebView, Room writes, or network. */
 @RunWith(AndroidJUnit4::class)
 class NativeCoreTest {
+    @Test fun presetsCreateIndependentDaysAndUndoOnlyTheUnchangedCompletion() {
+        val zone = ZoneId.of("UTC")
+        val at = Instant.parse("2026-10-16T18:30:00Z").toEpochMilli()
+        val engine = FlowEngine(mapOf("simple" to 10.0, "counter" to 2.0))
+        var state = FlowSnapshot.parse("""{"formatVersion":2,"tasks":[],"zones":[],"nid":300,
+          "priorities":[null,null,null],"xp":0,"xpTotal":0,"level":1,"done":0,
+          "progressionVersion":2,"progressDays":[],"dailyInsightClaims":[],"unlocked":[]}""")
+        fun apply(command: FlowCommand): FlowCommandResult.Applied {
+            val result = engine.apply(state, command, zone, command.activityAt)
+            check(result is FlowCommandResult.Applied) { "Native command rejected: $result" }
+            state = result.snapshot
+            return result
+        }
+        val preset = Json.parseToJsonElement("""{"id":"home","name":"Дім","blocks":[],"tasks":[
+          {"id":"sweep","task":{"title":"Підмести","type":"simple"}},
+          {"id":"stretch","task":{"title":"Розминка","type":"counter","counterTarget":3}}]}""") as JsonObject
+        apply(FlowCommand.CreateTemplate(preset, "create", at))
+        apply(FlowCommand.ApplyTemplate("home", "2026-10-16", 2, "apply", at))
+        assertEquals(4, state.tasks.size)
+        val today = state.tasks.first { it.type == "simple" && it.raw["planDate"].toString() == "\"2026-10-16\"" }
+        val done = apply(FlowCommand.SetTaskDone(today.id, true, at, "done", at))
+        check(done.undoReceipt != null)
+        assertEquals("10", state.data["xpTotal"].toString())
+        apply(FlowCommand.UndoTask(today.id, "undo", at + 1000, receipt = done.undoReceipt))
+        assertEquals(false, state.tasks.first { it.id == today.id }.done)
+        assertEquals("0", state.data["xpTotal"].toString())
+        assertEquals("[\"2026-10-16\"]", state.data["progressDays"].toString())
+        apply(FlowCommand.SetTaskDone(today.id, true, at + 2000, "redo", at + 2000))
+        val tasks = state.tasks.map { it.raw }
+        val xp = state.data["xpTotal"]
+        apply(FlowCommand.ApplyTemplate("home", "2026-10-16", 2, "reapply", at + 3000))
+        assertEquals(tasks, state.tasks.map { it.raw })
+        assertEquals(xp, state.data["xpTotal"])
+        assertEquals(false, state.tasks.first { it.type == "simple" && it.raw["planDate"].toString() == "\"2026-10-17\"" }.done)
+        val stale = engine.apply(state, FlowCommand.UndoTask(today.id, "old-undo", at + 4000, receipt = done.undoReceipt), zone, at + 4000)
+        assertEquals(true, stale is FlowCommandResult.Rejected)
+    }
+
     @Test fun taskAndDayManagementPreserveCompletionCreditAndDeletedZoneReferences() {
         val zone = ZoneId.of("UTC")
         val at = Instant.parse("2026-10-16T19:00:00Z").toEpochMilli()

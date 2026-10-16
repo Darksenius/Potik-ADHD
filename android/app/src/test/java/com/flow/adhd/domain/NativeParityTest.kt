@@ -46,6 +46,12 @@ class NativeParityTest(private val name: String, private val group: String, priv
             )
             check(result is FlowCommandResult.Applied) { "$name rejected: $result" }
             assertEquals(name, fixture["expectedState"], result.snapshot.data)
+        } else if (group == "preset") {
+            val helper = DayPresetTasks(taskXp.keys)
+            val entry = fixture["entry"] as JsonObject
+            assertEquals(name, fixture["expectedSanitized"], helper.sanitize(entry) ?: JsonNull)
+            assertEquals(name, fixture["expectedTask"], helper.materialize(entry, fixture.text("templateId")!!,
+                fixture.text("date")!!, fixture.number("id"), (fixture["zones"] as JsonArray).map { it as JsonObject }, fixture.number("at")) ?: JsonNull)
         } else if (group == "zone") {
             val state = fixture["state"] as JsonObject
             val day = fixture.text("day")!!
@@ -190,7 +196,7 @@ class NativeParityTest(private val name: String, private val group: String, priv
                     val item = entry as JsonObject
                     add(arrayOf("notes-$index-${item.text("scenario")}", "notes", item))
                 }
-                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion", "editorCases" to "editor", "lifecycleCases" to "lifecycle", "scheduleCases" to "schedule", "captureCases" to "capture", "plannerCases" to "planner", "zoneCases" to "zone", "questCases" to "quest", "deferCommandCases" to "defer")) {
+                for ((key, group) in listOf("xpCases" to "xp", "energyCases" to "energy", "completionCases" to "completion", "editorCases" to "editor", "lifecycleCases" to "lifecycle", "scheduleCases" to "schedule", "captureCases" to "capture", "plannerCases" to "planner", "zoneCases" to "zone", "questCases" to "quest", "deferCommandCases" to "defer", "presetCases" to "preset")) {
                     (root[key] as JsonArray).forEachIndexed { index, entry ->
                         val item = entry as JsonObject
                         add(arrayOf("$group-$index-${item.text("name") ?: item.text("scenario")}", group, item))

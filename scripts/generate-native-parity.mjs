@@ -24,9 +24,10 @@ const entry = `
   import { fmtDate } from './src/utils/date.ts';
   import { dayBlocksFor, dayIsRestFor } from './src/state/slices/plannerHelpers.ts';
   import { buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks } from './src/utils/questPolicy.ts';
+  import { materializeDayPresetTask, sanitizeDayPresetTask } from './src/utils/dayPresetTasks.ts';
   import { isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt } from './src/utils/taskSchedule.ts';
   import taskTypes from './src/content/task-types.json' with { type: 'json' };
-  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes };
+  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks, materializeDayPresetTask, sanitizeDayPresetTask, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes };
 `;
 const bundled = await build({
   stdin: { contents: entry, resolveDir: root, sourcefile: 'native-parity-entry.ts' },
@@ -47,7 +48,7 @@ const bundled = await build({
   }],
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`;
-const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes } = await import(moduleUrl);
+const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, buildQuestTimeline, createQuestDeferral, getAssignedZoneOccurrences, getQuestDayRanges, getQuestTaskAvailability, selectQuestTasks, materializeDayPresetTask, sanitizeDayPresetTask, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes } = await import(moduleUrl);
 
 const transientFields = new Set(['qnid', 'dailyInsightNotice', 'selectedInsightDay', 'xpPopup', 'levelUpFlash', 'alarmTaskIds']);
 const fixedZone = 'Europe/Kyiv';
@@ -249,6 +250,50 @@ const taskFactoryCases = Object.keys(taskTypes).map((type, index) => {
   return { type, input, expectedTask: JSON.parse(JSON.stringify(createTaskRecord(
     input.id, input.title, input.type, input.zoneId, input.zone, input.alarmTime, input.created,
   ))) };
+});
+
+const presetTemplateId = 'native-parity-preset';
+const presetDate = '2026-10-16';
+const presetZone = { id: 7, nm: 'Робота', color: '#7ed321', desc: '', prio: 1, slots: [{ s: '08:00', e: '18:00' }] };
+function presetEntry(type, index) {
+  const source = {
+    title: `План ${type}`, type, zoneId: 7, note: '  Деталі  ', folderId: 'work', tags: ['  важливо ', '', 'дорога'],
+    created: '2020-01-01T00:00:00.000Z', done: true, doneDate: '2020-01-02', completionCredited: true,
+    completionCreditDate: '2020-01-02', occurrenceId: 'old-occurrence', repeat: 'daily', repeatDays: [true, true],
+    snoozeUntil: 123, trashed: true, expanded: true, counter: 99, counterDay: '2020-01-02', counterCreditedProgress: 9,
+    cntHit: true, alarmFired: true, firedSched: true, firedPre: true, questDeferral: { kind: 'not-today' },
+    completionDeferral: { kind: 'not-today' }, zoneOccurrenceKey: 'old-zone-slot', nextRepeatAt: 456,
+  };
+  switch (type) {
+    case 'simple': Object.assign(source, { counterEnabled: true, counterTarget: 4, counterStep: 2, counterUnit: 'pages' }); break;
+    case 'sched': Object.assign(source, { schedDate: '2020-01-02', schedTime: '10:30', reminderEnabled: true, remindBeforeMinutes: 10 }); break;
+    case 'check': source.items = [{ text: '  Ключі  ', done: true, id: 'old' }, { text: ' ', done: true }]; break;
+    case 'counter': Object.assign(source, { counterEnabled: true, counterTarget: 12, counterStep: 3, counterUnit: 'pages' }); break;
+    case 'note': source.note = 'Нотатка для задачі'; break;
+    case 'alarm': Object.assign(source, { alarmTime: '9:00', reminderEnabled: true }); break;
+    case 'timewin': Object.assign(source, { windowStart: '22:00', windowEnd: '02:00' }); break;
+    case 'ctx': source.ctxTags = ['  вдома ', '', 'тихо']; break;
+    case 'negative': Object.assign(source, { negXp: 3, counterEnabled: false, counterStep: 1, counterUnit: 'count' }); break;
+    case 'zonelinked': Object.assign(source, { repeat: 'everyzone', zoneDoneToday: true }); break;
+    default: break;
+  }
+  return { id: `preset-${type}-${index}`, task: source };
+}
+
+const presetInputs = Object.keys(taskTypes).map((type, index) => ({ name: `catalog-${type}`, entry: presetEntry(type, index) }));
+presetInputs.push(
+  { name: 'empty-time-window-uses-defaults', entry: { id: 'preset-empty-timewin', task: { title: 'Порожнє вікно', type: 'timewin', windowStart: '', windowEnd: '' } } },
+  { name: 'whitespace-alarm-is-rejected', entry: { id: 'preset-invalid-alarm', task: { title: 'Некоректний сигнал', type: 'alarm', alarmTime: '   ' } } },
+);
+const presetCases = presetInputs.map(({ name, entry }) => {
+  const expectedSanitized = sanitizeDayPresetTask(entry);
+  return {
+    name, entry, templateId: presetTemplateId, date: presetDate, id: 1300 + presetInputs.findIndex((item) => item.name === name),
+    zones: [presetZone], at: fixedNow, expectedSanitized,
+    expectedTask: expectedSanitized
+      ? materializeDayPresetTask(entry, presetTemplateId, presetDate, 1300 + presetInputs.findIndex((item) => item.name === name), [presetZone])
+      : null,
+  };
 });
 
 const initial = (overrides = {}) => ({
@@ -752,8 +797,9 @@ const fixture = {
   zoneCases,
   questCases,
   deferCommandCases,
+  presetCases,
 };
 
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(fixture, null, 2)}\n`, 'utf8');
-console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${plannerCases.length} planner cases, ${captureCases.length} capture cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, ${completionCases.length} completion fixtures, ${zoneCases.length} zone cases, ${questCases.length} quest cases, and ${deferCommandCases.length} defer-command cases to ${path.relative(root, outputPath)}`);
+console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${plannerCases.length} planner cases, ${captureCases.length} capture cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, ${completionCases.length} completion fixtures, ${zoneCases.length} zone cases, ${questCases.length} quest cases, ${deferCommandCases.length} defer-command cases, and ${presetCases.length} preset cases to ${path.relative(root, outputPath)}`);
