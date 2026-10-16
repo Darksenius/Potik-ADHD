@@ -16,15 +16,23 @@ test('an undated simple task is a normal task in Now and All Tasks, with its ear
   await page.getByRole('button', { name: 'Усі задачі', exact: true }).click();
   const allTasksCard = page.locator('#tasks-list .tc').filter({ hasText: 'Не забути зарядку' });
   const checkbox = allTasksCard.getByRole('button', { name: 'Виконати: Не забути зарядку', exact: true });
-  const tap = await checkbox.boundingBox();
-  expect(tap).not.toBeNull();
+  await checkbox.evaluate(element => {
+    element.addEventListener('click', event => {
+      (window as Window & { __checkboxTap?: { x: number; y: number } }).__checkboxTap = {
+        x: event.clientX,
+        y: event.clientY,
+      };
+    }, { once: true, capture: true });
+  });
   await checkbox.click({ position: { x: 24, y: 24 } });
+  const tap = await page.evaluate(() => (window as Window & { __checkboxTap?: { x: number; y: number } }).__checkboxTap);
+  expect(tap).toBeDefined();
 
   const reward = page.locator('.task-reward');
   await expect(reward).toHaveText('+10⚡');
   const origin = await reward.evaluate(element => ({ left: parseFloat((element as HTMLElement).style.left), top: parseFloat((element as HTMLElement).style.top) }));
-  expect(Math.abs(origin.left - (tap!.x + 24))).toBeLessThan(3);
-  expect(Math.abs(origin.top - (tap!.y + 24))).toBeLessThan(3);
+  expect(Math.abs(origin.left - tap!.x)).toBeLessThan(3);
+  expect(Math.abs(origin.top - tap!.y)).toBeLessThan(3);
   await expect(reward).toBeHidden({ timeout: 2500 });
 
   await expect(allTasksCard).toHaveClass(/done-t/);
