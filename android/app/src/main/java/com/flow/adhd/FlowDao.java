@@ -16,6 +16,11 @@ public interface FlowDao {
     @Query("SELECT notif_json FROM app_state WHERE id = 1")
     String getNotifJson();
 
+    /** Reserved row 2 is a native command receipt journal, not an application snapshot.
+     * Uses the existing schema; legacy readers and writers address only row 1. */
+    @Query("SELECT json FROM app_state WHERE id = 2")
+    String getCommandJournalJson();
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void saveState(AppState state);
 
