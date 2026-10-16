@@ -52,7 +52,7 @@ export interface NotesSlice {
   /**
    * delFolder(id) — рядки 2364–2375, без confirm() (питає компонент).
    * Видаляє папку, але НЕ задачі/нотатки — лише прибирає прив'язку
-   * (nотатки → 'general', задачі → null).
+   * (нотатки → наявна папка або без папки, задачі → null).
    */
   deleteFolder: (id: string) => void;
 }

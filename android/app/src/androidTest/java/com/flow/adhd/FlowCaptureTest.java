@@ -32,6 +32,74 @@ import org.junit.runner.RunWith;
 public class FlowCaptureTest {
     private static final long TIMEOUT_MS = 30000;
 
+    @Test public void capturedNoteAndEmptyFolderDestinationSurviveDeletingBuiltInsAndRecreation() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        FlowBridge bridge = new FlowBridge(context);
+        String previousState = bridge.load();
+        String previousNotif = bridge.getNotifJson();
+        String suffix = UUID.randomUUID().toString();
+        String capturedText = "Folder fallback capture " + suffix;
+        String filedText = "Unfiled destination " + suffix;
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        FlowNotifService.stop(context);
+        manager.cancel(FlowNotifService.NOTIF_ID);
+        try {
+            String onlyThought = new JSONObject().put("tasks", new JSONArray()).put("qnotes", new JSONArray())
+                .put("qnid", 900).put("folders", new JSONArray().put(new JSONObject()
+                    .put("id", "thought").put("nm", "Думка").put("ico", "💭")))
+                .put("notepad", "").put("notepadFolder", "thought").toString();
+            bridge.save(onlyThought); // Real Room-backed app state with seeded general/impulse folders removed.
+            long now = System.currentTimeMillis();
+            long until = now + 35L * 24L * 60L * 60L * 1000L;
+            JSONArray timeline = new JSONArray().put(new JSONObject().put("zoneId", 0)
+                .put("startAt", now - 60_000L).put("endAt", until));
+            bridge.saveNotif(new JSONObject().put("questTasks", new JSONArray()).put("questTimeline", timeline)
+                .put("questTimelineUntil", until).toString());
+            FlowNotifService.start(context);
+            Notification notification = awaitNotification(context);
+            Notification.Action noteAction = findAction(notification, "+ Нотатка", FlowNotifService.KEY_NOTE);
+            sendCapture(context, noteAction, FlowNotifService.KEY_NOTE, capturedText);
+            awaitReceipt(context, "Нотатку збережено");
+
+            try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+                awaitWeb(scenario, "document.querySelector('#add-fab') !== null", "Packaged app starts with real Room bridge");
+                awaitWeb(scenario, "(function(){var s=JSON.parse(window.FlowBridge.load()||'{}');var n=(s.qnotes||[]).filter(function(x){return x.txt==="
+                    + JSONObject.quote(capturedText) + ";});return n.length===1 && n[0].folder==='thought';})()",
+                    "Native capture_note falls back from removed general/impulse folders to the remaining real folder");
+                JSONObject stored = new JSONObject(bridge.load());
+                assertEquals("thought", findBy(stored.getJSONArray("qnotes"), "txt", capturedText).getString("folder"));
+
+                evaluate(scenario, "document.querySelector('#tabs button:nth-child(4)').click();return true;");
+                evaluate(scenario, "var b=document.querySelector('button[aria-label=\"Папки нотаток\"]');if(!b)throw new Error('Folders section missing');b.click();return true;");
+                awaitWeb(scenario, "document.querySelector('#note-folders-title') !== null", "Folder manager opens");
+                evaluate(scenario, "window.confirm=function(){return true};var b=document.querySelector('button[aria-label=\"Видалити папку Думка\"]');if(!b)throw new Error('Remaining folder missing');b.click();return true;");
+                awaitWeb(scenario, "JSON.parse(window.FlowBridge.load()||'{}').folders.length===0 && JSON.parse(window.FlowBridge.load()||'{}').qnotes.some(function(n){return n.txt==="
+                    + JSONObject.quote(capturedText) + " && n.folder==='';})", "Removing the final folder retains the capture as unfiled");
+
+                evaluate(scenario, "document.querySelector('#tabs button:nth-child(3)').click();return true;");
+                awaitWeb(scenario, "document.querySelector('#note-draft-folder') !== null && document.querySelector('#note-draft-folder').options.length===1 && document.querySelector('#note-draft-folder').options[0].text==='Без папки'",
+                    "Notes composer offers the unfiled destination when no folders remain");
+                evaluate(scenario, "var s=document.querySelector('#note-draft-folder');if(!s)throw new Error('Destination selector missing');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));var t=document.querySelector('#notepad');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t," + JSONObject.quote(filedText) + ");t.dispatchEvent(new Event('input',{bubbles:true}));return true;");
+                awaitWeb(scenario, "document.querySelector('.note-file-button') && !document.querySelector('.note-file-button').disabled && JSON.parse(window.FlowBridge.load()||'{}').notepad==="
+                    + JSONObject.quote(filedText), "Unfiled note text is saved and ready to file");
+                evaluate(scenario, "document.querySelector('.note-file-button').click();return true;");
+                awaitWeb(scenario, "(function(){var s=JSON.parse(window.FlowBridge.load()||'{}');return (s.qnotes||[]).some(function(n){return n.txt==="
+                    + JSONObject.quote(filedText) + " && n.folder==='';});})()", "A note can be filed to the unfiled destination");
+                scenario.recreate();
+                awaitWeb(scenario, "document.querySelector('#add-fab') !== null", "App returns after activity recreation");
+                evaluate(scenario, "document.querySelector('#tabs button:nth-child(3)').click();return true;");
+                awaitWeb(scenario, "document.querySelector('#note-draft-folder') !== null", "Notes composer reopens after activity recreation");
+                awaitWeb(scenario, "(function(){var s=JSON.parse(window.FlowBridge.load()||'{}');return s.folders.length===0 && (s.qnotes||[]).some(function(n){return n.txt==="
+                    + JSONObject.quote(capturedText) + " && n.folder==='';}) && (s.qnotes||[]).some(function(n){return n.txt==="
+                    + JSONObject.quote(filedText) + " && n.folder==='';}) && document.querySelector('#note-draft-folder').options[0].text==='Без папки';})()",
+                    "Unfiled capture and selected destination remain durable after activity recreation");
+            }
+        } finally {
+            FlowNotifService.stop(context);
+            bridge.save(previousState);
+            if (previousNotif != null) bridge.saveNotif(previousNotif);
+        }
+    }
     @Test public void collidingTaskIdHashesKeepCardAndActionPendingIntentsDistinct() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         String firstId = "84300921";
