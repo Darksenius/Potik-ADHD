@@ -31,7 +31,8 @@ object NotesReducer {
         if (command !is FlowCommand.AddQuickNote && command !is FlowCommand.UpdateQuickNote &&
             command !is FlowCommand.DeleteQuickNote && command !is FlowCommand.SetNotepad &&
             command !is FlowCommand.SetNotepadFolder && command !is FlowCommand.SaveNotepadAsNote &&
-            command !is FlowCommand.CreateNoteFolder && command !is FlowCommand.DeleteNoteFolder
+            command !is FlowCommand.CreateNoteFolder && command !is FlowCommand.UpdateNoteFolder &&
+            command !is FlowCommand.DeleteNoteFolder
         ) return rejected("unsupported-command", "NotesReducer does not handle this command")
 
         return try {
@@ -118,6 +119,30 @@ object NotesReducer {
                     val folder = folder(folderId, name, icon)
                     state["folders"] = JsonArray(folders.map { it } + folder)
                     committed(snapshotWith(state))
+                }
+                is FlowCommand.UpdateNoteFolder -> {
+                    if (command.folderId.isBlank()) return rejected("invalid-folder", "Folder ID must not be blank")
+                    val index = folders.indexOfFirst { it.text("id") == command.folderId }
+                    if (index < 0) return rejected("folder-not-found", "Note folder does not exist")
+                    val name = command.payload.text("nm")?.trim()
+                        ?: return rejected("invalid-folder", "Folder name is required")
+                    if (name.isBlank()) return rejected("invalid-folder", "Folder name must not be blank")
+                    val iconValue = command.payload["ico"]
+                    if (iconValue != null && (iconValue !is JsonPrimitive || !iconValue.isString)) {
+                        return rejected("invalid-folder", "Folder icon must be text")
+                    }
+                    val prior = folders[index]
+                    val icon = (iconValue as? JsonPrimitive)?.content?.trim()?.ifEmpty { "📁" }
+                        ?: prior.text("ico") ?: "📁"
+                    val updated = JsonObject(prior.toMutableMap().apply {
+                        this["nm"] = JsonPrimitive(name)
+                        this["ico"] = JsonPrimitive(icon)
+                    })
+                    if (updated == prior) committed(snapshot)
+                    else {
+                        state["folders"] = JsonArray(folders.mapIndexed { i, folder -> if (i == index) updated else folder })
+                        committed(snapshotWith(state))
+                    }
                 }
                 is FlowCommand.DeleteNoteFolder -> {
                     if (command.folderId.isBlank()) return rejected("invalid-folder", "Folder ID must not be blank")

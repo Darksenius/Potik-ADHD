@@ -71,6 +71,35 @@ class NotesReducerTest {
     }
 
     @Test
+    fun updatingFolderChangesNameAndIconWithoutChangingIdOrLinkedRecords() {
+        val input = FlowSnapshot.parse("""{"tasks":[{"id":1,"title":"Task","folderId":"work"}],"folders":[{"id":"work","nm":"Old","ico":"💼","custom":true}],"qnotes":[{"id":100,"txt":"note","folder":"work"}],"extra":9}""")
+        val result = NotesReducer.reduce(
+            input,
+            FlowCommand.UpdateNoteFolder("work", JsonObject(mapOf("nm" to j("  New name  "), "ico" to j(" 🗂 "))), "update-folder", at),
+            zone,
+        ) as FlowCommandResult.Applied
+
+        val folder = result.snapshot.data["folders"]!!.jsonArray.single().jsonObject
+        assertEquals("work", folder["id"]?.jsonPrimitive?.content)
+        assertEquals("New name", folder["nm"]?.jsonPrimitive?.content)
+        assertEquals("🗂", folder["ico"]?.jsonPrimitive?.content)
+        assertEquals("true", folder["custom"]?.jsonPrimitive?.content)
+        assertEquals(input.qnotes, result.snapshot.qnotes)
+        assertEquals(input.data["tasks"], result.snapshot.data["tasks"])
+        assertEquals("9", result.snapshot.data["extra"]?.jsonPrimitive?.content)
+        assertTrue(result.events.isEmpty())
+    }
+
+    @Test
+    fun updatingFolderRejectsMissingFolderOrBlankName() {
+        val input = FlowSnapshot.parse("""{"tasks":[],"folders":[{"id":"work","nm":"Work","ico":"💼"}]}""")
+        val missing = NotesReducer.reduce(input, FlowCommand.UpdateNoteFolder("gone", JsonObject(mapOf("nm" to j("Name"))), "missing", at), zone)
+        assertTrue(missing is FlowCommandResult.Rejected)
+        val blank = NotesReducer.reduce(input, FlowCommand.UpdateNoteFolder("work", JsonObject(mapOf("nm" to j("  "))), "blank", at), zone)
+        assertTrue(blank is FlowCommandResult.Rejected)
+    }
+
+    @Test
     fun sameDayNoteActivitiesClaimAtMostOneInsight() {
         val start = FlowSnapshot.parse("""{"tasks":[],"folders":[{"id":"impulse","nm":"Impulse","ico":"⚡"}],"progressionVersion":2,"progressDays":[]}""")
         val first = NotesReducer.reduce(

@@ -15,7 +15,7 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
     ): FlowCommandResult = when (command) {
         is FlowCommand.AddQuickNote, is FlowCommand.UpdateQuickNote, is FlowCommand.DeleteQuickNote,
         is FlowCommand.SetNotepad, is FlowCommand.SetNotepadFolder, is FlowCommand.SaveNotepadAsNote,
-        is FlowCommand.CreateNoteFolder, is FlowCommand.DeleteNoteFolder -> NotesReducer.reduce(snapshot, command, zone, now)
+        is FlowCommand.CreateNoteFolder, is FlowCommand.UpdateNoteFolder, is FlowCommand.DeleteNoteFolder -> NotesReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.ChangeCounter, is FlowCommand.SetChecklistItem, is FlowCommand.RecordNegative ->
             CounterReducer.reduce(snapshot, command, zone, now)
         is FlowCommand.SetTaskDone -> TaskCompletionReducer.reduce(snapshot, command, zone, taskXp, now, zoneOccurrenceKey).let { result ->
@@ -43,7 +43,20 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.CaptureTask -> capture(snapshot, command, zone, now)
         is FlowCommand.CreateTask, is FlowCommand.UpdateTask -> TaskEditorReducer.reduce(snapshot, command, zone, taskXp.keys, now, activeZoneId)
         is FlowCommand.LifecycleTick -> TaskLifecycle.tick(snapshot, now, zone, zoneOccurrenceKey)
-        else -> FlowCommandResult.Rejected("not-migrated", "This command has not been migrated yet")
+        is FlowCommand.SetPreferences -> PreferencesReducer.reduce(snapshot, command)
+        is FlowCommand.ImportSnapshot, is FlowCommand.RestoreSnapshot -> import(snapshot, command, zone, now)
+    }
+
+    private fun import(snapshot: FlowSnapshot, command: FlowCommand, zone: ZoneId, now: Long): FlowCommandResult = try {
+        when (command) {
+            is FlowCommand.ImportSnapshot -> SnapshotMerge.merge(snapshot,
+                SnapshotNormalizer.normalize(BackupValidator.validate(command.payload, taskXp.keys), zone, now), zone, now, command.commandId)
+            is FlowCommand.RestoreSnapshot -> SnapshotRestore.restore(snapshot,
+                BackupValidator.validate(command.payload, taskXp.keys), zone, now)
+            else -> error("Expected an import command")
+        }
+    } catch (e: Exception) {
+        FlowCommandResult.Rejected("invalid-backup", e.message ?: "Backup is invalid; current data is unchanged")
     }
 
     private fun capture(snapshot: FlowSnapshot, command: FlowCommand.CaptureTask, zone: ZoneId, now: Long): FlowCommandResult {

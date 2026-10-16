@@ -94,7 +94,7 @@ sealed class FlowCommand(
     data class RestoreSnapshot(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
 }
 
-/** A committed domain event returned with the resulting snapshot. */
+/** A proposed domain event. Only the Repository can confirm its durable commit. */
 data class FlowEvent(val type: String, val activityAt: Long, val payload: JsonObject = JsonObject(emptyMap()))
 
 sealed interface FlowCommandResult {

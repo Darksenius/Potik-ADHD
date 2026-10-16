@@ -1,0 +1,2749 @@
+{
+  "fixtureVersion": 1,
+  "generatedAt": "2026-10-16T12:00:00+03:00",
+  "taskXp": {
+    "simple": 10,
+    "sched": 10,
+    "check": 10,
+    "counter": 2,
+    "note": 5,
+    "alarm": 10,
+    "timewin": 5,
+    "ctx": 8,
+    "negative": 0,
+    "zonelinked": 8
+  },
+  "cases": [
+    {
+      "name": "restore-minimal-resets-current-state",
+      "mode": "restore",
+      "zone": "Europe/Kyiv",
+      "now": 1792141200000,
+      "command": {
+        "kind": "RestoreSnapshot",
+        "commandId": "import-parity-restore-minimal-resets-current-state",
+        "activityAt": 1792141200000,
+        "payload": {
+          "formatVersion": 2,
+          "tasks": [
+            {
+              "id": 3,
+              "title": "Imported task",
+              "type": "simple",
+              "done": false,
+              "someday": false,
+              "zoneId": null,
+              "zoneColor": null,
+              "zoneName": null,
+              "expanded": false,
+              "created": "2026-10-16T08:00:00.000Z",
+              "counterEnabled": false,
+              "counterStep": 1,
+              "counterUnit": "count",
+              "alarmFired": false,
+              "repeat": "none",
+              "repeatDays": [
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false
+              ],
+              "tags": []
+            }
+          ],
+          "saveDate": "Fri Oct 16 2026"
+        }
+      },
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 500,
+            "title": "Keep this task",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 501,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "light",
+        "preferences": {
+          "themeMode": "light",
+          "reduceMotion": true,
+          "showGamification": false
+        }
+      },
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-16T08:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 3,
+            "title": "Imported task",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 300,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      }
+    },
+    {
+      "name": "restore-legacy-routine-uses-save-date",
+      "mode": "restore",
+      "zone": "Europe/Kyiv",
+      "now": 1792141200000,
+      "command": {
+        "kind": "RestoreSnapshot",
+        "commandId": "import-parity-restore-legacy-routine-uses-save-date",
+        "activityAt": 1792141200000,
+        "payload": {
+          "formatVersion": 2,
+          "recur": [
+            {
+              "id": "r-old",
+              "nm": "Read",
+              "unit": "check",
+              "val": 0,
+              "done": true
+            }
+          ],
+          "saveDate": "Thu Oct 15 2026"
+        }
+      },
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 500,
+            "title": "Keep this task",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 501,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      },
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 300,
+            "title": "Read",
+            "type": "simple",
+            "done": true,
+            "someday": false,
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "created": "1970-01-01T00:00:00.000Z",
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false,
+            "repeat": "daily",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "legacyRoutineId": "r-old",
+            "counterDay": "2026-10-15",
+            "doneDate": "2026-10-15",
+            "completionCredited": true,
+            "completionCreditDate": "2026-10-15"
+          }
+        ],
+        "taskHistory": [
+          {
+            "id": "300@1970-01-01T00:00:00.000Z|day:2026-10-15#0:1792011600000:completed",
+            "occurrenceId": "300@1970-01-01T00:00:00.000Z|day:2026-10-15",
+            "taskId": 300,
+            "taskCreated": "1970-01-01T00:00:00.000Z",
+            "title": "Read",
+            "type": "simple",
+            "kind": "completed",
+            "sequence": 0,
+            "at": 1792011600000,
+            "date": "2026-10-15",
+            "time": "",
+            "zoneId": null
+          }
+        ],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [
+          "2026-10-15"
+        ],
+        "dailyInsightClaims": [
+          {
+            "day": "2026-10-15",
+            "sequence": 1,
+            "cardId": 1,
+            "earnedAt": 0
+          }
+        ],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 301,
+        "unlocked": [
+          "zones",
+          "active1"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      }
+    },
+    {
+      "name": "restore-legacy-planner-task-and-event",
+      "mode": "restore",
+      "zone": "Europe/Kyiv",
+      "now": 1792141200000,
+      "command": {
+        "kind": "RestoreSnapshot",
+        "commandId": "import-parity-restore-legacy-planner-task-and-event",
+        "activityAt": 1792141200000,
+        "payload": {
+          "formatVersion": 2,
+          "planItems": {
+            "2026-10-16": [
+              {
+                "title": "Migrated scheduled task",
+                "time": "10:30",
+                "done": true
+              },
+              {
+                "title": "Calendar event",
+                "time": "12:00",
+                "isEvent": true
+              }
+            ]
+          },
+          "saveDate": "Fri Oct 16 2026"
+        }
+      },
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 500,
+            "title": "Keep this task",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 501,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      },
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 300,
+            "title": "Migrated scheduled task",
+            "type": "sched",
+            "done": true,
+            "someday": false,
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "created": "2026-10-15T21:00:00.000Z",
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false,
+            "schedDate": "2026-10-16",
+            "schedTime": "10:30",
+            "firedSched": false,
+            "firedPre": false,
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "planDate": "2026-10-16",
+            "reminderEnabled": true,
+            "doneDate": "2026-10-16",
+            "completionCredited": true,
+            "completionCreditDate": "2026-10-16"
+          }
+        ],
+        "taskHistory": [
+          {
+            "id": "300@2026-10-15T21:00:00.000Z|once#0:1792098000000:completed",
+            "occurrenceId": "300@2026-10-15T21:00:00.000Z|once",
+            "taskId": 300,
+            "taskCreated": "2026-10-15T21:00:00.000Z",
+            "title": "Migrated scheduled task",
+            "type": "sched",
+            "kind": "completed",
+            "sequence": 0,
+            "at": 1792098000000,
+            "date": "2026-10-16",
+            "time": "",
+            "zoneId": null
+          }
+        ],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [
+          "2026-10-16"
+        ],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 301,
+        "unlocked": [
+          "zones",
+          "active1"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {
+          "2026-10-16": [
+            {
+              "done": false,
+              "title": "Calendar event",
+              "time": "12:00",
+              "isEvent": true
+            }
+          ]
+        },
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      }
+    },
+    {
+      "name": "merge-identical-task-content-with-different-id",
+      "mode": "merge",
+      "zone": "Europe/Kyiv",
+      "now": 1792141200000,
+      "command": {
+        "kind": "ImportSnapshot",
+        "commandId": "import-parity-merge-identical-task-content-with-different-id",
+        "activityAt": 1792141200000,
+        "payload": {
+          "formatVersion": 2,
+          "tasks": [
+            {
+              "id": 999,
+              "title": "Keep this task",
+              "type": "simple",
+              "done": false,
+              "someday": false,
+              "zoneId": null,
+              "zoneColor": null,
+              "zoneName": null,
+              "expanded": false,
+              "created": "2026-10-15T09:00:00.000Z",
+              "counterEnabled": false,
+              "counterStep": 1,
+              "counterUnit": "count",
+              "alarmFired": false,
+              "repeat": "none",
+              "repeatDays": [
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false
+              ],
+              "tags": []
+            }
+          ]
+        }
+      },
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 500,
+            "title": "Keep this task",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 501,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      },
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T09:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 500,
+            "title": "Keep this task",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 501,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      }
+    },
+    {
+      "name": "merge-remaps-zone-history-and-occurrence-identities",
+      "mode": "merge",
+      "zone": "Europe/Kyiv",
+      "now": 1792141200000,
+      "command": {
+        "kind": "ImportSnapshot",
+        "commandId": "import-parity-merge-remaps-zone-history-and-occurrence-identities",
+        "activityAt": 1792141200000,
+        "payload": {
+          "formatVersion": 2,
+          "zones": [
+            {
+              "id": 40,
+              "nm": "Office parity zone",
+              "color": "#4f83cc",
+              "desc": "",
+              "prio": 1,
+              "slots": [
+                {
+                  "s": "09:00",
+                  "e": "17:00"
+                }
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "id": 44,
+              "title": "Incoming zoned task",
+              "type": "simple",
+              "done": false,
+              "someday": false,
+              "zoneId": 40,
+              "zoneColor": null,
+              "zoneName": null,
+              "expanded": false,
+              "created": "2026-10-15T11:00:00.000Z",
+              "counterEnabled": false,
+              "counterStep": 1,
+              "counterUnit": "count",
+              "alarmFired": false,
+              "repeat": "everyzone",
+              "repeatDays": [
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false
+              ],
+              "tags": [],
+              "zoneOccurrenceKey": "2026-10-16:40:09:00",
+              "occurrenceId": "44@2026-10-15T11:00:00.000Z|zone:2026-10-16:40:09:00"
+            }
+          ],
+          "taskHistory": [
+            {
+              "id": "44@2026-10-15T11:00:00.000Z|zone:2026-10-16:40:09:00#0:1792141200000:completed",
+              "occurrenceId": "44@2026-10-15T11:00:00.000Z|zone:2026-10-16:40:09:00",
+              "taskId": 44,
+              "taskCreated": "2026-10-15T11:00:00.000Z",
+              "title": "Incoming zoned task",
+              "type": "simple",
+              "kind": "completed",
+              "sequence": 0,
+              "at": 1792141200000,
+              "date": "2026-10-16",
+              "time": "12:00",
+              "zoneId": 40
+            }
+          ]
+        }
+      },
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "color": "#4f83cc",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "17:00"
+              }
+            ],
+            "id": 4,
+            "nm": "Office parity zone",
+            "desc": "",
+            "prio": 1
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 300,
+        "unlocked": [],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      },
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T11:00:00.000Z",
+            "repeat": "everyzone",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 300,
+            "title": "Incoming zoned task",
+            "zoneId": 4,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false,
+            "zoneOccurrenceKey": "2026-10-16:4:09:00",
+            "occurrenceId": "300@2026-10-15T11:00:00.000Z|zone:2026-10-16:4:09:00"
+          }
+        ],
+        "taskHistory": [
+          {
+            "id": "300@2026-10-15T11:00:00.000Z|zone:2026-10-16:4:09:00#0:1792141200000:completed",
+            "occurrenceId": "300@2026-10-15T11:00:00.000Z|zone:2026-10-16:4:09:00",
+            "taskId": 300,
+            "taskCreated": "2026-10-15T11:00:00.000Z",
+            "title": "Incoming zoned task",
+            "type": "simple",
+            "kind": "completed",
+            "sequence": 0,
+            "at": 1792141200000,
+            "date": "2026-10-16",
+            "time": "12:00",
+            "zoneId": 4
+          }
+        ],
+        "recur": [],
+        "zones": [
+          {
+            "color": "#4f83cc",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "17:00"
+              }
+            ],
+            "id": 4,
+            "nm": "Office parity zone",
+            "desc": "",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [
+          "2026-10-16"
+        ],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 301,
+        "unlocked": [
+          "active1"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      }
+    },
+    {
+      "name": "merge-same-name-day-template-keeps-current-task-and-adds-entry",
+      "mode": "merge",
+      "zone": "Europe/Kyiv",
+      "now": 1792141200000,
+      "command": {
+        "kind": "ImportSnapshot",
+        "commandId": "import-parity-merge-same-name-day-template-keeps-current-task-and-adds-entry",
+        "activityAt": 1792141200000,
+        "payload": {
+          "formatVersion": 2,
+          "dayTemplates": [
+            {
+              "id": "different-backup-source-id",
+              "name": "Parity morning",
+              "blocks": [],
+              "tasks": [
+                {
+                  "id": "backup-entry",
+                  "task": {
+                    "title": "Template entry task",
+                    "type": "simple",
+                    "zoneId": null
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T10:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 510,
+            "title": "Keep template neighbor",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 511,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [
+          {
+            "blocks": [],
+            "id": "current-source-id",
+            "name": "Parity morning",
+            "tasks": []
+          }
+        ],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      },
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "created": "2026-10-15T10:00:00.000Z",
+            "repeat": "none",
+            "repeatDays": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "tags": [],
+            "id": 510,
+            "title": "Keep template neighbor",
+            "zoneId": null,
+            "zoneColor": null,
+            "zoneName": null,
+            "expanded": false,
+            "counterEnabled": false,
+            "counterStep": 1,
+            "counterUnit": "count",
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Сон",
+            "color": "#4f8ef7",
+            "slots": [
+              {
+                "s": "00:00",
+                "e": "06:00"
+              },
+              {
+                "s": "22:00",
+                "e": "24:00"
+              }
+            ],
+            "desc": "Відпочинок",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 2,
+            "nm": "Ранок",
+            "color": "#f5a623",
+            "slots": [
+              {
+                "s": "06:00",
+                "e": "09:00"
+              }
+            ],
+            "desc": "Ранкова рутина",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 3,
+            "nm": "Робота",
+            "color": "#7ed321",
+            "slots": [
+              {
+                "s": "09:00",
+                "e": "13:00"
+              },
+              {
+                "s": "14:00",
+                "e": "18:00"
+              }
+            ],
+            "desc": "Продуктивний час",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 4,
+            "nm": "Обід",
+            "color": "#ff6b35",
+            "slots": [
+              {
+                "s": "13:00",
+                "e": "14:00"
+              }
+            ],
+            "desc": "Прийом їжі",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          },
+          {
+            "id": 5,
+            "nm": "Вечір",
+            "color": "#bd10e0",
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ],
+            "desc": "Відпочинок/сім'я",
+            "prio": 1,
+            "bound": false,
+            "active": true
+          }
+        ],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "qnotes": [],
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 2,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "streak": 1,
+        "negCount": 0,
+        "nid": 511,
+        "unlocked": [
+          "zones"
+        ],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "priorities": [
+          null,
+          null,
+          null
+        ],
+        "focusChips": [
+          "Потік",
+          "Робота",
+          "Дитина",
+          "Навчання",
+          "Cybersec",
+          "Гра",
+          "Відпочинок"
+        ],
+        "focusLog": [],
+        "currentFocus": "",
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "rareEvents": [],
+        "dayTemplates": [
+          {
+            "blocks": [],
+            "id": "current-source-id",
+            "name": "Parity morning",
+            "tasks": [
+              {
+                "id": "backup-entry",
+                "task": {
+                  "type": "simple",
+                  "done": false,
+                  "someday": false,
+                  "created": "1970-01-01T00:00:00.000Z",
+                  "repeat": "none",
+                  "repeatDays": [
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false
+                  ],
+                  "tags": [],
+                  "title": "Template entry task",
+                  "zoneId": null
+                }
+              }
+            ]
+          }
+        ],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "notepad": "",
+        "notepadFolder": "thought",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        }
+      }
+    }
+  ]
+}
