@@ -24,7 +24,7 @@ const SOURCE_FILES = [
 const SOURCE_DIRS = [
   { dir: 'src', exts: ['.ts', '.tsx', '.css', '.json', '.txt'] },
   { dir: 'scripts', exts: ['.js', '.mjs', '.mts'] },
-  { dir: 'android/app/src/main/java', exts: ['.java'] },
+  { dir: 'android/app/src/main/java', exts: ['.java', '.kt'] },
   { dir: 'android/app/src/main/res', exts: ['.xml'] },
 ];
 const TARGET = path.join(ROOT, 'www', 'index.html');
