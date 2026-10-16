@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <activity
+            android:name="com.flow.adhd.NativePreviewActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar" />
         <provider
             android:name="com.flow.adhd.FlowBackupTestDocumentsProvider"
             android:authorities="com.flow.adhd.backup-test-documents"

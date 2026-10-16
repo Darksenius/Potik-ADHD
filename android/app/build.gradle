@@ -1,4 +1,6 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 // package.json is the only version source: 1.7.6-r10 -> 1.7.6.r10 / 1070610.
 def packageVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version.toString()
@@ -54,8 +56,18 @@ android {
             }
         }
     }
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions {
+        // Capacitor's generated build script also targets 21 during transition.
+        jvmTarget = '21'
+    }
     buildFeatures {
         // потрібно, щоб FlowBridge.appVersion() бачив BuildConfig.VERSION_NAME
+        compose true
         buildConfig true
     }
 }
@@ -67,6 +79,21 @@ repositories {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation platform('androidx.compose:compose-bom:2025.10.01')
+    implementation 'androidx.activity:activity-compose:1.11.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.9.4'
+    implementation 'androidx.navigation:navigation-compose:2.9.5'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    androidTestImplementation platform('androidx.compose:compose-bom:2025.10.01')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
@@ -78,8 +105,9 @@ dependencies {
     implementation project(':capacitor-cordova-android-plugins')
 
     // ── Room Database ──────────────────────────────────────
-    implementation "androidx.room:room-runtime:2.6.1"
-    annotationProcessor "androidx.room:room-compiler:2.6.1"
+    // Kotlin 2.2 metadata requires the current Room processor; database schema stays v1.
+    implementation "androidx.room:room-runtime:2.8.5"
+    annotationProcessor "androidx.room:room-compiler:2.8.5"
 }
 
 // ─── АВТОКОПІЯ APK ────────────────────────────────────────────────────

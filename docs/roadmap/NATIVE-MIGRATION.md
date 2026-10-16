@@ -26,9 +26,15 @@ TS/Java контракту. Push лише гілки, без тегів та Git
 
 ## Окрема гілка refactor/native-compose після r26
 
-- [ ] N1: Kotlin/Compose/ViewModel/StateFlow у поточному Android-проєкті.
+- [x] N1: Kotlin/Compose/ViewModel/StateFlow у поточному Android-проєкті.
   Шари domain/data/platform/ui; ручний AppContainer. Java-код використовувати
   повторно. package com.flow.adhd, min24, target36, signing зберегти.
+  Реалізовано читання Room через data → domain → ViewModel та ручний AppContainer.
+  Нативний екран поки debug-only і лише для перегляду; основний launcher чинний.
+  Kotlin 2.2.21, Compose BOM 2025.10.01; JVM21 узгоджено з Capacitor.
+  Room library 2.8.5 потрібна для нових Kotlin metadata, схема бази лишилася v1.
+  На API28 пройшли NativePreview/FlowPersistence/FlowWebView: 15/15;
+  refresh/recreate не змінюють JSON, екран не містить WebView. Вигляд оглянуто.
 - [ ] N2: Kotlin ядро з типізованими командами, станом і результатами.
   Перенести всі правила типів, входжень, повторів, зон, плану, нотаток,
   історії, XP і нагород. Зіставляти результати зі спільними сценаріями TS.
