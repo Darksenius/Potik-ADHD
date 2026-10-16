@@ -76,5 +76,9 @@ if (process.argv.includes('--clean')) {
   const contracts = path.join(ROOT, 'www', 'contracts');
   fs.mkdirSync(contracts, { recursive: true });
   fs.copyFileSync(catalog, path.join(contracts, 'task-types.json'));
+  const insights = path.join(ROOT, 'src', 'content', 'daily-insights.json');
+  const insightData = JSON.parse(fs.readFileSync(insights, 'utf8'));
+  if (!Array.isArray(insightData.cards) || insightData.cards.length !== 100) throw new Error('Expected 100 offline daily insights.');
+  fs.copyFileSync(insights, path.join(contracts, 'daily-insights.json'));
   console.log('Embedded license and text from ' + files.length + ' files; revision ' + revision + '. Generated native task catalog.');
 }

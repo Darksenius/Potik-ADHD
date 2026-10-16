@@ -145,11 +145,13 @@ class NativeCommandRepositoryTest {
                 override fun readSnapshot() = nextSnapshot
                 override fun readJournal() = nextJournal
                 override fun writeSnapshot(json: String) { fail("snapshot"); nextSnapshot = json }
+                override fun writeNotification(json: String) { fail("notification") }
                 override fun writeJournal(json: String) { fail("journal"); nextJournal = json }
                 override fun acknowledge(eventIds: List<Long>) {
                     fail("ack")
                     nextPending.removeAll(eventIds.toSet())
                 }
+                override fun hasOtherEvents(eventIds: List<Long>) = nextPending.any { it !in eventIds }
             })
             snapshot = nextSnapshot
             journal = nextJournal

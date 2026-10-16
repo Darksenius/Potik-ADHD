@@ -12,12 +12,14 @@ class RoomCommandStore(private val database: FlowDatabase) : CommandStore {
                 override fun readSnapshot(): String? = dao.stateJson
                 override fun readJournal(): String? = dao.commandJournalJson
                 override fun writeSnapshot(json: String) = dao.writeState(json)
+                override fun writeNotification(json: String) = dao.writeNotif(json)
                 override fun writeJournal(json: String) {
                     val row = AppState(json, "")
                     row.id = 2
                     dao.saveState(row)
                 }
                 override fun acknowledge(eventIds: List<Long>) { if (eventIds.isNotEmpty()) dao.acknowledgeEvents(eventIds) }
+                override fun hasOtherEvents(eventIds: List<Long>) = dao.hasOtherPendingEvents(eventIds)
             })
         })
     })

@@ -8,7 +8,11 @@ interface CommandStore {
         fun readSnapshot(): String?
         fun readJournal(): String?
         fun writeSnapshot(json: String)
+        fun writeNotification(json: String)
         fun writeJournal(json: String)
         fun acknowledge(eventIds: List<Long>)
+        fun hasOtherEvents(eventIds: List<Long>): Boolean
     }
 }
+
+data class QueuedNotification(val id: Long, val event: String, val createdAt: Long)

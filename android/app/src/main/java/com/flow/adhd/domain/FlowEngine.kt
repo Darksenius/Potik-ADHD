@@ -52,6 +52,8 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.CaptureNote, is FlowCommand.RecordPastTaskDone, is FlowCommand.MarkTaskReminderFired ->
             NotificationTaskActions.reduce(snapshot, command, zone, now, taskXp, zoneOccurrenceKey)
         is FlowCommand.ImportSnapshot, is FlowCommand.RestoreSnapshot -> import(snapshot, command, zone, now)
+        is FlowCommand.MoveTask -> TaskOrderReducer.reduce(snapshot, command)
+        is FlowCommand.ApplyNotificationEvent -> NotificationEventReducer.reduce(snapshot, command, zone, now, this)
     }
 
     private fun import(snapshot: FlowSnapshot, command: FlowCommand, zone: ZoneId, now: Long): FlowCommandResult = try {

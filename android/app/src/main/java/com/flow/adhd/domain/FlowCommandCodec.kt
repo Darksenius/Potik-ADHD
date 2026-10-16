@@ -1,5 +1,6 @@
 package com.flow.adhd.domain
 
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -23,6 +24,7 @@ object FlowCommandCodec {
             is FlowCommand.ChangeCounter -> fields("ChangeCounter", command, "taskId" to id(command.taskId), "delta" to num(command.delta))
             is FlowCommand.RecordNegative -> fields("RecordNegative", command, "taskId" to id(command.taskId), "delta" to num(command.delta))
             is FlowCommand.DeferTask -> fields("DeferTask", command, "taskId" to id(command.taskId), "deferralKind" to str(command.kind.name), "requestedAt" to time(command.requestedAt), "details" to nullable(command.details))
+            is FlowCommand.MoveTask -> fields("MoveTask", command, "taskId" to id(command.taskId), "direction" to num(command.direction), "visibleIds" to ids(command.visibleIds))
             is FlowCommand.MoveTaskToSomeday -> fields("MoveTaskToSomeday", command, "taskId" to id(command.taskId))
             is FlowCommand.RestoreTaskFromSomeday -> fields("RestoreTaskFromSomeday", command, "taskId" to id(command.taskId))
             is FlowCommand.TrashTask -> fields("TrashTask", command, "taskId" to id(command.taskId))
@@ -33,6 +35,7 @@ object FlowCommandCodec {
             is FlowCommand.CaptureNote -> fields("CaptureNote", command, "text" to str(command.text))
             is FlowCommand.RecordPastTaskDone -> fields("RecordPastTaskDone", command, "taskId" to id(command.taskId), "completedAt" to time(command.completedAt))
             is FlowCommand.MarkTaskReminderFired -> fields("MarkTaskReminderFired", command, "taskId" to id(command.taskId), "reminderAt" to time(command.reminderAt), "preReminder" to bool(command.preReminder))
+            is FlowCommand.ApplyNotificationEvent -> fields("ApplyNotificationEvent", command, "event" to str(command.event))
             is FlowCommand.UpdateQuickNote -> fields("UpdateQuickNote", command, "noteId" to id(command.noteId), "payload" to command.payload)
             is FlowCommand.DeleteQuickNote -> fields("DeleteQuickNote", command, "noteId" to id(command.noteId))
             is FlowCommand.SetNotepad -> fields("SetNotepad", command, "payload" to command.payload)
@@ -96,6 +99,7 @@ object FlowCommandCodec {
                 "ChangeCounter" -> read(value, "taskId", "delta") { c -> FlowCommand.ChangeCounter(c.id("taskId"), c.double("delta"), c.commandId, c.activityAt) }
                 "RecordNegative" -> read(value, "taskId", "delta") { c -> FlowCommand.RecordNegative(c.id("taskId"), c.double("delta"), c.commandId, c.activityAt) }
                 "DeferTask" -> read(value, "taskId", "deferralKind", "requestedAt", "details") { c -> FlowCommand.DeferTask(c.id("taskId"), c.enum("deferralKind", QuestDeferralKind.entries), c.time("requestedAt"), c.nullableObj("details"), c.commandId, c.activityAt) }
+                "MoveTask" -> read(value, "taskId", "direction", "visibleIds") { c -> FlowCommand.MoveTask(c.id("taskId"), c.int("direction"), c.ids("visibleIds"), c.commandId, c.activityAt) }
                 "MoveTaskToSomeday" -> read(value, "taskId") { c -> FlowCommand.MoveTaskToSomeday(c.id("taskId"), c.commandId, c.activityAt) }
                 "RestoreTaskFromSomeday" -> read(value, "taskId") { c -> FlowCommand.RestoreTaskFromSomeday(c.id("taskId"), c.commandId, c.activityAt) }
                 "TrashTask" -> read(value, "taskId") { c -> FlowCommand.TrashTask(c.id("taskId"), c.commandId, c.activityAt) }
@@ -106,6 +110,7 @@ object FlowCommandCodec {
                 "CaptureNote" -> read(value, "text") { c -> FlowCommand.CaptureNote(c.string("text"), c.commandId, c.activityAt) }
                 "RecordPastTaskDone" -> read(value, "taskId", "completedAt") { c -> FlowCommand.RecordPastTaskDone(c.id("taskId"), c.time("completedAt"), c.commandId, c.activityAt) }
                 "MarkTaskReminderFired" -> read(value, "taskId", "reminderAt", "preReminder") { c -> FlowCommand.MarkTaskReminderFired(c.id("taskId"), c.time("reminderAt"), c.bool("preReminder"), c.commandId, c.activityAt) }
+                "ApplyNotificationEvent" -> read(value, "event") { c -> FlowCommand.ApplyNotificationEvent(c.string("event"), c.commandId, c.activityAt) }
                 "UpdateQuickNote" -> read(value, "noteId", "payload") { c -> FlowCommand.UpdateQuickNote(c.id("noteId"), c.obj("payload"), c.commandId, c.activityAt) }
                 "DeleteQuickNote" -> read(value, "noteId") { c -> FlowCommand.DeleteQuickNote(c.id("noteId"), c.commandId, c.activityAt) }
                 "SetNotepad" -> read(value, "payload") { c -> FlowCommand.SetNotepad(c.obj("payload"), c.commandId, c.activityAt) }
@@ -160,8 +165,8 @@ object FlowCommandCodec {
 
     private val kinds = setOf(
         "CaptureTask", "CreateTask", "UpdateTask", "SetTaskDone", "UndoTask", "SetChecklistItem", "ChangeCounter", "RecordNegative", "DeferTask",
-        "MoveTaskToSomeday", "RestoreTaskFromSomeday", "TrashTask", "RestoreTrashedTask", "HardDeleteTask", "SetPriority",
-        "AddQuickNote", "CaptureNote", "RecordPastTaskDone", "MarkTaskReminderFired", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
+        "MoveTask", "MoveTaskToSomeday", "RestoreTaskFromSomeday", "TrashTask", "RestoreTrashedTask", "HardDeleteTask", "SetPriority",
+        "AddQuickNote", "CaptureNote", "RecordPastTaskDone", "MarkTaskReminderFired", "ApplyNotificationEvent", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
         "CreateZone", "UpdateZone", "DeleteZone", "SetZoneOff", "SetPlanDay", "SetPlanRestDay", "SetPlanDayNote", "ResetPlanDay", "SetPlanZoneOff", "EditPlanZoneForDay", "AddPlanItem", "UpdatePlanItem", "DeletePlanItem",
         "CreateTemplate", "UpdateTemplate", "DeleteTemplate", "ApplyTemplate", "CreateWeekTemplate", "UpdateWeekTemplate", "DeleteWeekTemplate", "ApplyWeekTemplate", "DeletePlanRule",
         "SetFocus", "ClearFocus", "AddFocusChip", "RemoveFocusChip", "SetEnergy", "SetPreferences", "SetTaskEditorDraft", "CreateRareEvent", "ChangeRareEvent", "DeleteRareEvent", "LifecycleTick", "ImportSnapshot", "RestoreSnapshot",
@@ -189,6 +194,7 @@ object FlowCommandCodec {
         fun int(key: String) = value.int(key)
         fun double(key: String) = value.double(key)
         fun id(key: String) = value.id(key)
+        fun ids(key: String) = value.ids(key)
         fun nullableId(key: String) = value.nullableId(key)
         fun time(key: String) = value.time(key)
         fun nullableTime(key: String) = value.nullableTime(key)
@@ -217,7 +223,14 @@ object FlowCommandCodec {
         ?.takeIf { it.isFinite() } ?: malformed("$key must be a finite number")
     private fun JsonObject.id(key: String): Long = nullableId(key)
         ?: malformed("$key must be a non-negative JavaScript-safe ID")
-    private fun JsonObject.nullableId(key: String): Long? = when (val item = this[key]) {
+    private fun JsonObject.nullableId(key: String): Long? = readId(this[key], key)
+    private fun JsonObject.ids(key: String): List<Long> {
+        val items = this[key] as? JsonArray ?: malformed("$key must be an array of IDs")
+        return items.mapIndexed { index, item ->
+            readId(item, "$key[$index]") ?: malformed("$key[$index] must be a non-negative JavaScript-safe ID")
+        }
+    }
+    private fun readId(item: JsonElement?, key: String): Long? = when (item) {
         JsonNull -> null
         is JsonPrimitive -> {
             val number = item.takeUnless { it.isString }?.doubleOrNull
@@ -252,6 +265,7 @@ object FlowCommandCodec {
         return JsonPrimitive(value)
     }
     private fun nullableId(value: Long?) = value?.let(::id) ?: JsonNull
+    private fun ids(values: List<Long>) = JsonArray(values.map(::id))
     private fun time(value: Long): JsonPrimitive {
         require(value >= 0) { "time must be non-negative" }
         return JsonPrimitive(value)

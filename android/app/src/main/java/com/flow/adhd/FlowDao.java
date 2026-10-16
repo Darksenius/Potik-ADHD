@@ -58,6 +58,12 @@ public interface FlowDao {
     @Query("SELECT * FROM pending_events ORDER BY id ASC")
     List<PendingEvent> getPendingEvents();
 
+    @Query("SELECT * FROM pending_events ORDER BY id ASC LIMIT :limit")
+    List<PendingEvent> getPendingEventsBatch(int limit);
+
+    @Query("SELECT EXISTS(SELECT 1 FROM pending_events WHERE id NOT IN (:ids))")
+    boolean hasOtherPendingEvents(List<Long> ids);
+
     @Insert
     void insertEvent(PendingEvent event);
 

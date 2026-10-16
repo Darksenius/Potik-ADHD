@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.flow.adhd.data.CommandCommit
 import com.flow.adhd.data.NativeCommandRepository
+import com.flow.adhd.data.NativeContent
 import com.flow.adhd.domain.*
 import java.time.Instant
 import java.time.ZoneId
@@ -41,6 +42,10 @@ class NativeRepositoryTest {
     private fun pending() = FlowDatabase.callStorage { database.flowDao().pendingEvents.map { it.id } }
     private fun enqueue() = FlowDatabase.callStorage {
         database.flowDao().insertEvent(PendingEvent("capture"))
+        database.flowDao().pendingEvents.last().id
+    }
+    private fun queueRaw(event: String, createdAt: Long) = FlowDatabase.callStorage {
+        database.flowDao().insertEvent(PendingEvent(event).apply { this.createdAt = createdAt })
         database.flowDao().pendingEvents.last().id
     }
 
@@ -174,5 +179,85 @@ class NativeRepositoryTest {
         assertEquals(JsonPrimitive("День без поспіху"), saved.data["planDayLog"]!!.jsonObject["2026-10-16"]!!.jsonObject["note"])
         assertFalse(saved.data["planDayZones"]!!.jsonObject.containsKey("2026-10-16"))
         assertEquals(1, saved.data["taskHistory"]!!.jsonArray.size)
+    }
+
+    @Test fun queuedCaptureDoneAndNotesCommitWithoutAnActivityAndUpdateTheNotificationSnapshot() = runBlocking {
+        val capture = "capture_task_v2:600:" + buildJsonObject { put("title", "Зі шторки"); put("createdAt", at) }
+        val first = queueRaw(capture, at)
+        queueRaw("task_done:600", at + 1)
+        queueRaw("capture_note:Швидка думка", at + 2)
+        queueRaw("share_text:Зберегти з іншого застосунку", at + 3)
+        val repo = NativeCommandRepository(RoomCommandStore(database), FlowEngine(mapOf("simple" to 10.0)), { ZoneId.of("UTC") }, { at + 10 })
+        val inbox = NativeNotificationInbox(database, repo)
+        assertTrue(inbox.drain() is CommandCommit.Committed)
+        assertTrue(state().tasks.single().done)
+        assertEquals(JsonPrimitive(21), state().data["xpTotal"])
+        assertEquals(2, state().qnotes.size)
+        assertTrue(pending().isEmpty())
+        val notif = FlowDatabase.callStorage { Json.parseToJsonElement(database.flowDao().notifJson) as JsonObject }
+        assertEquals(JsonPrimitive(true), notif["questTasks"]!!.jsonArray.single().jsonObject["done"])
+        // Re-delivery of the same Room envelope after a crash cannot award or capture again.
+        FlowDatabase.callStorage { database.flowDao().insertEvent(PendingEvent(capture).apply { id = first; createdAt = at }) }
+        assertTrue((inbox.drain() as CommandCommit.Committed).replayed)
+        assertEquals(JsonPrimitive(21), state().data["xpTotal"])
+        assertEquals(2, state().qnotes.size)
+    }
+
+    @Test fun invalidQueuedActionCannotCommitOrAcknowledgeAValidPrefix() = runBlocking {
+        queueRaw("capture_task:Не загубити", at)
+        val malformed = queueRaw("unknown-command:17", at + 1)
+        queueRaw("capture_note:Ще одна думка", at + 2)
+        val before = pending()
+        val inbox = NativeNotificationInbox(database, repository())
+        assertTrue(inbox.drain() is CommandCommit.Rejected)
+        assertEquals(FlowSnapshot.parse(initial).data, state().data)
+        assertEquals(before, pending())
+        assertNull(FlowDatabase.callStorage { database.flowDao().commandJournalJson })
+        FlowDatabase.callStorage { database.openHelper.writableDatabase.execSQL("UPDATE pending_events SET event = ? WHERE id = ?", arrayOf("task_remind:17", malformed)) }
+        assertTrue(inbox.drain() is CommandCommit.Committed)
+        assertTrue(pending().isEmpty())
+        assertEquals(1, state().tasks.size)
+        assertEquals(1, state().qnotes.size)
+    }
+
+    @Test fun drainingAPrefixDoesNotResetProgressBeforeALaterQueuedDeferral() = runBlocking {
+        val yesterday = at - 86_400_000L
+        val requested = yesterday + 10 * 3_600_000L
+        val task = JsonObject(TaskFactory.create(300, "Розминка", "counter", yesterday - 86_400_000L, 5) + mapOf(
+            "repeat" to JsonPrimitive("daily"), "counterDay" to JsonPrimitive("2026-10-15"),
+            "counter" to JsonPrimitive(7), "counterCreditedProgress" to JsonPrimitive(7),
+        ))
+        FlowDatabase.callStorage { database.flowDao().writeState(JsonObject(FlowDefaults.create() + mapOf(
+            "tasks" to JsonArray(listOf(task)), "saveDate" to JsonPrimitive("Thu Oct 15 2026"),
+        )).toString()) }
+        queueRaw("capture_note:Спочатку думка", requested)
+        val deferral = buildJsonObject {
+            put("kind", "not-today"); put("requestedAt", requested + 1000); put("sourceZoneId", 5); put("targetZoneId", 5)
+            put("startAt", Instant.parse("2026-10-16T00:00:00Z").toEpochMilli())
+        }
+        queueRaw("task_defer:300:$deferral", requested + 1000)
+        val inbox = NativeNotificationInbox(database, repository())
+        assertTrue(inbox.drain(1) is CommandCommit.Committed)
+        assertEquals(task, state().tasks.single().raw)
+        assertEquals(1, pending().size)
+        assertTrue(inbox.drain(1) is CommandCommit.Committed)
+        val saved = state().tasks.single().raw
+        assertEquals(JsonPrimitive(7), saved["counter"])
+        assertEquals(JsonPrimitive("2026-10-15"), saved["counterDay"])
+        assertEquals(deferral, saved["questDeferral"])
+        assertTrue(pending().isEmpty())
+    }
+
+    @Test fun installedApkContainsAllTaskTypesAnd100InsightCardsWithoutNetwork() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val content = NativeContent.load(context)
+        assertEquals(10, content.taskXp.size)
+        assertEquals((1..100).toSet(), content.insights.keys)
+        val repo = NativeCommandRepository(RoomCommandStore(database), FlowEngine(content.taskXp), { ZoneId.of("UTC") }, { at },
+            notificationProjection = { snapshot, now, zone -> NotificationProjection.build(snapshot, now, zone, content.insights) })
+        assertTrue(repo.dispatch(FlowCommand.CaptureNote("Думка для активного дня", "offline-content", at)) is CommandCommit.Committed)
+        val notification = FlowDatabase.callStorage { Json.parseToJsonElement(database.flowDao().notifJson) as JsonObject }
+        assertEquals(JsonPrimitive(1), notification["dailyInsight"]!!.jsonObject["cardId"])
+        assertEquals(content.insights.getValue(1)["text"], notification["dailyInsight"]!!.jsonObject["text"])
     }
 }

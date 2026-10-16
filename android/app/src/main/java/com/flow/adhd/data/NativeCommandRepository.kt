@@ -31,6 +31,7 @@ class NativeCommandRepository(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val initialState: () -> JsonObject = { FlowDefaults.create() },
     private val afterCommit: (String) -> Unit = {},
+    private val notificationProjection: (FlowSnapshot, Long, ZoneId) -> JsonObject = { snapshot, at, zone -> NotificationProjection.build(snapshot, at, zone) },
 ) : SnapshotSource {
     // Also orders observer publication after a transaction. Never expose optimistic state.
     private val lane = Mutex()
@@ -52,6 +53,7 @@ class NativeCommandRepository(
 
     suspend fun dispatch(command: FlowCommand, eventIds: List<Long> = emptyList()): CommandCommit = withContext(Dispatchers.IO) {
         lane.withLock {
+            if (command is FlowCommand.ApplyNotificationEvent) return@withLock CommandCommit.Rejected("queued-event-only", "Queued events must use the atomic pending batch")
             if (command.commandId.toByteArray(Charsets.UTF_8).size > 256) return@withLock CommandCommit.Rejected("invalid-command-id", "Command ID is too long")
             if (eventIds.size > 500 || eventIds.any { it <= 0 } || eventIds.toSet().size != eventIds.size)
                 return@withLock CommandCommit.Rejected("invalid-events", "Event acknowledgements must be unique positive IDs")
@@ -77,6 +79,7 @@ class NativeCommandRepository(
                         is FlowCommandResult.Applied -> {
                             entries[command.commandId] = buildJsonObject { put("sha256", digest); put("at", at) }
                             tx.writeSnapshot(result.snapshot.toJson())
+                            tx.writeNotification(notificationProjection(result.snapshot, at, timeZone).toString())
                             tx.writeJournal(JsonObject(journal + ("receipts" to JsonObject(entries))).toString())
                             tx.acknowledge(eventIds)
                             CommandCommit.Committed(result.snapshot, command.commandId, false, result.events, result.undoReceipt)
@@ -87,6 +90,67 @@ class NativeCommandRepository(
                     mutableState.value = SnapshotRead.Ready(committed.snapshot)
                     // A backup is a derived copy. Its failure cannot undo an already durable command.
                     if (!committed.replayed) try { afterCommit(committed.snapshot.toJson()) } catch (_: Exception) { }
+                }
+                committed
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SnapshotFormatException) { CommandCommit.Failed("invalid_snapshot") }
+            catch (_: JournalFormatException) { CommandCommit.Failed("invalid_command_journal") }
+            catch (_: Exception) { CommandCommit.Failed("storage_error") }
+        }
+    }
+
+    /** FIFO events, the final lifecycle tick, notification projection and exact ack commit together. */
+    suspend fun dispatchPending(envelopes: List<QueuedNotification>): CommandCommit = withContext(Dispatchers.IO) {
+        lane.withLock {
+            if (envelopes.isEmpty() || envelopes.size > 500 || envelopes.any { it.id <= 0 || it.createdAt !in 0..8_640_000_000_000_000L }
+                || envelopes.zipWithNext().any { (a, b) -> a.id >= b.id })
+                return@withLock CommandCommit.Rejected("invalid-pending-batch", "Expected 1–500 ordered unique queued events")
+            try {
+                val at = clock()
+                val timeZone = zone()
+                val committed = store.transaction { tx ->
+                    val raw = tx.readSnapshot()
+                    var snapshot = if (raw.isNullOrBlank()) FlowSnapshot.fromData(initialState()) else FlowSnapshot.parse(raw)
+                    val journal = readJournal(tx.readJournal())
+                    val entries = (journal["receipts"] as JsonObject).toMutableMap()
+                    val events = mutableListOf<FlowEvent>()
+                    var allReplayed = true
+                    var undoReceipt: JsonObject? = null
+                    for (envelope in envelopes) {
+                        val command = FlowCommand.ApplyNotificationEvent(envelope.event, "native-event:${envelope.id}", envelope.createdAt)
+                        val hash = fingerprint(FlowCommandCodec.encode(command))
+                        val previous = entries[command.commandId] as? JsonObject
+                        if (previous != null) {
+                            if ((previous["sha256"] as JsonPrimitive).content != hash)
+                                return@transaction CommandCommit.Rejected("command-id-conflict", "Queued event ID was reused for different content")
+                            continue
+                        }
+                        when (val result = engine.apply(snapshot, command, timeZone, at)) {
+                            is FlowCommandResult.Rejected -> return@transaction CommandCommit.Rejected(result.code, result.message)
+                            is FlowCommandResult.Applied -> {
+                                snapshot = result.snapshot
+                                events += result.events
+                                undoReceipt = result.undoReceipt
+                                entries[command.commandId] = buildJsonObject { put("sha256", hash); put("at", at) }
+                                allReplayed = false
+                            }
+                        }
+                    }
+                    // Never reset another task before its still-queued deferral is read in the next batch.
+                    val tick = if (tx.hasOtherEvents(envelopes.map { it.id })) FlowCommandResult.Applied(snapshot, emptyList())
+                        else engine.apply(snapshot, FlowCommand.LifecycleTick("pending-final-tick", at), timeZone, at)
+                    if (tick !is FlowCommandResult.Applied) return@transaction CommandCommit.Rejected("lifecycle-failed", "Could not advance queued state")
+                    snapshot = tick.snapshot
+                    events += tick.events
+                    tx.writeSnapshot(snapshot.toJson())
+                    tx.writeNotification(notificationProjection(snapshot, at, timeZone).toString())
+                    tx.writeJournal(JsonObject(journal + ("receipts" to JsonObject(entries))).toString())
+                    tx.acknowledge(envelopes.map { it.id })
+                    CommandCommit.Committed(snapshot, "native-batch:${envelopes.first().id}:${envelopes.last().id}", allReplayed, events, undoReceipt)
+                }
+                if (committed is CommandCommit.Committed) {
+                    mutableState.value = SnapshotRead.Ready(committed.snapshot)
+                    try { afterCommit(committed.snapshot.toJson()) } catch (_: Exception) { }
                 }
                 committed
             } catch (cancelled: CancellationException) { throw cancelled }

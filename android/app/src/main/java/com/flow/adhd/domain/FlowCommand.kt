@@ -41,6 +41,9 @@ sealed class FlowCommand(
         init { require(delta.isFinite()) { "negative-event delta must be finite" } }
     }
     data class DeferTask(val taskId: Long, val kind: QuestDeferralKind, val requestedAt: Long, val details: JsonObject?, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class MoveTask(val taskId: Long, val direction: Int, val visibleIds: List<Long>, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
+        init { require(direction == -1 || direction == 1) { "task direction must be -1 or 1" } }
+    }
     data class MoveTaskToSomeday(val taskId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class RestoreTaskFromSomeday(val taskId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class TrashTask(val taskId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
@@ -54,6 +57,7 @@ sealed class FlowCommand(
     data class CaptureNote(val text: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class RecordPastTaskDone(val taskId: Long, val completedAt: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class MarkTaskReminderFired(val taskId: Long, val reminderAt: Long, val preReminder: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class ApplyNotificationEvent(val event: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateQuickNote(val noteId: Long, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteQuickNote(val noteId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetNotepad(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
