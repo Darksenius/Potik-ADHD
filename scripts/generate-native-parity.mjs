@@ -22,9 +22,10 @@ const entry = `
   import { createLifecycleSlice } from './src/state/slices/lifecycleSlice.ts';
   import { completedTaskOccurrences } from './src/utils/taskHistory.ts';
   import { fmtDate } from './src/utils/date.ts';
+  import { dayBlocksFor, dayIsRestFor } from './src/state/slices/plannerHelpers.ts';
   import { isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt } from './src/utils/taskSchedule.ts';
   import taskTypes from './src/content/task-types.json' with { type: 'json' };
-  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes };
+  export { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes };
 `;
 const bundled = await build({
   stdin: { contents: entry, resolveDir: root, sourcefile: 'native-parity-entry.ts' },
@@ -45,7 +46,7 @@ const bundled = await build({
   }],
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`;
-const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes } = await import(moduleUrl);
+const { createTaskRecord, createNotesSlice, createGamificationSlice, createTasksSlice, createLifecycleSlice, completedTaskOccurrences, dayBlocksFor, dayIsRestFor, fmtDate, isTaskInInbox, isTaskInTimeWindow, nextTaskReminderAt, repeatDueOn, taskDoneOn, taskPreReminderAt, taskTypes } = await import(moduleUrl);
 
 const transientFields = new Set(['qnid', 'dailyInsightNotice', 'selectedInsightDay', 'xpPopup', 'levelUpFlash', 'alarmTaskIds']);
 const fixedZone = 'Europe/Kyiv';
@@ -376,6 +377,60 @@ const scheduleCases = [
   }, { at: Date.parse('2026-10-17T12:30:00.000Z') }),
 ];
 
+function plannerCase(name, state, day) {
+  return {
+    name, state, day,
+    blocks: dayBlocksFor(day, state.planDayZones || {}, state.planRules || [], state.dayTemplates || []),
+    rest: dayIsRestFor(day, state.planRestDays || {}, state.planRules || []),
+  };
+}
+
+const plannerCases = [
+  plannerCase('manual-empty-overrides-template', {
+    planDayZones: { '2026-10-16': [] }, planRestDays: {},
+    planRules: [{ start: '2026-10-16', end: '2026-10-16', days: [{ tplId: 'work' }] }],
+    dayTemplates: [{ id: 'work', name: 'Робота', blocks: [{ zoneId: 7, s: '09:00', e: '10:00' }] }],
+  }, '2026-10-16'),
+  plannerCase('explicit-false-rest-overrides-rule', {
+    planDayZones: {}, planRestDays: { '2026-10-16': false },
+    planRules: [{ start: '2026-10-16', end: '2026-10-16', days: [{ rest: true }] }], dayTemplates: [],
+  }, '2026-10-16'),
+  plannerCase('last-overlapping-rule-wins', {
+    planDayZones: {}, planRestDays: {},
+    planRules: [
+      { start: '2026-10-16', end: '2026-10-20', days: [{ tplId: 'first' }] },
+      { start: '2026-10-16', end: '2026-10-18', days: [{ tplId: 'last' }] },
+    ],
+    dayTemplates: [
+      { id: 'first', name: 'Перше', blocks: [{ zoneId: 1, s: '06:00', e: '07:00' }] },
+      { id: 'last', name: 'Останнє', blocks: [{ zoneId: 2, s: '07:00', e: '08:00' }] },
+    ],
+  }, '2026-10-16'),
+  plannerCase('seven-day-cycle-selects-monday-after-dst', {
+    planDayZones: {}, planRestDays: {},
+    planRules: [{ start: '2026-10-01', end: '2026-11-01', days: [
+      { tplId: 'mon' }, { tplId: 'tue' }, { tplId: 'wed' }, { tplId: 'thu' }, { tplId: 'fri' }, { tplId: 'sat' }, { tplId: 'sun' },
+    ] }],
+    dayTemplates: [{ id: 'mon', name: 'Понеділок', blocks: [{ zoneId: 3, s: '09:00', e: '10:00' }] }],
+  }, '2026-10-26'),
+  plannerCase('three-day-cycle-keeps-date-index-across-dst', {
+    planDayZones: {}, planRestDays: {},
+    planRules: [{ start: '2026-10-24', end: '2026-10-31', days: [
+      { tplId: 'first' }, { tplId: 'second' }, { tplId: 'third' },
+    ] }],
+    dayTemplates: [{ id: 'third', name: 'Третій день', blocks: [{ zoneId: 4, s: '14:00', e: '15:00' }] }],
+  }, '2026-10-26'),
+  plannerCase('deleted-template-produces-no-blocks', {
+    planDayZones: {}, planRestDays: {},
+    planRules: [{ start: '2026-10-16', end: '2026-10-16', days: [{ tplId: 'deleted', rest: true }] }], dayTemplates: [],
+  }, '2026-10-16'),
+  plannerCase('template-blocks-strip-extra-metadata', {
+    planDayZones: {}, planRestDays: {},
+    planRules: [{ start: '2026-10-16', end: '2026-10-16', days: [{ tplId: 'meta' }] }],
+    dayTemplates: [{ id: 'meta', name: 'Метадані', blocks: [{ zoneId: 7, s: '09:00', e: '10:00', id: 'block-1', ov: true, custom: 'drop' }] }],
+  }, '2026-10-16'),
+];
+
 const xpInputs = [
   {
     name: 'daily-cap-240-plus-20',
@@ -507,6 +562,7 @@ const fixture = {
   editorCases: [...editorCases, ...editorUpdates],
   lifecycleCases,
   scheduleCases,
+  plannerCases,
   captureCases,
   notes,
   xpCases,
@@ -516,4 +572,4 @@ const fixture = {
 
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(fixture, null, 2)}\n`, 'utf8');
-console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${captureCases.length} capture cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, and ${completionCases.length} completion fixtures to ${path.relative(root, outputPath)}`);
+console.log(`Wrote ${taskFactoryCases.length} task cases, ${editorCases.length + editorUpdates.length} editor cases, ${lifecycleCases.length} lifecycle cases, ${scheduleCases.length} schedule cases, ${plannerCases.length} planner cases, ${captureCases.length} capture cases, ${notes.length} note-command fixtures, ${xpCases.length} XP cases, ${energyCases.length} energy cases, and ${completionCases.length} completion fixtures to ${path.relative(root, outputPath)}`);

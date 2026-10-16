@@ -9,6 +9,7 @@ import com.flow.adhd.domain.FlowEngine
 import com.flow.adhd.domain.FlowSnapshot
 import com.flow.adhd.domain.TaskFactory
 import com.flow.adhd.domain.TaskHistory
+import com.flow.adhd.domain.PlannerProjection
 import java.time.ZoneId
 import java.time.Instant
 import kotlinx.serialization.json.Json
@@ -25,6 +26,22 @@ import org.junit.runner.RunWith
 /** Runs only the pure native engine: no Activity, WebView, Room writes, or network. */
 @RunWith(AndroidJUnit4::class)
 class NativeCoreTest {
+    @Test fun plannerManualOverridesAndCivilDayCyclesRemainIndependentOfDst() {
+        val state = Json.parseToJsonElement("""{
+          "planDayZones":{"2026-10-25":[]},"planRestDays":{"2026-10-25":false},
+          "planRules":[{"start":"2026-10-24","end":"2026-10-28","days":[
+            {"tplId":"home","rest":true},{"tplId":"home","rest":true},{"tplId":"work","rest":false}]}],
+          "dayTemplates":[{"id":"home","blocks":[{"zoneId":7,"s":"18:00","e":"22:00"}]},
+            {"id":"work","blocks":[{"zoneId":8,"s":"09:00","e":"17:00","label":"template-only"}]}]
+        }""") as JsonObject
+        assertEquals(emptyList<JsonObject>(), PlannerProjection.dayBlocks(state, "2026-10-25"))
+        assertFalse(PlannerProjection.isRest(state, "2026-10-25"))
+        val next = PlannerProjection.dayBlocks(state, "2026-10-26").single()
+        assertEquals("8", next["zoneId"].toString())
+        assertFalse(next.containsKey("label"))
+        assertEquals("7", PlannerProjection.dayBlocks(state, "2026-10-27").single()["zoneId"].toString())
+    }
+
     @Test fun repeatedNotificationCaptureRetainsItsIdWithoutDuplicateReward() {
         val engine = FlowEngine(mapOf("simple" to 10.0))
         val zone = ZoneId.systemDefault()

@@ -6304,6 +6304,298 @@
       "expectedValue": 1792239600000
     }
   ],
+  "plannerCases": [
+    {
+      "name": "manual-empty-overrides-template",
+      "state": {
+        "planDayZones": {
+          "2026-10-16": []
+        },
+        "planRestDays": {},
+        "planRules": [
+          {
+            "start": "2026-10-16",
+            "end": "2026-10-16",
+            "days": [
+              {
+                "tplId": "work"
+              }
+            ]
+          }
+        ],
+        "dayTemplates": [
+          {
+            "id": "work",
+            "name": "Робота",
+            "blocks": [
+              {
+                "zoneId": 7,
+                "s": "09:00",
+                "e": "10:00"
+              }
+            ]
+          }
+        ]
+      },
+      "day": "2026-10-16",
+      "blocks": [],
+      "rest": false
+    },
+    {
+      "name": "explicit-false-rest-overrides-rule",
+      "state": {
+        "planDayZones": {},
+        "planRestDays": {
+          "2026-10-16": false
+        },
+        "planRules": [
+          {
+            "start": "2026-10-16",
+            "end": "2026-10-16",
+            "days": [
+              {
+                "rest": true
+              }
+            ]
+          }
+        ],
+        "dayTemplates": []
+      },
+      "day": "2026-10-16",
+      "blocks": [],
+      "rest": false
+    },
+    {
+      "name": "last-overlapping-rule-wins",
+      "state": {
+        "planDayZones": {},
+        "planRestDays": {},
+        "planRules": [
+          {
+            "start": "2026-10-16",
+            "end": "2026-10-20",
+            "days": [
+              {
+                "tplId": "first"
+              }
+            ]
+          },
+          {
+            "start": "2026-10-16",
+            "end": "2026-10-18",
+            "days": [
+              {
+                "tplId": "last"
+              }
+            ]
+          }
+        ],
+        "dayTemplates": [
+          {
+            "id": "first",
+            "name": "Перше",
+            "blocks": [
+              {
+                "zoneId": 1,
+                "s": "06:00",
+                "e": "07:00"
+              }
+            ]
+          },
+          {
+            "id": "last",
+            "name": "Останнє",
+            "blocks": [
+              {
+                "zoneId": 2,
+                "s": "07:00",
+                "e": "08:00"
+              }
+            ]
+          }
+        ]
+      },
+      "day": "2026-10-16",
+      "blocks": [
+        {
+          "zoneId": 2,
+          "s": "07:00",
+          "e": "08:00"
+        }
+      ],
+      "rest": false
+    },
+    {
+      "name": "seven-day-cycle-selects-monday-after-dst",
+      "state": {
+        "planDayZones": {},
+        "planRestDays": {},
+        "planRules": [
+          {
+            "start": "2026-10-01",
+            "end": "2026-11-01",
+            "days": [
+              {
+                "tplId": "mon"
+              },
+              {
+                "tplId": "tue"
+              },
+              {
+                "tplId": "wed"
+              },
+              {
+                "tplId": "thu"
+              },
+              {
+                "tplId": "fri"
+              },
+              {
+                "tplId": "sat"
+              },
+              {
+                "tplId": "sun"
+              }
+            ]
+          }
+        ],
+        "dayTemplates": [
+          {
+            "id": "mon",
+            "name": "Понеділок",
+            "blocks": [
+              {
+                "zoneId": 3,
+                "s": "09:00",
+                "e": "10:00"
+              }
+            ]
+          }
+        ]
+      },
+      "day": "2026-10-26",
+      "blocks": [
+        {
+          "zoneId": 3,
+          "s": "09:00",
+          "e": "10:00"
+        }
+      ],
+      "rest": false
+    },
+    {
+      "name": "three-day-cycle-keeps-date-index-across-dst",
+      "state": {
+        "planDayZones": {},
+        "planRestDays": {},
+        "planRules": [
+          {
+            "start": "2026-10-24",
+            "end": "2026-10-31",
+            "days": [
+              {
+                "tplId": "first"
+              },
+              {
+                "tplId": "second"
+              },
+              {
+                "tplId": "third"
+              }
+            ]
+          }
+        ],
+        "dayTemplates": [
+          {
+            "id": "third",
+            "name": "Третій день",
+            "blocks": [
+              {
+                "zoneId": 4,
+                "s": "14:00",
+                "e": "15:00"
+              }
+            ]
+          }
+        ]
+      },
+      "day": "2026-10-26",
+      "blocks": [
+        {
+          "zoneId": 4,
+          "s": "14:00",
+          "e": "15:00"
+        }
+      ],
+      "rest": false
+    },
+    {
+      "name": "deleted-template-produces-no-blocks",
+      "state": {
+        "planDayZones": {},
+        "planRestDays": {},
+        "planRules": [
+          {
+            "start": "2026-10-16",
+            "end": "2026-10-16",
+            "days": [
+              {
+                "tplId": "deleted",
+                "rest": true
+              }
+            ]
+          }
+        ],
+        "dayTemplates": []
+      },
+      "day": "2026-10-16",
+      "blocks": [],
+      "rest": true
+    },
+    {
+      "name": "template-blocks-strip-extra-metadata",
+      "state": {
+        "planDayZones": {},
+        "planRestDays": {},
+        "planRules": [
+          {
+            "start": "2026-10-16",
+            "end": "2026-10-16",
+            "days": [
+              {
+                "tplId": "meta"
+              }
+            ]
+          }
+        ],
+        "dayTemplates": [
+          {
+            "id": "meta",
+            "name": "Метадані",
+            "blocks": [
+              {
+                "zoneId": 7,
+                "s": "09:00",
+                "e": "10:00",
+                "id": "block-1",
+                "ov": true,
+                "custom": "drop"
+              }
+            ]
+          }
+        ]
+      },
+      "day": "2026-10-16",
+      "blocks": [
+        {
+          "zoneId": 7,
+          "s": "09:00",
+          "e": "10:00"
+        }
+      ],
+      "rest": false
+    }
+  ],
   "captureCases": [
     {
       "scenario": "notification-capture-honors-requested-id-and-awards-10-xp",
