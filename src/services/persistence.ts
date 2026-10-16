@@ -9,6 +9,9 @@ import { normalizeRoutineTasks } from './routineMigration';
 import { markSaveError, markSaveSaved } from './saveStatus';
 import { initializeProgression } from '../utils/progression';
 import { archiveInsightClaims } from '../utils/dailyInsights';
+import { appendWebRecoveryArchive, listWebRecoveryArchives, readWebRecoveryArchive, type WebRecoveryEntry } from './webRecoveryArchive';
+import type { RecoveryArchive } from './webRecoveryArchive';
+export type { RecoveryArchive } from './webRecoveryArchive';
 
 /** Stable storage slot. formatVersion distinguishes the persisted domain schema. */
 export const LS_KEY = 'flow_v2';
@@ -151,16 +154,17 @@ export function continueWithCurrentState(quiet = false): boolean {
     return false;
   };
   if (recoveryReadFailed) return fail(); // Unknown bytes cannot be safely replaced.
-  const archive = JSON.stringify({ savedAt: new Date().toISOString(), sources: recoverySources });
+  const archive: WebRecoveryEntry = {
+    savedAt: new Date().toISOString(),
+    sources: recoverySources.map(({ source, raw }) => ({ source, raw })),
+  };
   const fb = flowBridge();
   try {
     if (fb) {
-      if (!fb.archiveRecovery?.(archive)) return fail();
+      if (!fb.archiveRecovery?.(JSON.stringify(archive))) return fail();
     } else {
-      // Keep prior archives when the user recovers more than once.
       const previous = localStorage.getItem(RECOVERY_ARCHIVE_KEY);
-      const value = previous ? { ...JSON.parse(archive), previous } : JSON.parse(archive);
-      localStorage.setItem(RECOVERY_ARCHIVE_KEY, JSON.stringify(value));
+      localStorage.setItem(RECOVERY_ARCHIVE_KEY, appendWebRecoveryArchive(previous, archive));
     }
   } catch { return fail(); }
   const banner = useStore.getState().backupBanner;
@@ -176,8 +180,6 @@ export function continueWithCurrentState(quiet = false): boolean {
   return true;
 }
 
-export interface RecoveryArchive { name: string; createdAt: number; size: number; }
-
 export function listRecoveryArchives(): RecoveryArchive[] {
   try {
     const fb = flowBridge();
@@ -187,11 +189,7 @@ export function listRecoveryArchives(): RecoveryArchive[] {
       return entries.filter((item): item is RecoveryArchive => !!item && typeof item.name === 'string'
         && Number.isFinite(item.createdAt) && Number.isFinite(item.size));
     }
-    const raw = localStorage.getItem(RECOVERY_ARCHIVE_KEY);
-    if (!raw) return [];
-    let createdAt = 0;
-    try { createdAt = Date.parse(JSON.parse(raw).savedAt) || 0; } catch { /* An unreadable archive can still be exported. */ }
-    return [{ name: 'flow-recovery-archive.json', createdAt, size: new Blob([raw]).size }];
+    return listWebRecoveryArchives(localStorage.getItem(RECOVERY_ARCHIVE_KEY));
   } catch { return []; }
 }
 
@@ -199,7 +197,7 @@ export function readRecoveryArchive(name?: string): string {
   try {
     const fb = flowBridge();
     if (fb) return (name ? fb.readRecoveryArchiveFile?.(name) : fb.readRecoveryArchive?.()) || '';
-    return localStorage.getItem(RECOVERY_ARCHIVE_KEY) || '';
+    return readWebRecoveryArchive(localStorage.getItem(RECOVERY_ARCHIVE_KEY), name);
   }
   catch { return ''; }
 }

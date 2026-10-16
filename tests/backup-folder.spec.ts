@@ -167,6 +167,14 @@ test('backup write failure is reported after the restored Room state is committe
   expect(backupWrites).toBe(1);
 });
 
+test('restoring identical already committed data reconnects the folder without another archive or import', async () => {
+  const raw = backupJson();
+  picker = async () => ({ cancelled: false, raw });
+  window.FlowBridge!.load = () => raw;
+  expect(await restoreFromBackupFolder()).toContain('Ці дані вже є');
+  expect(order).toEqual(['backup']);
+});
+
 test('rejected backup confirmation reports failure after the restored Room state is committed', async () => {
   picker = async () => ({ cancelled: false, raw: backupJson() });
   backupReject = 'backup confirmation rejected';

@@ -21,8 +21,8 @@ test('automatically archives incompatible browser data, then creates and exports
   await page.goto('/');
   await expect(page.locator('#add-fab')).toBeVisible();
   const archive = await page.evaluate(() => JSON.parse(localStorage.getItem('flow_v2_recovery_archive')!));
-  expect(archive.sources).toEqual([expect.objectContaining({ raw: incompatible })]);
-  expect(new Date(archive.savedAt).getTime()).toBeGreaterThan(0);
+  expect(archive.entries[0].sources).toEqual([expect.objectContaining({ raw: incompatible })]);
+  expect(new Date(archive.entries[0].savedAt).getTime()).toBeGreaterThan(0);
 
   await createTaskWithNote(page, 'Task after automatic recovery');
   await expect(page.getByText('Task after automatic recovery', { exact: true })).toBeVisible();
