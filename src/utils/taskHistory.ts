@@ -24,7 +24,6 @@ export function historyEvent(task: Task, kind: TaskHistoryEvent['kind'], at: num
     taskId: task.id, taskCreated: task.created, title: task.title, type: task.type,
     kind, sequence, at, date, time: time ?? new Date(at).toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' }),
     zoneId: task.zoneId, counter: task.counter,
-    items: task.items?.map(item => ({ ...item })),
   };
 }
 

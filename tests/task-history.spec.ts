@@ -80,6 +80,7 @@ test('Undo reopens only the active repeat occurrence and preserves an earlier co
   useStore.setState({ tasks: [task({ id, repeat: 'daily', planDate: yesterday })], nid: id + 1 });
 
   useStore.getState().setTaskDone(id, true, new Date(`${yesterday}T09:00:00`).getTime());
+  expect(useStore.getState().taskHistory[0]).not.toHaveProperty('items');
   useStore.getState().resetRepeatingTasksFor(new Date(`${today}T12:00:00`));
   useStore.getState().setTaskDone(id, true, new Date(`${today}T10:00:00`).getTime());
   const activeOccurrence = useStore.getState().tasks[0].occurrenceId;
@@ -91,6 +92,7 @@ test('Undo reopens only the active repeat occurrence and preserves an earlier co
   expect(completed.map(event => event.date)).toEqual([yesterday]);
   expect(completed[0].occurrenceId).not.toBe(activeOccurrence);
   expect(state.taskHistory.filter(event => event.occurrenceId === activeOccurrence).map(event => event.kind)).toEqual(['completed', 'reopened']);
+  expect(state.taskHistory.filter(event => event.occurrenceId === activeOccurrence).every(event => !('items' in event))).toBe(true);
 });
 
 test('task history survives collect/apply reload roundtrip', () => {
@@ -105,6 +107,22 @@ test('task history survives collect/apply reload roundtrip', () => {
   expect(applyState(saved, true)).toBe(true);
   expect(collectState().taskHistory).toEqual(expectedHistory);
   expect(completedTaskOccurrences(useStore.getState().taskHistory).map(event => event.title)).toEqual(['Збережений факт']);
+});
+
+test('new completion events omit checklist snapshots while older imported snapshots survive', () => {
+  const id = 7361;
+  const savedTask = task({ id, type: 'check', items: [{ text: 'Старий пункт', done: true }] });
+  useStore.setState({ tasks: [savedTask], nid: id + 1 });
+  useStore.getState().setTaskDone(id, true);
+  expect(useStore.getState().taskHistory[0]).not.toHaveProperty('items');
+
+  const legacy = JSON.parse(JSON.stringify(collectState()));
+  legacy.taskHistory[0].items = [{ text: 'Знімок зі старого резерву', done: true, credited: true }];
+  useStore.setState(useStore.getInitialState(), true);
+  expect(applyState(legacy, true)).toBe(true);
+  expect(useStore.getState().taskHistory[0].items).toEqual([
+    { text: 'Знімок зі старого резерву', done: true, credited: true },
+  ]);
 });
 
 test('rename and hard delete keep the original completion snapshot', () => {
