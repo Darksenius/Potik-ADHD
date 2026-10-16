@@ -12863,8 +12863,8 @@
             "prio": 1,
             "slots": [
               {
-                "s": "08:00",
-                "e": "10:00"
+                "s": "18:00",
+                "e": "22:00"
               }
             ]
           }
@@ -12887,22 +12887,22 @@
         "planRules": [],
         "dayTemplates": []
       },
-      "now": 1792139400000,
+      "now": 1792175400000,
       "zone": "Europe/Kyiv",
       "timeline": [
         {
           "zoneId": 0,
           "startAt": 1792098000000,
-          "endAt": 1792126800000
+          "endAt": 1792162800000
         },
         {
           "zoneId": 1,
-          "startAt": 1792126800000,
-          "endAt": 1792134000000
+          "startAt": 1792162800000,
+          "endAt": 1792177200000
         },
         {
           "zoneId": 0,
-          "startAt": 1792134000000,
+          "startAt": 1792177200000,
           "endAt": 1792184400000
         }
       ],
@@ -12918,7 +12918,7 @@
       },
       "expectedAvailability": {
         "eligible": true,
-        "currentZoneId": 0
+        "currentZoneId": 1
       },
       "expectedSelected": [
         {
@@ -12936,10 +12936,121 @@
       "kind": "next-zone",
       "expectedDeferral": {
         "kind": "not-today",
-        "requestedAt": 1792139400000,
-        "sourceZoneId": 0,
+        "requestedAt": 1792175400000,
+        "sourceZoneId": 1,
         "targetZoneId": 0,
-        "startAt": 1792222200000
+        "startAt": 1792258200000
+      }
+    },
+    {
+      "name": "next-zone-skips-free-gap-for-next-named-zone",
+      "state": {
+        "zones": [
+          {
+            "id": 1,
+            "nm": "Дім",
+            "prio": 1,
+            "slots": [
+              {
+                "s": "08:00",
+                "e": "10:00"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "nm": "Робота",
+            "prio": 2,
+            "slots": [
+              {
+                "s": "11:00",
+                "e": "12:00"
+              }
+            ]
+          }
+        ],
+        "priorities": [],
+        "tasks": [
+          {
+            "id": 107,
+            "title": "Домашня справа",
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "zoneId": 1,
+            "repeat": "none",
+            "created": "2026-10-15T09:00:00.000Z"
+          }
+        ],
+        "planDayOff": {},
+        "planDayZones": {},
+        "planRules": [],
+        "dayTemplates": []
+      },
+      "now": 1792132200000,
+      "zone": "Europe/Kyiv",
+      "timeline": [
+        {
+          "zoneId": 0,
+          "startAt": 1792098000000,
+          "endAt": 1792126800000
+        },
+        {
+          "zoneId": 1,
+          "startAt": 1792126800000,
+          "endAt": 1792134000000
+        },
+        {
+          "zoneId": 0,
+          "startAt": 1792134000000,
+          "endAt": 1792137600000
+        },
+        {
+          "zoneId": 2,
+          "startAt": 1792137600000,
+          "endAt": 1792141200000
+        },
+        {
+          "zoneId": 0,
+          "startAt": 1792141200000,
+          "endAt": 1792184400000
+        }
+      ],
+      "task": {
+        "id": 107,
+        "title": "Домашня справа",
+        "type": "simple",
+        "done": false,
+        "someday": false,
+        "zoneId": 1,
+        "repeat": "none",
+        "created": "2026-10-15T09:00:00.000Z"
+      },
+      "expectedAvailability": {
+        "eligible": true,
+        "currentZoneId": 1
+      },
+      "expectedSelected": [
+        {
+          "id": 107,
+          "title": "Домашня справа",
+          "type": "simple",
+          "done": false,
+          "someday": false,
+          "zoneId": 1,
+          "repeat": "none",
+          "created": "2026-10-15T09:00:00.000Z",
+          "priorityIndex": -1
+        }
+      ],
+      "kind": "next-zone",
+      "expectedDeferral": {
+        "kind": "next-zone",
+        "requestedAt": 1792132200000,
+        "sourceZoneId": 1,
+        "targetZoneId": 2,
+        "startAt": 1792137600000,
+        "endAt": 1792141200000
       }
     },
     {
@@ -13955,6 +14066,257 @@
         "weekTplSeeded": false,
         "priorities": [
           113
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 0,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      }
+    },
+    {
+      "name": "defer-from-last-named-zone-past-free-time",
+      "initialState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 114,
+            "title": "Вільна справа",
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "zoneId": null,
+            "repeat": "none",
+            "created": "2026-10-15T09:00:00.000Z"
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 3,
+            "nm": "Вечірня зона",
+            "prio": 1,
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ]
+          }
+        ],
+        "nid": 300,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          114
+        ],
+        "focusChips": [],
+        "focusLog": [],
+        "currentFocus": "",
+        "taskEditorDraft": "",
+        "theme": "dark",
+        "preferences": {
+          "themeMode": "system",
+          "reduceMotion": false,
+          "showGamification": true
+        },
+        "xp": 0,
+        "xpTotal": 0,
+        "level": 1,
+        "progressionVersion": 0,
+        "progressDays": [],
+        "dailyInsightClaims": [],
+        "done": 0,
+        "negCount": 0,
+        "unlocked": [],
+        "energy": 0,
+        "lastEnergyXp": 0,
+        "dayXpGained": 0,
+        "xpDay": "",
+        "streak": 1,
+        "rareEvents": [],
+        "qnotes": [],
+        "folders": [
+          {
+            "id": "impulse",
+            "nm": "Імпульс",
+            "ico": "⚡"
+          },
+          {
+            "id": "thought",
+            "nm": "Думка",
+            "ico": "💭"
+          },
+          {
+            "id": "general",
+            "nm": "Загальне",
+            "ico": "📝"
+          },
+          {
+            "id": "therapy",
+            "nm": "Терапія",
+            "ico": "💆"
+          },
+          {
+            "id": "training",
+            "nm": "Тренування",
+            "ico": "💪"
+          },
+          {
+            "id": "food",
+            "nm": "Харчування",
+            "ico": "🍎"
+          },
+          {
+            "id": "work",
+            "nm": "Робота",
+            "ico": "💼"
+          },
+          {
+            "id": "kid",
+            "nm": "Дитина",
+            "ico": "👶"
+          }
+        ],
+        "notepad": "",
+        "notepadFolder": "thought"
+      },
+      "command": {
+        "kind": "next-zone",
+        "taskId": 114,
+        "requestedAt": 1792175400000,
+        "activityAt": 1792175400000,
+        "now": 1792141200000,
+        "zone": "Europe/Kyiv"
+      },
+      "expectedState": {
+        "formatVersion": 2,
+        "tasks": [
+          {
+            "id": 114,
+            "title": "Вільна справа",
+            "type": "simple",
+            "done": false,
+            "someday": false,
+            "zoneId": null,
+            "repeat": "none",
+            "created": "2026-10-15T09:00:00.000Z",
+            "occurrenceId": "114@2026-10-15T09:00:00.000Z|once",
+            "questDeferral": {
+              "kind": "not-today",
+              "requestedAt": 1792175400000,
+              "sourceZoneId": 3,
+              "targetZoneId": 0,
+              "startAt": 1792258200000
+            },
+            "snoozeUntil": 0,
+            "firedSched": false,
+            "firedPre": false,
+            "alarmFired": false
+          }
+        ],
+        "taskHistory": [],
+        "recur": [],
+        "zones": [
+          {
+            "id": 3,
+            "nm": "Вечірня зона",
+            "prio": 1,
+            "slots": [
+              {
+                "s": "18:00",
+                "e": "22:00"
+              }
+            ]
+          }
+        ],
+        "nid": 300,
+        "planItems": {},
+        "planRestDays": {},
+        "planSchedules": {},
+        "planDayZones": {},
+        "planDayOff": {},
+        "planRules": [],
+        "planDayLog": {},
+        "dayTemplates": [],
+        "weekTemplates": [],
+        "weekTplSeeded": false,
+        "priorities": [
+          114
         ],
         "focusChips": [],
         "focusLog": [],

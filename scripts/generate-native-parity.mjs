@@ -656,8 +656,12 @@ const questCaseInputs = [
     state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '09:00' }, { s: '10:00', e: '12:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '09:00', e: '10:00' }] }], priorities: [], tasks: [{ id: 102, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 102, kind: 'next-zone',
   },
   {
-    name: 'last-zone-next-deferral-falls-back-to-not-today', zone: fixedZone, now: Date.parse('2026-10-16T08:30:00.000Z'), days: 1,
-    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '10:00' }] }], priorities: [], tasks: [{ id: 103, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 103, kind: 'next-zone',
+    name: 'last-zone-next-deferral-falls-back-to-not-today', zone: fixedZone, now: Date.parse('2026-10-16T18:30:00.000Z'), days: 1,
+    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '18:00', e: '22:00' }] }], priorities: [], tasks: [{ id: 103, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 103, kind: 'next-zone',
+  },
+  {
+    name: 'next-zone-skips-free-gap-for-next-named-zone', zone: fixedZone, now: Date.parse('2026-10-16T06:30:00.000Z'), days: 1,
+    state: { zones: [{ id: 1, nm: 'Дім', prio: 1, slots: [{ s: '08:00', e: '10:00' }] }, { id: 2, nm: 'Робота', prio: 2, slots: [{ s: '11:00', e: '12:00' }] }], priorities: [], tasks: [{ id: 107, title: 'Домашня справа', type: 'simple', done: false, someday: false, zoneId: 1, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [] }, taskId: 107, kind: 'next-zone',
   },
   {
     name: 'linked-not-today-starts-tomorrow-in-own-zone', zone: fixedZone, now: Date.parse('2026-10-16T08:30:00.000Z'), days: 2,
@@ -720,6 +724,11 @@ const deferCommandCases = [
     tasks: [{ id: 113, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-03-06T15:00:00.000Z' }],
     priorities: [113], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [],
   }, 113, 'not-today', Date.parse('2026-03-07T17:00:00.000Z'), 'America/New_York'),
+  runDeferralFixture('defer-from-last-named-zone-past-free-time', {
+    zones: [{ id: 3, nm: 'Вечірня зона', prio: 1, slots: [{ s: '18:00', e: '22:00' }] }],
+    tasks: [{ id: 114, title: 'Вільна справа', type: 'simple', done: false, someday: false, zoneId: null, repeat: 'none', created: '2026-10-15T09:00:00.000Z' }],
+    priorities: [114], planDayOff: {}, planDayZones: {}, planRules: [], dayTemplates: [],
+  }, 114, 'next-zone', Date.parse('2026-10-16T18:30:00.000Z')),
 ];
 process.env.TZ = fixedZone;
 

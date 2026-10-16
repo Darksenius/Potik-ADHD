@@ -169,6 +169,35 @@ public class QuestPolicyTest {
         assertEquals(0, freeDeferral.targetZoneId);
     }
 
+    @Test public void nextZoneSkipsFreeGapsAndFallsBackToNotTodayAfterLastNamedZone() {
+        long midnight = QuestPolicy.localDateTime(QuestPolicy.localDate(NOW, UTC), "00:00", UTC);
+        long lateRequest = midnight + 21 * 60 * 60_000L;
+        List<QuestPolicy.Segment> lateTimeline = Arrays.asList(
+                new QuestPolicy.Segment(1, midnight + 20 * 60 * 60_000L, midnight + 22 * 60 * 60_000L),
+                new QuestPolicy.Segment(0, midnight + 22 * 60 * 60_000L, midnight + DAY));
+        QuestPolicy.Task linked = QuestPolicy.Task.builder("linked").zone(1).build();
+        QuestPolicy.Task unbound = QuestPolicy.Task.builder("unbound").build();
+
+        QuestPolicy.Deferral linkedDeferral = QuestPolicy.deferNextZone(linked, lateTimeline, lateRequest, UTC);
+        QuestPolicy.Deferral unboundDeferral = QuestPolicy.deferNextZone(unbound, lateTimeline, lateRequest, UTC);
+        assertEquals(QuestPolicy.DEFERRAL_NOT_TODAY, linkedDeferral.kind);
+        assertEquals(1, linkedDeferral.targetZoneId);
+        assertEquals(midnight + DAY, linkedDeferral.startAt);
+        assertEquals(QuestPolicy.DEFERRAL_NOT_TODAY, unboundDeferral.kind);
+        assertEquals(0, unboundDeferral.targetZoneId);
+        assertEquals(lateRequest + 23 * 60 * 60_000L, unboundDeferral.startAt);
+
+        long request = midnight + 9 * 60 * 60_000L;
+        List<QuestPolicy.Segment> gapTimeline = Arrays.asList(
+                new QuestPolicy.Segment(1, midnight + 8 * 60 * 60_000L, midnight + 10 * 60 * 60_000L),
+                new QuestPolicy.Segment(0, midnight + 10 * 60 * 60_000L, midnight + 12 * 60 * 60_000L),
+                new QuestPolicy.Segment(2, midnight + 12 * 60 * 60_000L, midnight + 14 * 60 * 60_000L),
+                new QuestPolicy.Segment(0, midnight + 14 * 60 * 60_000L, midnight + DAY));
+        QuestPolicy.Deferral afterGap = QuestPolicy.deferNextZone(linked, gapTimeline, request, UTC);
+        assertEquals(QuestPolicy.DEFERRAL_NEXT_ZONE, afterGap.kind);
+        assertEquals(2, afterGap.targetZoneId);
+        assertEquals(midnight + 12 * 60 * 60_000L, afterGap.startAt);
+    }
     @Test public void boundNotTodayStaysAvailableInLaterPrimaryOccurrencesOfItsZone() {
         List<QuestPolicy.Segment> timeline = ordinaryTimeline();
         QuestPolicy.Task bound = QuestPolicy.Task.builder("bound").zone(1).build();

@@ -44,6 +44,39 @@ class QuestPolicyTest {
         assertEquals("keep", task.string("unknown"))
     }
 
+    @Test fun lastNamedZoneFollowedByFreeTimeFallsBackToLinkedMidnightOrUnboundTwentyThreeHours() {
+        val request = epoch("2026-10-16T21:30:00Z")
+        val context = QuestPolicy.Context(request, listOf(
+            TimelineSegment(18, epoch("2026-10-16T18:00:00Z"), epoch("2026-10-16T22:00:00Z")),
+            TimelineSegment(0, epoch("2026-10-16T22:00:00Z"), epoch("2026-10-17T00:00:00Z")),
+        ), listOf(json("""{"id":18}""")), zone = utc)
+
+        val linked = QuestPolicy.createDeferral(json("""{"id":10,"type":"simple","zoneId":18}"""), QuestDeferralKind.NEXT_ZONE, context, request)
+        assertEquals("not-today", linked.string("kind"))
+        assertEquals(epoch("2026-10-17T00:00:00Z"), linked.number("startAt")?.toLong())
+
+        val unbound = QuestPolicy.createDeferral(json("""{"id":11,"type":"simple"}"""), QuestDeferralKind.NEXT_ZONE, context, request)
+        assertEquals("not-today", unbound.string("kind"))
+        assertEquals(request + 23L * 60 * 60 * 1000, unbound.number("startAt")?.toLong())
+    }
+
+    @Test fun nextZoneDeferralSkipsFreeGapAndUsesNextNamedZone() {
+        val request = epoch("2026-10-16T18:30:00Z")
+        val startNext = epoch("2026-10-16T20:00:00Z")
+        val endNext = epoch("2026-10-16T22:00:00Z")
+        val context = QuestPolicy.Context(request, listOf(
+            TimelineSegment(18, epoch("2026-10-16T18:00:00Z"), epoch("2026-10-16T19:00:00Z")),
+            TimelineSegment(0, epoch("2026-10-16T19:00:00Z"), startNext),
+            TimelineSegment(22, startNext, endNext),
+        ), listOf(json("""{"id":18}"""), json("""{"id":22}""")), zone = utc)
+
+        val result = QuestPolicy.createDeferral(json("""{"id":12,"type":"simple","zoneId":18}"""), QuestDeferralKind.NEXT_ZONE, context, request)
+        assertEquals("next-zone", result.string("kind"))
+        assertEquals(22L, result.number("targetZoneId")?.toLong())
+        assertEquals(startNext, result.number("startAt")?.toLong())
+        assertEquals(endNext, result.number("endAt")?.toLong())
+    }
+
     @Test fun unboundNotTodayUsesTwentyThreeElapsedHoursAcrossDst() {
         val zone = ZoneId.of("Europe/Kyiv")
         val at = epoch("2026-03-28T12:00:00Z")

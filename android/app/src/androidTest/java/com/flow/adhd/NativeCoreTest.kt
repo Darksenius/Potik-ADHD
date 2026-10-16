@@ -29,6 +29,27 @@ import org.junit.runner.RunWith
 /** Runs only the pure native engine: no Activity, WebView, Room writes, or network. */
 @RunWith(AndroidJUnit4::class)
 class NativeCoreTest {
+    @Test fun lastNamedZoneUsesTheSameFallbackInNotificationsAndNativeCore() {
+        val zone = ZoneId.of("UTC")
+        val at = Instant.parse("2026-10-16T21:30:00Z").toEpochMilli()
+        val state = Json.parseToJsonElement("""{"zones":[{"id":7,"slots":[{"s":"18:00","e":"22:00"}]}]}""") as JsonObject
+        val timeline = ZoneCalendar.timeline(state, at, zone, 2)
+        val task = Json.parseToJsonElement("""{"id":300,"title":"Підмести","zoneId":7}""") as JsonObject
+        val native = QuestPolicy.createDeferral(task, QuestDeferralKind.NEXT_ZONE,
+            QuestPolicy.Context(now = at, timeline = timeline, zones = listOf((state["zones"] as JsonArray)[0] as JsonObject), zone = zone), at)
+        val notification = com.flow.adhd.QuestPolicy.deferNextZone(
+            com.flow.adhd.QuestPolicy.Task.builder("300").zone(7).build(),
+            timeline.map { com.flow.adhd.QuestPolicy.Segment(it.zoneId.toInt(), it.startAt, it.endAt) },
+            at, java.util.TimeZone.getTimeZone("UTC"))
+        check(notification != null)
+        assertEquals("not-today", notification.kind)
+        assertEquals("\"not-today\"", native["kind"].toString())
+        assertEquals(Instant.parse("2026-10-17T00:00:00Z").toEpochMilli(), notification.startAt)
+        assertEquals(notification.startAt.toString(), native["startAt"].toString())
+        assertEquals("7", native["targetZoneId"].toString())
+        assertEquals(7, notification.targetZoneId)
+    }
+
     @Test fun zoneOverlaysDoNotResetCreditAndDeferredTasksReturnToTheirSourceZone() {
         val zone = ZoneId.of("UTC")
         val engine = FlowEngine(mapOf("simple" to 10.0))

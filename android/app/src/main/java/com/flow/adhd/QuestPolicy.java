@@ -884,7 +884,7 @@ final class QuestPolicy {
     static Deferral deferNextZone(Task task,List<Segment> timeline,long now,TimeZone zone) {
         Segment source=segmentAt(timeline,now);if(source==null)return null;
         List<Segment> ordered=new ArrayList<>(timeline);Collections.sort(ordered,Comparator.comparingLong(s->s.startAt));
-        for(Segment s:ordered){if(s.startAt<source.endAt||s.endAt<=now)continue;if(!sameLocalDate(s.startAt,now,zone))break;if(s.zoneId!=source.zoneId)return new Deferral(DEFERRAL_NEXT_ZONE,now,source.zoneId,s.zoneId,s.startAt,s.endAt);}
+        for(Segment s:ordered){if(s.startAt<source.endAt||s.endAt<=now)continue;if(!sameLocalDate(s.startAt,now,zone))break;if(s.zoneId>0&&s.zoneId!=source.zoneId)return new Deferral(DEFERRAL_NEXT_ZONE,now,source.zoneId,s.zoneId,s.startAt,s.endAt);}
         return deferNotToday(task,timeline,now,zone);
     }
     static Deferral deferNotToday(Task task,List<Segment> timeline,long now,TimeZone zone) {

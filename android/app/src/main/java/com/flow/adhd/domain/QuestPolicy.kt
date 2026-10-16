@@ -54,7 +54,7 @@ object QuestPolicy {
         val requestedDay = localDay(requestedAt, context.zone)
         if (kind == QuestDeferralKind.NEXT_ZONE) {
             val next = context.timeline.firstOrNull {
-                it.startAt > requestedAt && localDay(it.startAt, context.zone) == requestedDay && it.zoneId != sourceZone
+                it.startAt > requestedAt && localDay(it.startAt, context.zone) == requestedDay && it.zoneId > 0L && it.zoneId != sourceZone
             }
             if (next != null) return buildJsonObject {
                 put("kind", "next-zone"); put("requestedAt", requestedAt); put("sourceZoneId", sourceZone)

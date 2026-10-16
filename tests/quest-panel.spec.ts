@@ -98,6 +98,36 @@ test('not-today deferral uses local midnight for eligibility and the target zone
   expect(getQuestTaskAvailability({ ...unbound, questDeferral: openDeferral }, { ...ctx, now: new Date(openDeferral.startAt) }).eligible).toBe(true);
 });
 
+test('next-zone after the last named zone follows not-today instead of targeting free time', () => {
+  const zones: Zone[] = [{ id: 7, nm: 'Вечір', color: '#a0f', prio: 1, slots: [{ s: '18:00', e: '22:00' }] }];
+  const requestedAt = new Date('2026-10-14T21:30:00').getTime();
+  const ctx = contextAt(new Date(requestedAt), zones, 2);
+  const linked = task(27, { zoneId: 7 });
+  const deferred = createQuestDeferral(linked, 'next-zone', { requestedAt, timeline: ctx.timeline, zones });
+  expect(deferred).toEqual({ kind: 'not-today', requestedAt, sourceZoneId: 7, targetZoneId: 7,
+    startAt: new Date('2026-10-15T00:00:00').getTime() });
+  expect(getQuestTaskAvailability({ ...linked, questDeferral: deferred }, { ...ctx, now: new Date('2026-10-14T22:30:00') }).eligible).toBe(false);
+  expect(getQuestTaskAvailability({ ...linked, questDeferral: deferred }, { ...ctx, now: new Date('2026-10-15T18:30:00') }).eligible).toBe(true);
+  const unbound = createQuestDeferral(task(28), 'next-zone', { requestedAt, timeline: ctx.timeline, zones });
+  expect(unbound).toEqual({ kind: 'not-today', requestedAt, sourceZoneId: 7, targetZoneId: 0,
+    startAt: requestedAt + 23 * 60 * 60 * 1000 });
+});
+
+test('next-zone skips a free gap and waits for the next named zone', () => {
+  const zones: Zone[] = [
+    { id: 1, nm: 'Ранок', color: '#0f0', prio: 1, slots: [{ s: '08:00', e: '10:00' }] },
+    { id: 2, nm: 'Робота', color: '#00f', prio: 1, slots: [{ s: '11:00', e: '12:00' }] },
+  ];
+  const requestedAt = new Date('2026-10-14T09:30:00').getTime();
+  const ctx = contextAt(new Date(requestedAt), zones);
+  const original = task(29, { zoneId: 1 });
+  const deferral = createQuestDeferral(original, 'next-zone', { requestedAt, timeline: ctx.timeline, zones });
+  expect(deferral).toMatchObject({ kind: 'next-zone', sourceZoneId: 1, targetZoneId: 2,
+    startAt: new Date('2026-10-14T11:00:00').getTime() });
+  expect(getQuestTaskAvailability({ ...original, questDeferral: deferral }, { ...ctx, now: new Date('2026-10-14T10:30:00') }).eligible).toBe(false);
+  expect(getQuestTaskAvailability({ ...original, questDeferral: deferral }, { ...ctx, now: new Date('2026-10-14T11:30:00') }).eligible).toBe(true);
+});
+
 test('a scheduled deferral has one reminder at the first own-zone start and no old pre-reminder', () => {
   const zones: Zone[] = [
     { id: 9, nm: 'Робота', color: '#0f0', prio: 1, slots: [{ s: '10:00', e: '13:00' }] },

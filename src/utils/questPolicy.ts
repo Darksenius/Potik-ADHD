@@ -328,7 +328,8 @@ export function createQuestDeferral(
   if (kind === 'next-zone') {
     const day = fmtDate(requestedDate);
     const next = input.timeline.find(segment =>
-      segment.startAt > requestedAt && fmtDate(new Date(segment.startAt)) === day && segment.zoneId !== sourceZoneId,
+      segment.startAt > requestedAt && fmtDate(new Date(segment.startAt)) === day
+        && segment.zoneId > 0 && segment.zoneId !== sourceZoneId,
     );
     if (next) return {
       kind: 'next-zone',
