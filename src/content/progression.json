@@ -1,0 +1,456 @@
+{
+  "achievements": [
+    {
+      "id": "first",
+      "icon": "🎯",
+      "name": "Перший крок",
+      "description": "Заверши першу задачу.",
+      "metric": "done",
+      "target": 1
+    },
+    {
+      "id": "ten",
+      "icon": "🔟",
+      "name": "10 задач",
+      "description": "Заверши десять задач.",
+      "metric": "done",
+      "target": 10
+    },
+    {
+      "id": "xp100",
+      "icon": "🧘",
+      "name": "100 досвіду",
+      "description": "Зароби загалом 100 од.",
+      "metric": "xpTotal",
+      "target": 100
+    },
+    {
+      "id": "zones",
+      "icon": "🗂",
+      "name": "5 зон",
+      "description": "У твоєму просторі є п’ять зон.",
+      "metric": "zonesCount",
+      "target": 5
+    },
+    {
+      "id": "pro",
+      "icon": "🏆",
+      "name": "Рівень 5",
+      "description": "Дійди до п’ятого рівня.",
+      "metric": "level",
+      "target": 5
+    },
+    {
+      "id": "habit",
+      "icon": "🔁",
+      "name": "П’ять завершень",
+      "description": "Заверши п’ять задач.",
+      "metric": "done",
+      "target": 5
+    },
+    {
+      "id": "done25",
+      "icon": "📌",
+      "name": "Упевнена хода",
+      "description": "Заверши 25 задач.",
+      "metric": "done",
+      "target": 25
+    },
+    {
+      "id": "done50",
+      "icon": "🧭",
+      "name": "Пів сотні кроків",
+      "description": "Заверши 50 задач.",
+      "metric": "done",
+      "target": 50
+    },
+    {
+      "id": "done100",
+      "icon": "💯",
+      "name": "Сотня справ",
+      "description": "Заверши 100 задач.",
+      "metric": "done",
+      "target": 100
+    },
+    {
+      "id": "done250",
+      "icon": "🌟",
+      "name": "Чверть тисячі",
+      "description": "Заверши 250 задач.",
+      "metric": "done",
+      "target": 250
+    },
+    {
+      "id": "done500",
+      "icon": "🏅",
+      "name": "П’ятсот перемог",
+      "description": "Заверши 500 задач.",
+      "metric": "done",
+      "target": 500
+    },
+    {
+      "id": "xp500",
+      "icon": "✨",
+      "name": "Зоряний запас",
+      "description": "Зароби загалом 500 од.",
+      "metric": "xpTotal",
+      "target": 500
+    },
+    {
+      "id": "xp1000",
+      "icon": "🌠",
+      "name": "Тисяча од.",
+      "description": "Зароби загалом 1 000 од.",
+      "metric": "xpTotal",
+      "target": 1000
+    },
+    {
+      "id": "xp2500",
+      "icon": "🔥",
+      "name": "Велике полум’я",
+      "description": "Зароби загалом 2 500 од.",
+      "metric": "xpTotal",
+      "target": 2500
+    },
+    {
+      "id": "xp5000",
+      "icon": "💎",
+      "name": "Скарб досвіду",
+      "description": "Зароби загалом 5 000 од.",
+      "metric": "xpTotal",
+      "target": 5000
+    },
+    {
+      "id": "level10",
+      "icon": "🛠",
+      "name": "Будівничий звичок",
+      "description": "Дійди до рівня 10.",
+      "metric": "level",
+      "target": 10
+    },
+    {
+      "id": "level15",
+      "icon": "🎼",
+      "name": "Майстер ритму",
+      "description": "Дійди до рівня 15.",
+      "metric": "level",
+      "target": 15
+    },
+    {
+      "id": "level20",
+      "icon": "🪨",
+      "name": "Витривалий",
+      "description": "Дійди до рівня 20.",
+      "metric": "level",
+      "target": 20
+    },
+    {
+      "id": "level25",
+      "icon": "♟️",
+      "name": "Стратег",
+      "description": "Дійди до рівня 25.",
+      "metric": "level",
+      "target": 25
+    },
+    {
+      "id": "level30",
+      "icon": "💡",
+      "name": "Натхненник",
+      "description": "Дійди до рівня 30.",
+      "metric": "level",
+      "target": 30
+    },
+    {
+      "id": "level40",
+      "icon": "🧑‍🚀",
+      "name": "Провідник",
+      "description": "Дійди до рівня 40.",
+      "metric": "level",
+      "target": 40
+    },
+    {
+      "id": "level50",
+      "icon": "🎻",
+      "name": "Віртуоз",
+      "description": "Дійди до рівня 50.",
+      "metric": "level",
+      "target": 50
+    },
+    {
+      "id": "level60",
+      "icon": "🤝",
+      "name": "Опора команди",
+      "description": "Дійди до рівня 60.",
+      "metric": "level",
+      "target": 60
+    },
+    {
+      "id": "level75",
+      "icon": "🗻",
+      "name": "Майстер шляху",
+      "description": "Дійди до рівня 75.",
+      "metric": "level",
+      "target": 75
+    },
+    {
+      "id": "level100",
+      "icon": "👑",
+      "name": "Легенда Потоку",
+      "description": "Дійди до рівня 100.",
+      "metric": "level",
+      "target": 100
+    },
+    {
+      "id": "active1",
+      "icon": "🌱",
+      "name": "Початок шляху",
+      "description": "Зроби щось корисне в один день.",
+      "metric": "activeDays",
+      "target": 1
+    },
+    {
+      "id": "active3",
+      "icon": "🍀",
+      "name": "Три активні дні",
+      "description": "Збери три дні з реальною активністю.",
+      "metric": "activeDays",
+      "target": 3
+    },
+    {
+      "id": "active7",
+      "icon": "🗓️",
+      "name": "Тиждень руху",
+      "description": "Збери сім активних днів.",
+      "metric": "activeDays",
+      "target": 7
+    },
+    {
+      "id": "active14",
+      "icon": "🌿",
+      "name": "Два тижні",
+      "description": "Збери 14 активних днів.",
+      "metric": "activeDays",
+      "target": 14
+    },
+    {
+      "id": "active21",
+      "icon": "🌳",
+      "name": "Три тижні",
+      "description": "Збери 21 активний день.",
+      "metric": "activeDays",
+      "target": 21
+    },
+    {
+      "id": "active30",
+      "icon": "🦋",
+      "name": "Місяць поступу",
+      "description": "Збери 30 активних днів.",
+      "metric": "activeDays",
+      "target": 30
+    },
+    {
+      "id": "active45",
+      "icon": "🧶",
+      "name": "Стійкий темп",
+      "description": "Збери 45 активних днів.",
+      "metric": "activeDays",
+      "target": 45
+    },
+    {
+      "id": "active60",
+      "icon": "🪴",
+      "name": "Два місяці дій",
+      "description": "Збери 60 активних днів.",
+      "metric": "activeDays",
+      "target": 60
+    },
+    {
+      "id": "active75",
+      "icon": "🦉",
+      "name": "Мудрий поступ",
+      "description": "Збери 75 активних днів.",
+      "metric": "activeDays",
+      "target": 75
+    },
+    {
+      "id": "active100",
+      "icon": "🎉",
+      "name": "Сто активних днів",
+      "description": "Збери 100 днів, у які ти справді щось зробив.",
+      "metric": "activeDays",
+      "target": 100
+    }
+  ],
+  "levelTitles": [
+    {
+      "level": 1,
+      "title": "Початківець"
+    },
+    {
+      "level": 5,
+      "title": "Дослідник"
+    },
+    {
+      "level": 10,
+      "title": "Будівничий звичок"
+    },
+    {
+      "level": 15,
+      "title": "Майстер ритму"
+    },
+    {
+      "level": 20,
+      "title": "Витривалий"
+    },
+    {
+      "level": 25,
+      "title": "Стратег"
+    },
+    {
+      "level": 30,
+      "title": "Натхненник"
+    },
+    {
+      "level": 40,
+      "title": "Провідник"
+    },
+    {
+      "level": 50,
+      "title": "Віртуоз"
+    },
+    {
+      "level": 60,
+      "title": "Опора команди"
+    },
+    {
+      "level": 75,
+      "title": "Майстер шляху"
+    },
+    {
+      "level": 100,
+      "title": "Легенда Потоку"
+    }
+  ],
+  "tokens": [
+    {
+      "id": "token-01",
+      "day": 5,
+      "title": "Зернятко",
+      "icon": "🌰"
+    },
+    {
+      "id": "token-02",
+      "day": 10,
+      "title": "Листочок",
+      "icon": "🍃"
+    },
+    {
+      "id": "token-03",
+      "day": 15,
+      "title": "Краплина",
+      "icon": "💧"
+    },
+    {
+      "id": "token-04",
+      "day": 20,
+      "title": "Іскра",
+      "icon": "✨"
+    },
+    {
+      "id": "token-05",
+      "day": 25,
+      "title": "Пір’їнка",
+      "icon": "🪶"
+    },
+    {
+      "id": "token-06",
+      "day": 30,
+      "title": "Мушля",
+      "icon": "🐚"
+    },
+    {
+      "id": "token-07",
+      "day": 35,
+      "title": "Медальйон",
+      "icon": "🪙"
+    },
+    {
+      "id": "token-08",
+      "day": 40,
+      "title": "Зірочка",
+      "icon": "⭐"
+    },
+    {
+      "id": "token-09",
+      "day": 45,
+      "title": "Кристал",
+      "icon": "🔮"
+    },
+    {
+      "id": "token-10",
+      "day": 50,
+      "title": "Компас",
+      "icon": "🧭"
+    },
+    {
+      "id": "token-11",
+      "day": 55,
+      "title": "Мініатюрна книга",
+      "icon": "📕"
+    },
+    {
+      "id": "token-12",
+      "day": 60,
+      "title": "Місяць",
+      "icon": "🌙"
+    },
+    {
+      "id": "token-13",
+      "day": 65,
+      "title": "Сонячний знак",
+      "icon": "☀️"
+    },
+    {
+      "id": "token-14",
+      "day": 70,
+      "title": "Квітка",
+      "icon": "🌼"
+    },
+    {
+      "id": "token-15",
+      "day": 75,
+      "title": "Маяк",
+      "icon": "🗼"
+    },
+    {
+      "id": "token-16",
+      "day": 80,
+      "title": "Планета",
+      "icon": "🪐"
+    },
+    {
+      "id": "token-17",
+      "day": 85,
+      "title": "Паперовий кораблик",
+      "icon": "⛵"
+    },
+    {
+      "id": "token-18",
+      "day": 90,
+      "title": "Полярна зірка",
+      "icon": "🌟"
+    },
+    {
+      "id": "token-19",
+      "day": 95,
+      "title": "Корона",
+      "icon": "👑"
+    },
+    {
+      "id": "token-20",
+      "day": 100,
+      "title": "Знак легенди",
+      "icon": "🏵️"
+    }
+  ]
+}

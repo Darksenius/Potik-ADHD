@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -96,7 +97,8 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                     page == "notes" -> NativeNotesScreen(snapshot, draft, status, busy, model::editNotepad, model::command,
                         model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f))
                     page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f))
-                    page == "more" -> NativeDevelopmentMore(snapshot, projection, busy, model::command, onInsight = { insightDay = it }, modifier = Modifier.weight(1f))
+                    page == "more" -> NativeDevelopmentMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
+                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f))
                     else -> NativeTasksScreen(snapshot, projection, busy, model::command,
                         onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f))
                 }
@@ -146,7 +148,8 @@ private fun NativeNavigationIcon(index: Int) {
 }
 
 @Composable
-private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit, onInsight: (String) -> Unit, modifier: Modifier) {
+private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject, content: NativeContent, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit,
+    onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, modifier: Modifier) {
     var destination by rememberSaveable { mutableStateOf("") }
     if (destination.isNotEmpty()) {
         BackHandler { destination = "" }
@@ -155,18 +158,27 @@ private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject
             when (destination) {
                 "zones" -> NativeZonesScreen(snapshot, busy, onCommand, Modifier.weight(1f))
                 "folders" -> NativeFoldersScreen(snapshot, busy, onCommand, Modifier.weight(1f))
+                "stats" -> NativeStatsScreen(snapshot, content, busy, onCommand, onInsight, Modifier.weight(1f))
+                "state" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "daily",
+                    header = { NativeStateControls(snapshot, busy, onCommand) })
+                "alltasks" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "all")
             }
         }
         return
     }
-    Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Нативний Потік", style = MaterialTheme.typography.headlineSmall)
         Text("Задачі, редактор, нотатки та План уже працюють через нативне ядро. Пресети, налаштування та інші екрани ще переносяться. Це окрема збірка для розробки.")
         Text("Рів ${snapshot.level} · ${snapshot.xpTotal.toLong()} од")
         OutlinedButton(onClick = { destination = "zones" }) { Text("Зони") }
         OutlinedButton(onClick = { destination = "folders" }) { Text("Папки нотаток") }
+        OutlinedButton(onClick = { destination = "alltasks" }) { Text("Усі задачі") }
+        OutlinedButton(onClick = { destination = "state" }) { Text("Стан") }
+        OutlinedButton(onClick = { destination = "stats" }) { Text("Статистика") }
         val insight = projection["dailyInsight"] as? JsonObject
         if (insight != null) OutlinedButton(onClick = { onInsight((insight["day"] as? JsonPrimitive)?.content.orEmpty()) }) { Text("Думка дня") }
         Text("Тестові дані цієї збірки зберігаються окремо від основного застосунку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+      }
+    } }
 }

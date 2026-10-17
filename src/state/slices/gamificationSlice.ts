@@ -1,3 +1,4 @@
+import progressionCatalog from '../../content/progression.json' with { type: 'json' };
 import type { AppSlice } from '../store';
 import type { AchievementCheckContext, Achievement, EnergyLevel, RareEvent } from '../../types';
 import { PROGRESSION_VERSION, initializeProgression as migrateProgression, recordProgressDay as addProgressDay, progressionFromXp, totalXpToReachLevel } from '../../utils/progression';
@@ -14,54 +15,12 @@ import { archiveInsightClaims, claimDailyInsight, type DailyInsightClaim } from 
  */
 
 const XP_DAILY_CAP = 250;
-const progress = (current: (s: AchievementCheckContext) => number, target: number) =>
-  (s: AchievementCheckContext) => ({ current: Math.min(target, current(s)), target });
-const achievement = (id: string, ico: string, nm: string, description: string,
-  current: (s: AchievementCheckContext) => number, target: number): Achievement => ({
-  id, ico, nm, description, progress: progress(current, target), check: (s) => current(s) >= target,
+export const ACHIEVEMENTS: Achievement[] = progressionCatalog.achievements.map((definition) => {
+  const current = (state: AchievementCheckContext) => state[definition.metric as keyof AchievementCheckContext];
+  return { id: definition.id, ico: definition.icon, nm: definition.name, description: definition.description,
+    progress: (state) => ({ current: Math.min(definition.target, current(state)), target: definition.target }),
+    check: (state) => current(state) >= definition.target };
 });
-const done = (s: AchievementCheckContext) => s.done;
-const xp = (s: AchievementCheckContext) => s.xpTotal;
-const level = (s: AchievementCheckContext) => s.level;
-const days = (s: AchievementCheckContext) => s.activeDays;
-
-export const ACHIEVEMENTS: Achievement[] = [
-  achievement('first', '🎯', 'Перший крок', 'Заверши першу задачу.', done, 1),
-  achievement('ten', '🔟', '10 задач', 'Заверши десять задач.', done, 10),
-  achievement('xp100', '🧘', '100 досвіду', 'Зароби загалом 100 од.', xp, 100),
-  achievement('zones', '🗂', '5 зон', 'У твоєму просторі є п’ять зон.', (s) => s.zonesCount, 5),
-  achievement('pro', '🏆', 'Рівень 5', 'Дійди до п’ятого рівня.', level, 5),
-  achievement('habit', '🔁', 'П’ять завершень', 'Заверши п’ять задач.', done, 5),
-  achievement('done25', '📌', 'Упевнена хода', 'Заверши 25 задач.', done, 25),
-  achievement('done50', '🧭', 'Пів сотні кроків', 'Заверши 50 задач.', done, 50),
-  achievement('done100', '💯', 'Сотня справ', 'Заверши 100 задач.', done, 100),
-  achievement('done250', '🌟', 'Чверть тисячі', 'Заверши 250 задач.', done, 250),
-  achievement('done500', '🏅', 'П’ятсот перемог', 'Заверши 500 задач.', done, 500),
-  achievement('xp500', '✨', 'Зоряний запас', 'Зароби загалом 500 од.', xp, 500),
-  achievement('xp1000', '🌠', 'Тисяча од.', 'Зароби загалом 1 000 од.', xp, 1000),
-  achievement('xp2500', '🔥', 'Велике полум’я', 'Зароби загалом 2 500 од.', xp, 2500),
-  achievement('xp5000', '💎', 'Скарб досвіду', 'Зароби загалом 5 000 од.', xp, 5000),
-  achievement('level10', '🛠', 'Будівничий звичок', 'Дійди до рівня 10.', level, 10),
-  achievement('level15', '🎼', 'Майстер ритму', 'Дійди до рівня 15.', level, 15),
-  achievement('level20', '🪨', 'Витривалий', 'Дійди до рівня 20.', level, 20),
-  achievement('level25', '♟️', 'Стратег', 'Дійди до рівня 25.', level, 25),
-  achievement('level30', '💡', 'Натхненник', 'Дійди до рівня 30.', level, 30),
-  achievement('level40', '🧑‍🚀', 'Провідник', 'Дійди до рівня 40.', level, 40),
-  achievement('level50', '🎻', 'Віртуоз', 'Дійди до рівня 50.', level, 50),
-  achievement('level60', '🤝', 'Опора команди', 'Дійди до рівня 60.', level, 60),
-  achievement('level75', '🗻', 'Майстер шляху', 'Дійди до рівня 75.', level, 75),
-  achievement('level100', '👑', 'Легенда Потоку', 'Дійди до рівня 100.', level, 100),
-  achievement('active1', '🌱', 'Початок шляху', 'Зроби щось корисне в один день.', days, 1),
-  achievement('active3', '🍀', 'Три активні дні', 'Збери три дні з реальною активністю.', days, 3),
-  achievement('active7', '🗓️', 'Тиждень руху', 'Збери сім активних днів.', days, 7),
-  achievement('active14', '🌿', 'Два тижні', 'Збери 14 активних днів.', days, 14),
-  achievement('active21', '🌳', 'Три тижні', 'Збери 21 активний день.', days, 21),
-  achievement('active30', '🦋', 'Місяць поступу', 'Збери 30 активних днів.', days, 30),
-  achievement('active45', '🧶', 'Стійкий темп', 'Збери 45 активних днів.', days, 45),
-  achievement('active60', '🪴', 'Два місяці дій', 'Збери 60 активних днів.', days, 60),
-  achievement('active75', '🦉', 'Мудрий поступ', 'Збери 75 активних днів.', days, 75),
-  achievement('active100', '🎉', 'Сто активних днів', 'Збери 100 днів, у які ти справді щось зробив.', days, 100),
-];
 
 export interface GamificationSlice {
   xp: number;

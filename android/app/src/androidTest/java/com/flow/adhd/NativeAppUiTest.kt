@@ -104,4 +104,29 @@ class NativeAppUiTest {
             compose.onNodeWithTag("native-zones").assertIsDisplayed()
         }
     }
+
+    @Test fun statePersistsEnergyAndFocusAndShowsAllOfflineProgressionContent() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assumeTrue(BuildConfig.NATIVE_RUNTIME && context.packageName.endsWith(".native"))
+        val app = AppContainer.get(context)
+        val focus = "Увага ${System.currentTimeMillis()}"
+        ActivityScenario.launch(NativeFlowActivity::class.java).use {
+            compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("native-nav-more").performClick()
+            compose.onNodeWithText("Стан", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("native-energy-5").performClick()
+            compose.waitUntil(10_000) { ((app.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.data?.get("energy") as? kotlinx.serialization.json.JsonPrimitive)?.content == "5" }
+            compose.onNodeWithTag("native-tasks").performScrollToNode(hasTestTag("native-focus-input"))
+            compose.onNodeWithTag("native-focus-input").performTextInput(focus)
+            compose.onNodeWithTag("native-focus-start").performScrollTo().performClick()
+            compose.waitUntil(10_000) { ((app.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.data?.get("currentFocus") as? kotlinx.serialization.json.JsonPrimitive)?.content == focus }
+            compose.onNodeWithText("← Ще").performClick()
+            compose.onNodeWithText("Статистика", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithTag("native-stats").assertIsDisplayed()
+            assertEquals(35, (app.nativeContent.progression["achievements"] as kotlinx.serialization.json.JsonArray).size)
+            assertEquals(20, (app.nativeContent.progression["tokens"] as kotlinx.serialization.json.JsonArray).size)
+            compose.onNodeWithTag("native-stats").performScrollToNode(hasText("Колекція знаків", substring = true))
+            compose.onNodeWithText("Колекція знаків", substring = true).assertIsDisplayed()
+        }
+    }
 }

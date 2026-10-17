@@ -1,3 +1,4 @@
+import progressionCatalog from '../content/progression.json' with { type: 'json' };
 import type { QuickNote, TaskHistoryEvent } from '../types';
 
 export const PROGRESSION_VERSION = 2;
@@ -114,20 +115,7 @@ export function initializeProgression(state: ProgressionSnapshot, now = Date.now
   };
 }
 
-export const LEVEL_TITLES: ReadonlyArray<{ level: number; title: string }> = [
-  { level: 1, title: 'Початківець' },
-  { level: 5, title: 'Дослідник' },
-  { level: 10, title: 'Будівничий звичок' },
-  { level: 15, title: 'Майстер ритму' },
-  { level: 20, title: 'Витривалий' },
-  { level: 25, title: 'Стратег' },
-  { level: 30, title: 'Натхненник' },
-  { level: 40, title: 'Провідник' },
-  { level: 50, title: 'Віртуоз' },
-  { level: 60, title: 'Опора команди' },
-  { level: 75, title: 'Майстер шляху' },
-  { level: 100, title: 'Легенда Потоку' },
-];
+export const LEVEL_TITLES: ReadonlyArray<{ level: number; title: string }> = progressionCatalog.levelTitles;
 
 export interface CollectibleToken {
   id: string;
@@ -137,28 +125,7 @@ export interface CollectibleToken {
 }
 
 /** One non-XP collectible is earned at each five-active-day milestone. */
-export const COLLECTIBLE_TOKENS: ReadonlyArray<CollectibleToken> = [
-  { id: 'token-01', day: 5, title: 'Зернятко', icon: '🌰' },
-  { id: 'token-02', day: 10, title: 'Листочок', icon: '🍃' },
-  { id: 'token-03', day: 15, title: 'Краплина', icon: '💧' },
-  { id: 'token-04', day: 20, title: 'Іскра', icon: '✨' },
-  { id: 'token-05', day: 25, title: 'Пір’їнка', icon: '🪶' },
-  { id: 'token-06', day: 30, title: 'Мушля', icon: '🐚' },
-  { id: 'token-07', day: 35, title: 'Медальйон', icon: '🪙' },
-  { id: 'token-08', day: 40, title: 'Зірочка', icon: '⭐' },
-  { id: 'token-09', day: 45, title: 'Кристал', icon: '🔮' },
-  { id: 'token-10', day: 50, title: 'Компас', icon: '🧭' },
-  { id: 'token-11', day: 55, title: 'Мініатюрна книга', icon: '📕' },
-  { id: 'token-12', day: 60, title: 'Місяць', icon: '🌙' },
-  { id: 'token-13', day: 65, title: 'Сонячний знак', icon: '☀️' },
-  { id: 'token-14', day: 70, title: 'Квітка', icon: '🌼' },
-  { id: 'token-15', day: 75, title: 'Маяк', icon: '🗼' },
-  { id: 'token-16', day: 80, title: 'Планета', icon: '🪐' },
-  { id: 'token-17', day: 85, title: 'Паперовий кораблик', icon: '⛵' },
-  { id: 'token-18', day: 90, title: 'Полярна зірка', icon: '🌟' },
-  { id: 'token-19', day: 95, title: 'Корона', icon: '👑' },
-  { id: 'token-20', day: 100, title: 'Знак легенди', icon: '🏵️' },
-];
+export const COLLECTIBLE_TOKENS: ReadonlyArray<CollectibleToken> = progressionCatalog.tokens;
 
 export function tokensEarnedForActiveDays(activeDays: number): CollectibleToken[] {
   const count = Number.isFinite(activeDays) ? Math.max(0, Math.floor(activeDays)) : 0;

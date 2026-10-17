@@ -4,14 +4,14 @@ import android.content.Context
 import kotlinx.serialization.json.*
 
 /** Loads the same authored catalogs as the web app, entirely from the installed APK. */
-data class NativeContent(val taskXp: Map<String, Double>, val insights: Map<Int, JsonObject>) {
+data class NativeContent(val taskXp: Map<String, Double>, val insights: Map<Int, JsonObject>, val progression: JsonObject = JsonObject(emptyMap())) {
     companion object {
         fun load(context: Context): NativeContent {
             fun read(name: String) = context.assets.open("public/contracts/$name").bufferedReader(Charsets.UTF_8).use { it.readText() }
-            return parse(read("task-types.json"), read("daily-insights.json"))
+            return parse(read("task-types.json"), read("daily-insights.json"), read("progression.json"))
         }
 
-        fun parse(taskTypesJson: String, insightsJson: String): NativeContent {
+        fun parse(taskTypesJson: String, insightsJson: String, progressionJson: String? = null): NativeContent {
             val types = Json.parseToJsonElement(taskTypesJson) as? JsonObject ?: error("Task catalog must be an object")
             require(types.isNotEmpty()) { "Task catalog must not be empty" }
             val taskXp = types.mapValues { (type, value) ->
@@ -33,7 +33,11 @@ data class NativeContent(val taskXp: Map<String, Double>, val insights: Map<Int,
                 }
                 insights[id] = card
             }
-            return NativeContent(taskXp, insights)
+            val progression = progressionJson?.let { Json.parseToJsonElement(it) as? JsonObject ?: error("Progression catalog must be an object") } ?: JsonObject(emptyMap())
+            if (progressionJson != null) {
+                require((progression["achievements"] as? JsonArray)?.size == 35 && (progression["tokens"] as? JsonArray)?.size == 20) { "Progression catalog is incomplete" }
+            }
+            return NativeContent(taskXp, insights, progression)
         }
     }
 }

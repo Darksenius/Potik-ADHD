@@ -80,5 +80,8 @@ if (process.argv.includes('--clean')) {
   const insightData = JSON.parse(fs.readFileSync(insights, 'utf8'));
   if (!Array.isArray(insightData.cards) || insightData.cards.length !== 100) throw new Error('Expected 100 offline daily insights.');
   fs.copyFileSync(insights, path.join(contracts, 'daily-insights.json'));
+  const progression = path.join(ROOT, 'src', 'content', 'progression.json');
+  JSON.parse(fs.readFileSync(progression, 'utf8'));
+  fs.copyFileSync(progression, path.join(contracts, 'progression.json'));
   console.log('Embedded license and text from ' + files.length + ' files; revision ' + revision + '. Generated native task catalog.');
 }

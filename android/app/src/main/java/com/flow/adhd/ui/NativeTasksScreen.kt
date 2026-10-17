@@ -82,8 +82,10 @@ fun NativeTasksScreen(
     onCreate: () -> Unit,
     onEdit: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    initialFilter: String = "now",
+    header: @Composable () -> Unit = {},
 ) {
-    var filter by rememberSaveable { mutableStateOf("now") }
+    var filter by rememberSaveable(initialFilter) { mutableStateOf(initialFilter) }
     var filterMenu by remember { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -108,6 +110,7 @@ fun NativeTasksScreen(
         "all" -> tasks.filterNot { it.trashed }
         "someday" -> tasks.filter { it.someday && !it.trashed }
         "journal" -> tasks.filter { it.type == "negative" && !it.trashed && !it.someday }
+        "daily" -> tasks.filter { !it.trashed && !it.someday && (it.type == "counter" || it.type == "negative" || it.raw.booleanValue("counterEnabled") == true || it.raw.stringValue("repeat")?.let { value -> value != "none" } == true) }
         "trash" -> tasks.filter { it.trashed }
         else -> currentTasks
     }
@@ -132,6 +135,7 @@ fun NativeTasksScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item { header() }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (showGamification) {
@@ -155,7 +159,7 @@ fun NativeTasksScreen(
                             modifier = Modifier.testTag("native-task-filter"),
                         ) { Text("Показати") }
                         DropdownMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }) {
-                            for (key in listOf("now", "all", "someday", "journal", "trash")) {
+                            for (key in listOf("now", "all", "daily", "someday", "journal", "trash")) {
                                 DropdownMenuItem(
                                     text = { Text(taskFilterLabel(key)) },
                                     onClick = { filter = key; search = ""; filterMenu = false },
@@ -171,6 +175,7 @@ fun NativeTasksScreen(
                         "all" -> "Усі задачі, включно з майбутніми, відкладеними й виконаними."
                         "someday" -> "Поверни задачу, коли знову захочеш до неї взятися."
                         "journal" -> "Фіксація події збільшує журнал. Завершення задачі тут немає."
+                        "daily" -> "Лічильники та повторювані справи. Нове входження з’являється за розкладом."
                         else -> "Віднови потрібну задачу або видали її назавжди."
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -563,6 +568,7 @@ private fun taskTypeLabels(context: Context): Map<String, String> = runCatching 
 }.getOrDefault(emptyMap())
 
 private fun taskFilterLabel(filter: String) = when (filter) {
+    "daily" -> "Повсякденні задачі"
     "all" -> "Усі задачі"
     "someday" -> "Колись"
     "journal" -> "Журнал подій"
