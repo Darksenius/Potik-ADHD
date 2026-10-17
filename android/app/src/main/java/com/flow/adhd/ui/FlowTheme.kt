@@ -2,6 +2,8 @@ package com.flow.adhd.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
@@ -14,6 +16,11 @@ private val PotikColors = darkColorScheme(
 )
 
 @Composable
-fun FlowTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = PotikColors, content = content)
+fun FlowTheme(mode: String = "system", content: @Composable () -> Unit) {
+    val dark = mode == "dark" || (mode != "light" && isSystemInDarkTheme())
+    MaterialTheme(colorScheme = if (dark) PotikColors else lightColorScheme(
+        primary = Color(0xFFAF3B12), onPrimary = Color.White,
+        background = Color(0xFFFFF9F5), surface = Color(0xFFFFF9F5),
+        surfaceVariant = Color(0xFFF3E1D9), onSurfaceVariant = Color(0xFF54433C),
+    ), content = content)
 }

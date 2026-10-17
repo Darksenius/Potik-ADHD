@@ -34,6 +34,7 @@ class AppContainer private constructor(context: Context) {
     }
     val notificationInbox by lazy { NativeNotificationInbox(FlowDatabase.getInstance(context.applicationContext), commandRepository, snapshotPreparation::archivePending) }
     val nativeRuntime by lazy { NativeRuntime(context.applicationContext, commandRepository, notificationInbox, snapshotPreparation) }
+    val storageTools by lazy { NativeStorageTools(context.applicationContext, nativeRuntime, nativeContent) }
 
     companion object {
         @Volatile

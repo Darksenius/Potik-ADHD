@@ -75,9 +75,11 @@ fun NativeNotesScreen(
     onSaveNotepadAsNote: (String?, () -> Unit) -> Unit,
     onMakeTask: () -> Unit,
     modifier: Modifier = Modifier,
+    openNoteId: Long? = null,
 ) {
     val folders = remember(snapshot) { notesFolders(snapshot) }
     val notes = remember(snapshot) { notesEntries(snapshot) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val storedDestination = snapshot.data.noteText("notepadFolder").orEmpty()
     val destination = folders.firstOrNull { it.id == storedDestination }?.id
         ?: folders.firstOrNull()?.id.orEmpty()
@@ -95,6 +97,11 @@ fun NativeNotesScreen(
     val visibleNotes = notes.filter { note ->
         (filterFolder == null || note.folder == filterFolder) &&
             (search.isEmpty() || note.text.contains(search, ignoreCase = true))
+    }
+    LaunchedEffect(openNoteId, notes.any { it.id == openNoteId }) {
+        val note = notes.firstOrNull { it.id == openNoteId } ?: return@LaunchedEffect
+        filterFolder = null; query = ""; editingId = note.id; editText = note.text; editFolder = note.folder
+        listState.scrollToItem(3 + notes.indexOf(note))
     }
 
     LaunchedEffect(folders.map { it.id }) {
@@ -114,6 +121,7 @@ fun NativeNotesScreen(
     }
 
     LazyColumn(
+        state = listState,
         modifier = modifier.fillMaxSize().imePadding().testTag("native-notes"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),

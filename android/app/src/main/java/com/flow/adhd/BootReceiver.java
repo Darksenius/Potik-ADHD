@@ -29,6 +29,7 @@ public class BootReceiver extends BroadcastReceiver {
                 // RTC deadlines and the native wall-day projection both depend
                 // on the device calendar. scheduleAll is reentrant on this lane.
                 FlowAlarmReceiver.scheduleAll(appContext);
+                if (BuildConfig.NATIVE_RUNTIME) FlowNoteReview.reschedule(appContext);
                 if (clockChanged || exactAlarmPermissionChanged) FlowNotifService.start(appContext);
             } catch (Exception e) {
                 android.util.Log.w("BootReceiver", "Unable to refresh native schedules", e);

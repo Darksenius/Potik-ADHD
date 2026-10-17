@@ -50,9 +50,7 @@ class NativeTaskEditorTest {
     @Test
     fun everyInstalledTypeCanBeChosenAndChecklistStepsReachTheSavePayload() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val catalog = context.assets.open("public/contracts/task-types.json").bufferedReader(Charsets.UTF_8).use {
-            Json.parseToJsonElement(it.readText()) as JsonObject
-        }
+        val catalog = Json.parseToJsonElement(com.flow.adhd.data.NativeContent.read(context, "task-types.json")) as JsonObject
         assertEquals(10, catalog.size)
         var saved: JsonObject? = null
         show(fixture()) { saved = it }

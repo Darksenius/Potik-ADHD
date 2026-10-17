@@ -68,6 +68,7 @@ android {
     }
     // A separate development install proves single native ownership without touching the owner's app.
     sourceSets.nativeDebug.java.srcDirs += 'src/debug/java'
+    sourceSets.nativeDebug.manifest.srcFile 'src/debug/AndroidManifest.xml'
     testBuildType project.findProperty('flowTestBuildType') ?: 'debug'
     compileOptions {
         coreLibraryDesugaringEnabled true
@@ -154,6 +155,26 @@ afterEvaluate {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// Native content is packaged directly from authored sources, independently of Vite/Capacitor sync.
+def nativeAssets = layout.buildDirectory.dir('generated/potikAssets')
+tasks.register('prepareNativeContent', Sync) {
+    into nativeAssets
+    from(rootProject.file('../src/content')) { include '*.json'; into 'content' }
+    from(rootProject.file('../LICENSE')) { into 'content'; rename { 'license.txt' } }
+    from(rootProject.file('../README.md')) { into 'content'; rename { 'readme.md' } }
+    def nativeSources = fileTree('src/main/java') { include '**/*.java', '**/*.kt' }
+    inputs.files(nativeSources)
+    doLast {
+        def text = new StringBuilder('Potik native sources\n\n')
+        nativeSources.files.sort { a, b -> a.path <=> b.path }.each { source ->
+            text.append('\n\n=== ').append(project.relativePath(source)).append(' ===\n').append(source.getText('UTF-8'))
+        }
+        new File(nativeAssets.get().asFile, 'content/source.txt').setText(text.toString(), 'UTF-8')
+    }
+}
+android.sourceSets.main.assets.srcDir(nativeAssets)
+tasks.named('preBuild').configure { dependsOn 'prepareNativeContent' }
 try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {

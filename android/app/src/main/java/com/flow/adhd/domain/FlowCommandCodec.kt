@@ -73,6 +73,8 @@ object FlowCommandCodec {
             is FlowCommand.UpdateWeekTemplate -> fields("UpdateWeekTemplate", command, "templateId" to str(command.templateId), "payload" to command.payload)
             is FlowCommand.DeleteWeekTemplate -> fields("DeleteWeekTemplate", command, "templateId" to str(command.templateId))
             is FlowCommand.ApplyWeekTemplate -> fields("ApplyWeekTemplate", command, "templateId" to str(command.templateId), "startDate" to str(command.startDate), "spanDays" to num(command.spanDays))
+            is FlowCommand.InstallDemoPreset -> fields("InstallDemoPreset", command, "payload" to command.payload)
+            is FlowCommand.ClearDemoTasks -> fields("ClearDemoTasks", command)
             is FlowCommand.DeletePlanRule -> fields("DeletePlanRule", command, "index" to num(command.index))
             is FlowCommand.SetFocus -> fields("SetFocus", command, "value" to str(command.value))
             is FlowCommand.ClearFocus -> fields("ClearFocus", command)
@@ -156,6 +158,8 @@ object FlowCommandCodec {
                 "UpdateWeekTemplate" -> read(value, "templateId", "payload") { c -> FlowCommand.UpdateWeekTemplate(c.string("templateId"), c.obj("payload"), c.commandId, c.activityAt) }
                 "DeleteWeekTemplate" -> read(value, "templateId") { c -> FlowCommand.DeleteWeekTemplate(c.string("templateId"), c.commandId, c.activityAt) }
                 "ApplyWeekTemplate" -> read(value, "templateId", "startDate", "spanDays") { c -> FlowCommand.ApplyWeekTemplate(c.string("templateId"), c.string("startDate"), c.int("spanDays"), c.commandId, c.activityAt) }
+                "InstallDemoPreset" -> read(value, "payload") { c -> FlowCommand.InstallDemoPreset(c.obj("payload"), c.commandId, c.activityAt) }
+                "ClearDemoTasks" -> read(value) { c -> FlowCommand.ClearDemoTasks(c.commandId, c.activityAt) }
                 "DeletePlanRule" -> read(value, "index") { c -> FlowCommand.DeletePlanRule(c.int("index"), c.commandId, c.activityAt) }
                 "SetFocus" -> read(value, "value") { c -> FlowCommand.SetFocus(c.string("value"), c.commandId, c.activityAt) }
                 "ClearFocus" -> read(value) { c -> FlowCommand.ClearFocus(c.commandId, c.activityAt) }
@@ -184,7 +188,7 @@ object FlowCommandCodec {
         "MoveTask", "MoveTaskToSomeday", "RestoreTaskFromSomeday", "TrashTask", "RestoreTrashedTask", "HardDeleteTask", "SetPriority",
         "AddQuickNote", "CaptureNote", "RecordPastTaskDone", "MarkTaskReminderFired", "ApplyNotificationEvent", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "FileNotepadAsNote", "ConvertNotepadToTask", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
         "CreateZone", "UpdateZone", "DeleteZone", "SetZoneOff", "SetPlanDay", "SetPlanRestDay", "SetPlanDayNote", "ResetPlanDay", "SetPlanZoneOff", "EditPlanZoneForDay", "AddPlanItem", "UpdatePlanItem", "DeletePlanItem",
-        "CreateTemplate", "UpdateTemplate", "DeleteTemplate", "ApplyTemplate", "CreateWeekTemplate", "UpdateWeekTemplate", "DeleteWeekTemplate", "ApplyWeekTemplate", "DeletePlanRule",
+        "CreateTemplate", "UpdateTemplate", "DeleteTemplate", "ApplyTemplate", "CreateWeekTemplate", "UpdateWeekTemplate", "DeleteWeekTemplate", "ApplyWeekTemplate", "InstallDemoPreset", "ClearDemoTasks", "DeletePlanRule",
         "SetFocus", "ClearFocus", "AddFocusChip", "RemoveFocusChip", "SetEnergy", "SetPreferences", "SetTaskEditorDraft", "CreateRareEvent", "ChangeRareEvent", "DeleteRareEvent", "LifecycleTick", "ImportSnapshot", "RestoreSnapshot",
     )
 

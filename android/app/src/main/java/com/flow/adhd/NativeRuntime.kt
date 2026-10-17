@@ -7,13 +7,19 @@ import com.flow.adhd.data.CommandCommit
 import com.flow.adhd.data.NativeCommandRepository
 import com.flow.adhd.data.SnapshotPreparation
 import com.flow.adhd.domain.FlowCommand
+import com.flow.adhd.domain.FlowEvent
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+
+/** A post-commit UI/runtime action. Consumers handle it only while their Activity is present. */
+data class NativeRuntimeEffect(val event: FlowEvent)
 
 /** One application-owned lane for UI commands and queued background actions; never waits on flow-storage. */
 class NativeRuntime internal constructor(
@@ -25,6 +31,9 @@ class NativeRuntime internal constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val operations = Mutex()
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
+    private val effectQueue = Channel<NativeRuntimeEffect>(Channel.UNLIMITED)
+    /** One-shot committed effects; buffered until an Activity collects, never launches UI itself. */
+    val effects: Flow<NativeRuntimeEffect> = effectQueue.receiveAsFlow()
     private val mutableError = MutableStateFlow<String?>(null)
     val error = mutableError.asStateFlow()
     private val editorDraftLock = Any()
@@ -89,7 +98,7 @@ class NativeRuntime internal constructor(
         while (true) {
             when (val batch = inbox.drain()) {
                 null -> return null
-                is CommandCommit.Committed -> Unit
+                is CommandCommit.Committed -> enqueueEffects(batch)
                 else -> return batch
             }
         }
@@ -98,7 +107,11 @@ class NativeRuntime internal constructor(
     private suspend fun initialize(): CommandCommit? {
         if (initialized) return null
         val result = repository.initialize(preparation)
-        if (result is CommandCommit.Committed) { initialized = true; return null }
+        if (result is CommandCommit.Committed) {
+            initialized = true
+            try { FlowNoteReview.reschedule(context) } catch (error: Exception) { android.util.Log.w("NativeRuntime", "Unable to restore note reviews", error) }
+            return null
+        }
         return result
     }
 
@@ -109,6 +122,7 @@ class NativeRuntime internal constructor(
             is CommandCommit.Failed -> "Не вдалося зберегти дані (${result.code}). Спробуй ще раз."
         }
         if (result is CommandCommit.Committed) {
+            enqueueEffects(result)
             // Derived Android effects follow the durable transaction and cannot roll it back.
             try { FlowAlarmReceiver.scheduleAll(context) } catch (error: Exception) {
                 android.util.Log.w("NativeRuntime", "Unable to schedule reminders", error)
@@ -121,6 +135,16 @@ class NativeRuntime internal constructor(
             }
         }
         return result
+    }
+
+    private fun enqueueEffects(result: CommandCommit.Committed) {
+        result.events.filter { it.type == "note_review_requested" }.forEach { event ->
+            val note = (event.payload["noteId"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
+            val due = (event.payload["dueAt"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
+            if (note != null && due != null) try { FlowNoteReview.schedule(context, note, due) }
+            catch (error: Exception) { android.util.Log.w("NativeRuntime", "Unable to schedule note review", error) }
+        }
+        nativeRuntimeEffects(result).forEach { effectQueue.trySend(it) }
     }
 
     companion object {
@@ -138,3 +162,9 @@ class NativeRuntime internal constructor(
         }
     }
 }
+
+/** Keep only effects that need a foreground native UI. Domain mutations are already committed. */
+internal fun nativeRuntimeEffects(result: CommandCommit): List<NativeRuntimeEffect> =
+    (result as? CommandCommit.Committed)?.events.orEmpty()
+        .filter { it.type in setOf("navigate_note", "navigate_task", "navigate_insight", "note_review_requested") }
+        .map(::NativeRuntimeEffect)

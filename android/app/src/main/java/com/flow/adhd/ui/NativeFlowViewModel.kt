@@ -20,6 +20,7 @@ data class NativeUndoAction(val taskId: Long, val receipt: JsonObject, val comma
 class NativeFlowViewModel(private val runtime: NativeRuntime, private val content: NativeContent) : ViewModel() {
     val snapshots = runtime.repository.state
     val error = runtime.error
+    val effects = runtime.effects
     private val mutableDraft = MutableStateFlow("")
     val notepad = mutableDraft.asStateFlow()
     private val mutableStatus = MutableStateFlow("Відкриваю…")

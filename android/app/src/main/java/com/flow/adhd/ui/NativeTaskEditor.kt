@@ -73,13 +73,13 @@ fun NativeTaskEditor(
     modifier: Modifier = Modifier,
     onSnooze: ((JsonObject, Long?, Boolean) -> Unit)? = null,
     onDraftChanged: (String) -> Unit = {},
+    checklistDefinition: Boolean = false,
 ) {
     val context = LocalContext.current
     val catalog by produceState<EditorTypeCatalog?>(null, context) {
         value = withContext(Dispatchers.IO) {
             runCatching {
-                val raw = context.assets.open("public/contracts/task-types.json")
-                    .bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val raw = com.flow.adhd.data.NativeContent.read(context, "task-types.json")
                 val source = Json.parseToJsonElement(raw) as JsonObject
                 require(source.isNotEmpty())
                 EditorTypeCatalog(source.map { (id, definition) ->
@@ -118,7 +118,8 @@ fun NativeTaskEditor(
     var reminderAdvance by rememberSaveable(taskId) { mutableStateOf(seed.editorNumberText("remindBeforeMinutes", "0")) }
     var tags by rememberSaveable(taskId) { mutableStateOf((seed["tags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { entry -> entry.isString }?.content }.joinToString(", ")) }
     var contextTags by rememberSaveable(taskId) { mutableStateOf((seed["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }.joinToString(", ")) }
-    var checklist by rememberSaveable(taskId) { mutableStateOf(seed.editorText("checklistDraft").orEmpty()) }
+    var checklist by rememberSaveable(taskId) { mutableStateOf(seed.editorText("checklistDraft") ?: if (checklistDefinition)
+        (seed["items"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().joinToString("\n") { it.editorText("text").orEmpty() } else "") }
     var keepPast by rememberSaveable(taskId) { mutableStateOf(false) }
     var error by rememberSaveable(taskId) { mutableStateOf("") }
     val unavailable = taskId != null && existing == null
@@ -203,7 +204,7 @@ fun NativeTaskEditor(
             if (type == "alarm") put("alarmTime", JsonPrimitive(alarmTime.trim()))
             if (type == "timewin") { put("windowStart", JsonPrimitive(windowStart.trim())); put("windowEnd", JsonPrimitive(windowEnd.trim())) }
             if (type == "negative") put("negXp", JsonPrimitive(penalty!!))
-            if (type == "check" && storedItems.isNullOrEmpty()) put("items", JsonArray(checklist.lineSequence().mapNotNull { line ->
+            if (type == "check" && (storedItems.isNullOrEmpty() || checklistDefinition)) put("items", JsonArray(checklist.lineSequence().mapNotNull { line ->
                 line.trim().takeIf(String::isNotEmpty)?.let { text -> buildJsonObject {
                     put("text", text); put("done", false); put("credited", false)
                 } }
@@ -241,7 +242,7 @@ fun NativeTaskEditor(
                 catalog?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
             if (type == "check") item {
-                if (storedItems.isNullOrEmpty()) {
+                if (storedItems.isNullOrEmpty() || checklistDefinition) {
                     EditorInput("Кроки — кожен із нового рядка", checklist, { checklist = it; error = "" }, "native-task-checklist", enabled, minLines = 4)
                 } else {
                     EditorHeading("Кроки задачі")

@@ -41,6 +41,8 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.ApplyTemplate -> TemplateReducer.reduce(snapshot, command, zone, now, taskXp.keys)
         is FlowCommand.CreateWeekTemplate, is FlowCommand.UpdateWeekTemplate, is FlowCommand.DeleteWeekTemplate,
         is FlowCommand.ApplyWeekTemplate, is FlowCommand.DeletePlanRule -> WeekTemplateReducer.reduce(snapshot, command, zone, now, taskXp.keys)
+        is FlowCommand.InstallDemoPreset -> DemoActions.reduce(snapshot, command, zone, now, taskXp.keys)
+        is FlowCommand.ClearDemoTasks -> DemoActions.clear(snapshot, command, zone)
         is FlowCommand.SetFocus, is FlowCommand.ClearFocus, is FlowCommand.AddFocusChip, is FlowCommand.RemoveFocusChip ->
             FocusReducer.reduce(snapshot, command, zone)
         is FlowCommand.SetEnergy -> Experience.setEnergy(snapshot.data, command.value, command.activityAt, zone, now)

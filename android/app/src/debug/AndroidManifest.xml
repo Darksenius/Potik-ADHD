@@ -6,7 +6,7 @@
             android:theme="@style/AppTheme.NoActionBar" />
         <provider
             android:name="com.flow.adhd.FlowBackupTestDocumentsProvider"
-            android:authorities="com.flow.adhd.backup-test-documents"
+            android:authorities="${applicationId}.backup-test-documents"
             android:exported="true"
             android:grantUriPermissions="true"
             android:permission="android.permission.MANAGE_DOCUMENTS" />

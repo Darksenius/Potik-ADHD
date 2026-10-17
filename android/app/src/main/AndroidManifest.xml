@@ -92,6 +92,10 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name="com.flow.adhd.FlowNoteReviewReceiver"
+            android:exported="false" />
+
         <!-- Перепланування будильників і запуск сервісу після перезавантаження -->
         <receiver
             android:name="com.flow.adhd.BootReceiver"

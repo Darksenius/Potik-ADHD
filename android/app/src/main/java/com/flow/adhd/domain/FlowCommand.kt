@@ -107,6 +107,8 @@ sealed class FlowCommand(
     data class UpdateWeekTemplate(val templateId: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteWeekTemplate(val templateId: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class ApplyWeekTemplate(val templateId: String, val startDate: String, val spanDays: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class InstallDemoPreset(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class ClearDemoTasks(override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeletePlanRule(val index: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
 
     data class SetFocus(val value: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)

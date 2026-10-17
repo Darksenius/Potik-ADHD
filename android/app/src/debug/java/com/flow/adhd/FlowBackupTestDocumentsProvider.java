@@ -14,7 +14,7 @@ import java.io.IOException;
 
 /** Tiny filesystem-backed SAF provider used only by FlowBackupStore instrumentation tests. */
 public final class FlowBackupTestDocumentsProvider extends DocumentsProvider {
-    static final String AUTHORITY = "com.flow.adhd.backup-test-documents";
+    static final String AUTHORITY = BuildConfig.APPLICATION_ID + ".backup-test-documents";
     static volatile boolean failBackupRename;
     private File root;
 

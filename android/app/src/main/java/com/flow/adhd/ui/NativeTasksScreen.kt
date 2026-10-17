@@ -584,7 +584,7 @@ private fun TaskCompletionTarget(task: FlowTask, enabled: Boolean, onClick: () -
 }
 
 private fun taskTypeLabels(context: Context): Map<String, String> = runCatching {
-    val source = context.assets.open("public/contracts/task-types.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+    val source = com.flow.adhd.data.NativeContent.read(context, "task-types.json")
     val catalog = Json.parseToJsonElement(source) as JsonObject
     catalog.mapNotNull { (key, value) -> (value as? JsonObject)?.stringValue("label")?.let { key to it } }.toMap()
 }.getOrDefault(emptyMap())

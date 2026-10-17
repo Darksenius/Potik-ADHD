@@ -1,0 +1,35 @@
+{
+  "id": "potik-intro-v1",
+  "folder": { "id": "potik-intro-day", "name": "DEMO · День і нотатки", "icon": "🧭" },
+  "zones": [
+    { "key": "morning", "name": "Ранок · демо", "color": "#e4aa35", "start": "07:00", "end": "12:00", "description": "Приклад часової зони для ознайомлення." },
+    { "key": "afternoon", "name": "Після обіду · демо", "color": "#4386d9", "start": "13:00", "end": "18:00", "description": "Друга зона; розклад задач і дати задаються окремо." }
+  ],
+  "today": [
+    { "id": "errand", "title": "Забрати посилку", "type": "simple", "note": "Код отримання: 4821. Справа без обов’язкового часу.", "repeat": "none" },
+    { "id": "call", "title": "Подзвонити майстру", "type": "sched", "note": "Часова справа: дата й час зберігаються окремо.", "repeat": "none", "fields": { "schedTime": "14:30", "reminderEnabled": false }, "zone": null },
+    { "id": "leaving", "title": "Перед виходом", "type": "check", "note": "Зона дає часовий контекст; відміть окремі кроки.", "zone": "morning", "fields": { "items": [{ "text": "Ключі", "done": false }, { "text": "Документи", "done": false }, { "text": "Навушники", "done": false }] } },
+    { "id": "pages", "title": "Переглянути три сторінки", "type": "counter", "note": "Лічильник обсягу з ціллю 3.", "repeat": "none", "fields": { "counterTarget": 3, "counterEnabled": true, "counterStep": 1, "counterUnit": "count" } },
+    { "id": "filter", "title": "Замовити фільтр", "type": "note", "note": "Розмір 20×25 см. Перевірити сумісність перед замовленням.", "repeat": "none" },
+    { "id": "light", "title": "Вимкнути зовнішнє світло", "type": "alarm", "note": "Приклад сигналу у заданий час; сигнал вимкнено, доки ти не ввімкнеш нагадування.", "repeat": "none", "fields": { "alarmTime": "22:00", "reminderEnabled": false } },
+    { "id": "air", "title": "Провітрити кімнату", "type": "timewin", "note": "Вікно часу обмежує показ задачі.", "zone": "morning", "repeat": "none", "fields": { "windowStart": "09:00", "windowEnd": "11:00" } },
+    { "id": "photos", "title": "Розібрати фото", "type": "ctx", "note": "Мітки контексту й зона — різні підказки.", "zone": "afternoon", "fields": { "repeatInterval": 2, "repeatUnit": "day", "repeatMs": 172800000, "ctxTags": ["вдома", "15 хв"] } },
+    { "id": "impulse", "title": "Записати небажаний імпульс", "type": "negative", "note": "Журнал фіксує подію, це не дія для «Виконано». У цьому прикладі штраф досвіду вимкнено.", "repeat": "none", "fields": { "repeatDays": [true, false, true, false, true, false, false], "negXp": 0 } },
+    { "id": "sweep", "title": "Підмести підлогу під час входу", "type": "zonelinked", "note": "Справа для конкретної зони. Окремий приклад нижче демонструє повтор «Кожна зона».", "zone": "afternoon", "repeat": "none" }
+  ],
+  "tomorrow": [
+    { "id": "r-daily", "title": "Повтор: щодня", "type": "simple", "note": "Приклад повторення «Щодня».", "repeat": "daily" },
+    { "id": "r-weekly", "title": "Повтор: щотижня", "type": "check", "note": "Приклад повторення «Щотижня».", "repeat": "weekly" },
+    { "id": "r-weekdays", "title": "Повтор: будні", "type": "counter", "note": "Приклад повторення «Будні».", "repeat": "weekdays", "fields": { "counterTarget": 5, "counterEnabled": true } },
+    { "id": "r-weekend", "title": "Повтор: вихідні", "type": "note", "note": "Приклад повторення «Вихідні».", "repeat": "weekend" },
+    { "id": "r-interval", "title": "Повтор: раз на 2 дні", "type": "ctx", "note": "Приклад повторення за інтервалом.", "repeat": "interval", "fields": { "repeatInterval": 2, "repeatUnit": "day", "repeatMs": 172800000, "ctxTags": ["приклад"] } },
+    { "id": "r-custom", "title": "Повтор: пн, ср, пт", "type": "timewin", "note": "Приклад вибраних днів тижня.", "repeat": "custom", "fields": { "repeatDays": [true, false, true, false, true, false, false], "windowStart": "10:00", "windowEnd": "12:00" } },
+    { "id": "r-everyzone", "title": "Повтор: кожна зона", "type": "zonelinked", "zone": "morning", "note": "Приклад повторення при кожному вході у зону.", "repeat": "everyzone" },
+    { "id": "r-none", "title": "Без повторення", "type": "alarm", "note": "Разова справа без повторення; сигнал вимкнено.", "repeat": "none", "fields": { "alarmTime": "18:00", "reminderEnabled": false } }
+  ],
+  "notes": [
+    { "text": "DEMO · Сьогодні, {today}: переглянь план і вибери один крок.", "time": "09:00" },
+    { "text": "DEMO · Завтра, {tomorrow}: подзвонити майстру о 14:30.", "time": "14:30" },
+    { "text": "DEMO · Зона задає часовий контекст; планова дата — окреме поле.", "time": "" }
+  ]
+}

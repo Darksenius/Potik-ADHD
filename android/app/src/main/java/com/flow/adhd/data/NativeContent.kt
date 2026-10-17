@@ -7,9 +7,11 @@ import kotlinx.serialization.json.*
 data class NativeContent(val taskXp: Map<String, Double>, val insights: Map<Int, JsonObject>, val progression: JsonObject = JsonObject(emptyMap())) {
     companion object {
         fun load(context: Context): NativeContent {
-            fun read(name: String) = context.assets.open("public/contracts/$name").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            fun read(name: String) = read(context, name)
             return parse(read("task-types.json"), read("daily-insights.json"), read("progression.json"))
         }
+
+        fun read(context: Context, name: String): String = context.assets.open("content/$name").bufferedReader(Charsets.UTF_8).use { it.readText() }
 
         fun parse(taskTypesJson: String, insightsJson: String, progressionJson: String? = null): NativeContent {
             val types = Json.parseToJsonElement(taskTypesJson) as? JsonObject ?: error("Task catalog must be an object")

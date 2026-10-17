@@ -17,13 +17,19 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.flow.adhd.R
+import com.flow.adhd.AppContainer
+import com.flow.adhd.NativeStorageTools
 import com.flow.adhd.data.NativeContent
 import com.flow.adhd.domain.*
 import java.util.UUID
@@ -33,7 +39,11 @@ import kotlinx.serialization.json.*
 
 /** Native development shell. It uses the same command owner as the background service. */
 @Composable
-fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingInsight: String?, content: NativeContent) {
+fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingInsight: String?, content: NativeContent, incomingNote: Long? = null) {
+    val context = LocalContext.current
+    val tools = remember(context) { AppContainer.get(context).storageTools }
+    val recoveryPrefs = remember(context) { context.getSharedPreferences("native_recovery", android.content.Context.MODE_PRIVATE) }
+    var recoveryNotice by remember { mutableStateOf(recoveryPrefs.getBoolean("notice", false)) }
     val read by model.snapshots.collectAsStateWithLifecycle()
     val projection by model.projection.collectAsStateWithLifecycle()
     val draft by model.notepad.collectAsStateWithLifecycle()
@@ -54,11 +64,27 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var editorId by rememberSaveable { mutableStateOf<Long?>(null) }
     var insightDay by rememberSaveable { mutableStateOf<String?>(null) }
+    var openedNote by rememberSaveable { mutableStateOf<Long?>(null) }
     var touch by remember { mutableStateOf(Offset(140f, 300f)) }
     val snapshot = (read as? SnapshotRead.Ready)?.snapshot
     val edit: (Long) -> Unit = { editorId = it; editorOpen = true }
     LaunchedEffect(incomingTask, snapshot != null) { if (incomingTask != null && snapshot?.tasks?.any { it.id == incomingTask } == true) edit(incomingTask) }
     LaunchedEffect(incomingInsight) { if (incomingInsight != null) insightDay = incomingInsight }
+    LaunchedEffect(incomingNote) { if (incomingNote != null) { openedNote = incomingNote; page = "notes" } }
+    LaunchedEffect(snapshot != null) { if (snapshot != null) recoveryNotice = recoveryPrefs.getBoolean("notice", false) }
+    val lifecycle = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycle) {
+        lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            model.effects.collect { effect ->
+                val payload = effect.event.payload
+                when (effect.event.type) {
+                    "navigate_note" -> { openedNote = (payload["noteId"] as? JsonPrimitive)?.longOrNull; editorOpen = false; page = "notes" }
+                    "navigate_task" -> (payload["taskId"] as? JsonPrimitive)?.longOrNull?.let { edit(it) }
+                    "navigate_insight" -> insightDay = (payload["day"] as? JsonPrimitive)?.content
+                }
+            }
+        }
+    }
     BackHandler(editorOpen && !busy) { editorOpen = false }
 
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(Unit) {
@@ -75,7 +101,8 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                 if (!editorOpen) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(R.drawable.potik_mark), null, Modifier.size(32.dp))
                     Text("Потік", Modifier.weight(1f).padding(start = 10.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Нативна розробка", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if ((snapshot?.data?.get("preferences") as? JsonObject)?.get("showGamification") != JsonPrimitive(false))
+                        Text("Рів ${snapshot?.level ?: 1} · ${snapshot?.xpTotal?.toLong() ?: 0} од", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             bottomBar = {
@@ -88,6 +115,10 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
+                if (recoveryNotice) Surface(color = MaterialTheme.colorScheme.secondaryContainer) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Старі дані збережено в архів. Його можна експортувати в Налаштуваннях.", Modifier.weight(1f))
+                    TextButton(onClick = { recoveryPrefs.edit().putBoolean("notice", false).apply(); recoveryNotice = false }) { Text("Гаразд") }
+                } }
                 if (error != null) Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().testTag("native-save-error")) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(error.orEmpty(), Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
@@ -106,10 +137,10 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                         onSnooze = { payload, minutes, tomorrow -> model.command(FlowCommand.SaveTaskEditor(editorId, payload, minutes, tomorrow, UUID.randomUUID().toString(), System.currentTimeMillis())) { editorOpen = false } },
                         onDraftChanged = model::editTaskDraft)
                     page == "notes" -> NativeNotesScreen(snapshot, draft, status, busy, model::editNotepad, model::command,
-                        model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f))
+                        model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f), openNoteId = openedNote)
                     page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f))
                     page == "more" -> NativeDevelopmentMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
-                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f))
+                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, tools = tools, modifier = Modifier.weight(1f))
                     else -> NativeTasksScreen(snapshot, projection, busy, model::command,
                         onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f))
                 }
@@ -160,7 +191,7 @@ private fun NativeNavigationIcon(index: Int) {
 
 @Composable
 private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject, content: NativeContent, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit,
-    onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, modifier: Modifier) {
+    onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, tools: NativeStorageTools, modifier: Modifier) {
     var destination by rememberSaveable { mutableStateOf("") }
     if (destination.isNotEmpty()) {
         BackHandler { destination = "" }
@@ -171,6 +202,7 @@ private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject
                 "folders" -> NativeFoldersScreen(snapshot, busy, onCommand, Modifier.weight(1f))
                 "presets" -> NativePresetsScreen(snapshot, busy, onCommand, Modifier.weight(1f))
                 "stats" -> NativeStatsScreen(snapshot, content, busy, onCommand, onInsight, Modifier.weight(1f))
+                "settings" -> NativeSettingsScreen(snapshot, busy, onCommand, tools, Modifier.weight(1f))
                 "state" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "daily",
                     header = { NativeStateControls(snapshot, busy, onCommand) })
                 "alltasks" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "all")
@@ -180,8 +212,7 @@ private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject
     }
     LazyColumn(modifier, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Нативний Потік", style = MaterialTheme.typography.headlineSmall)
-        Text("Задачі, редактор, нотатки та План уже працюють через нативне ядро. Пресети, налаштування та інші екрани ще переносяться. Це окрема збірка для розробки.")
+        Text("Ще", style = MaterialTheme.typography.headlineSmall)
         Text("Рів ${snapshot.level} · ${snapshot.xpTotal.toLong()} од")
         OutlinedButton(onClick = { destination = "zones" }) { Text("Зони") }
         OutlinedButton(onClick = { destination = "folders" }) { Text("Папки нотаток") }
@@ -189,9 +220,10 @@ private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject
         OutlinedButton(onClick = { destination = "alltasks" }) { Text("Усі задачі") }
         OutlinedButton(onClick = { destination = "state" }) { Text("Стан") }
         OutlinedButton(onClick = { destination = "stats" }) { Text("Статистика") }
+        OutlinedButton(onClick = { destination = "settings" }, modifier = Modifier.testTag("native-open-settings")) { Text("Налаштування") }
         val insight = projection["dailyInsight"] as? JsonObject
         if (insight != null) OutlinedButton(onClick = { onInsight((insight["day"] as? JsonPrimitive)?.content.orEmpty()) }) { Text("Думка дня") }
-        Text("Тестові дані цієї збірки зберігаються окремо від основного застосунку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (com.flow.adhd.BuildConfig.APPLICATION_ID.endsWith(".native")) Text("Тестові дані цієї збірки зберігаються окремо від основного застосунку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     } }
 }

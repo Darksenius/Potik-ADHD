@@ -5,6 +5,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModelProvider
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.serialization.json.*
 import com.flow.adhd.ui.FlowTheme
 import com.flow.adhd.ui.NativeFlowScreen
 import com.flow.adhd.ui.NativeFlowViewModel
@@ -14,6 +17,7 @@ class NativeFlowActivity : ComponentActivity() {
     private lateinit var model: NativeFlowViewModel
     private var incomingTaskId: Long? = null
     private var incomingInsight: String? = null
+    private var incomingNote: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,7 +29,11 @@ class NativeFlowActivity : ComponentActivity() {
     }
 
     private fun render() = setContent {
-        FlowTheme { NativeFlowScreen(model, incomingTaskId, incomingInsight, AppContainer.get(this).nativeContent) }
+        val read by model.snapshots.collectAsStateWithLifecycle()
+        val prefs = ((read as? com.flow.adhd.domain.SnapshotRead.Ready)?.snapshot?.data?.get("preferences")) as? JsonObject
+        FlowTheme((prefs?.get("themeMode") as? JsonPrimitive)?.content ?: "system") {
+            NativeFlowScreen(model, incomingTaskId, incomingInsight, AppContainer.get(this).nativeContent, incomingNote)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -38,6 +46,7 @@ class NativeFlowActivity : ComponentActivity() {
     private fun handleIncoming(intent: Intent?, shared: Boolean) {
         incomingTaskId = intent?.getStringExtra("openTaskId")?.toLongOrNull()
         incomingInsight = intent?.getStringExtra("openInsightDay")
+        incomingNote = intent?.getStringExtra("openNoteId")?.toLongOrNull()
         if (!shared && intent?.action == Intent.ACTION_SEND && intent.type == "text/plain" && !intent.getBooleanExtra("shared", false)) {
             val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString()?.trim().orEmpty().take(500)
             val body = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim().orEmpty()
@@ -54,7 +63,7 @@ class NativeFlowActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
     }
 
-    override fun onResume() { super.onResume(); if (::model.isInitialized) model.refresh() }
+    override fun onResume() { super.onResume(); if (::model.isInitialized) { model.refresh(); AppContainer.get(this).storageTools.refresh() } }
     override fun onPause() {
         if (::model.isInitialized) model.flushDraft()
         if (BuildConfig.NATIVE_RUNTIME) AppContainer.get(this).nativeRuntime.flushBackup()

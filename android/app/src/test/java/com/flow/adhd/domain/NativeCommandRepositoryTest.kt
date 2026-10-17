@@ -153,6 +153,25 @@ class NativeCommandRepositoryTest {
     }
 
     /** Transactional test double: mutations are private copies until the block returns normally. */
+    @Test fun changingImportRequiresAnArchiveButIdenticalRestoreDoesNotArchiveAgain() = runBlocking {
+        val store = MemoryCommandStore(initial)
+        val copies = mutableListOf<String>()
+        var archiveAllowed = false
+        val repo = NativeCommandRepository(store, FlowEngine(mapOf("simple" to 10.0)), { zone }, { now },
+            archiveBeforeReplacement = { raw -> if (archiveAllowed) { copies += raw; true } else false })
+        val payload = kotlinx.serialization.json.Json.parseToJsonElement("""{"formatVersion":2,"tasks":[],"qnotes":[{"id":7,"txt":"Keep this note"}]}""").let { it as JsonObject }
+        assertTrue(repo.dispatch(FlowCommand.RestoreSnapshot(payload, "blocked", now)) is CommandCommit.Rejected)
+        assertEquals(initial, store.snapshot)
+        assertEquals(null, store.journal)
+        archiveAllowed = true
+        val first = repo.dispatch(FlowCommand.RestoreSnapshot(payload, "restore", now)) as CommandCommit.Committed
+        assertEquals(listOf(initial), copies)
+        val second = repo.dispatch(FlowCommand.RestoreSnapshot(payload, "again", now + 1)) as CommandCommit.Committed
+        assertEquals(first.snapshot.data - setOf("saveDate", "qnid"), second.snapshot.data - setOf("saveDate", "qnid"))
+        assertEquals(1, copies.size)
+    }
+
+    /** Transactional test double: mutations are private copies until the block returns normally. */
     private class MemoryCommandStore(
         snapshot: String?,
         journal: String? = null,

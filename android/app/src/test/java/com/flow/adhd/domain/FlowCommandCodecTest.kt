@@ -151,6 +151,8 @@ class FlowCommandCodecTest {
             FlowCommand.DeleteTemplate("template", id, at), FlowCommand.ApplyTemplate("template", "2026-10-16", 3, id, at),
             FlowCommand.CreateWeekTemplate(p, id, at), FlowCommand.UpdateWeekTemplate("week", p, id, at),
             FlowCommand.DeleteWeekTemplate("week", id, at), FlowCommand.ApplyWeekTemplate("week", "2026-10-16", 7, id, at),
+            FlowCommand.InstallDemoPreset(p, id, at),
+            FlowCommand.ClearDemoTasks(id, at),
             FlowCommand.DeletePlanRule(0, id, at), FlowCommand.SetFocus("focus", id, at), FlowCommand.ClearFocus(id, at),
             FlowCommand.AddFocusChip("chip", id, at), FlowCommand.RemoveFocusChip("chip", id, at), FlowCommand.SetEnergy(3, id, at),
             FlowCommand.SetPreferences(p, id, at), FlowCommand.LifecycleTick(id, at), FlowCommand.ImportSnapshot(p, id, at),
