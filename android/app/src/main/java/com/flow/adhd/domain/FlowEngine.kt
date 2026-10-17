@@ -57,6 +57,8 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.MoveTask -> TaskOrderReducer.reduce(snapshot, command)
         is FlowCommand.ApplyNotificationEvent -> NotificationEventReducer.reduce(snapshot, command, zone, now, this)
         is FlowCommand.FileNotepadAsNote, is FlowCommand.ConvertNotepadToTask -> commitNotepad(snapshot, command, zone, now)
+        is FlowCommand.SaveTaskEditor, is FlowCommand.DuplicateTask, is FlowCommand.EditChecklistItem,
+        is FlowCommand.DeleteChecklistItem, is FlowCommand.SetContextTags, is FlowCommand.SnoozeTask -> TaskEditingActions.reduce(snapshot, command, zone, now, taskXp.keys, activeZoneId)
     }
 
     /** Filing, reward and clearing the draft form one atomic user action. */

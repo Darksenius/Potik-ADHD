@@ -171,4 +171,36 @@ class NativeAppUiTest {
             assertFalse(repeated.first { task -> task.id != todayTask.id }.done)
         }
     }
+
+    @Test fun unfinishedTaskEditorDraftSurvivesClosingAndClearsOnlyWithASavedTask() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assumeTrue(BuildConfig.NATIVE_RUNTIME && context.packageName.endsWith(".native"))
+        val app = AppContainer.get(context)
+        val title = "Чернетка ${System.currentTimeMillis()}"
+        ActivityScenario.launch(NativeFlowActivity::class.java).use { scenario ->
+            compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("native-task-create").performClick()
+            compose.onNodeWithTag("native-task-title").performTextReplacement(title)
+            compose.onNodeWithTag("native-task-editor-body").performScrollToNode(hasTestTag("native-task-note"))
+            compose.onNodeWithTag("native-task-note").performTextReplacement("Нотатка незбереженого редактора")
+            compose.onNodeWithTag("native-task-editor-close").performClick()
+            compose.waitUntil(10_000) {
+                ((app.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.data?.get("taskEditorDraft") as? kotlinx.serialization.json.JsonPrimitive)?.content?.contains(title) == true
+            }
+            scenario.recreate()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("native-task-create").performClick()
+            compose.onNodeWithTag("native-task-editor-body").performScrollToNode(hasTestTag("native-task-title"))
+            compose.onNodeWithTag("native-task-title").assertTextContains(title)
+            compose.onNodeWithTag("native-task-editor-body").performScrollToNode(hasTestTag("native-task-note"))
+            compose.onNodeWithTag("native-task-note").assertTextContains("Нотатка незбереженого редактора")
+            compose.onNodeWithTag("native-task-save").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-task-editor").fetchSemanticsNodes().isEmpty() }
+            android.os.SystemClock.sleep(400)
+            val snapshot = runBlocking { (app.commandRepository.read() as SnapshotRead.Ready).snapshot }
+            assertEquals("", (snapshot.data["taskEditorDraft"] as kotlinx.serialization.json.JsonPrimitive).content)
+            assertEquals(1, snapshot.tasks.count { it.title == title })
+            assertEquals("Нотатка незбереженого редактора", snapshot.tasks.first { it.title == title }.note)
+        }
+    }
 }

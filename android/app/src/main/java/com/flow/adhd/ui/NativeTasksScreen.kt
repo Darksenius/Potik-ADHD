@@ -288,6 +288,8 @@ private fun NativeTaskCard(
 ) {
     var menuOpen by remember(task.id) { mutableStateOf(false) }
     var noteExpanded by rememberSaveable(task.id) { mutableStateOf(false) }
+    var itemEditor by rememberSaveable(task.id) { mutableStateOf<Int?>(null) }
+    var itemText by rememberSaveable(task.id) { mutableStateOf("") }
     val isJournal = task.type == "negative"
     val progressEnabled = !busy && !task.done && !task.trashed && !task.someday
     val counter = task.raw.numberValue("counter") ?: 0.0
@@ -359,6 +361,8 @@ private fun NativeTaskCard(
                                 enabled = !busy,
                                 modifier = Modifier.testTag("native-task-edit-${task.id}"),
                             )
+                            DropdownMenuItem(text = { Text("Створити копію") }, enabled = !busy,
+                                onClick = { menuOpen = false; send { id, now -> FlowCommand.DuplicateTask(task.id, id, now) } })
                             if (canPrioritize) {
                                 for (slot in 0..2) {
                                     DropdownMenuItem(
@@ -474,10 +478,21 @@ private fun NativeTaskCard(
                         ) {
                             Checkbox(checked = checked, onCheckedChange = null, enabled = progressEnabled, modifier = Modifier.size(48.dp))
                             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
+                            TextButton(onClick = { itemEditor = index; itemText = label }, enabled = !busy) { Text("Змінити") }
+                            TextButton(onClick = { send { id, now -> FlowCommand.DeleteChecklistItem(task.id, index, id, now) } }, enabled = !busy) { Text("×") }
                         }
                     }
                 }
                 Text("Пункти зберігають поступ. Завершення всієї справи — окрема дія.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (task.type == "check" && !task.trashed) OutlinedButton(onClick = { itemEditor = -1; itemText = "" }, enabled = !busy) { Text("+ Пункт") }
+            if (task.type == "ctx" && !task.trashed) {
+                val current = (task.raw["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
+                for (row in (listOf("Вдома", "Телефон", "Робота", "Тихо", "З дитиною") + current).distinct().chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { tag -> androidx.compose.material3.FilterChip(tag in current, onClick = {
+                        send { id, now -> FlowCommand.SetContextTags(task.id, if (tag in current) current - tag else current + tag, id, now) }
+                    }, label = { Text(tag) }, enabled = !busy) }
+                }
             }
             if (hasCounter && !task.trashed) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -537,6 +552,13 @@ private fun NativeTaskCard(
             }
         }
     }
+    if (itemEditor != null) AlertDialog(onDismissRequest = { itemEditor = null }, title = { Text(if (itemEditor == -1) "Новий пункт" else "Змінити пункт") },
+        text = { OutlinedTextField(itemText, { itemText = it }, label = { Text("Що зробити?") }, enabled = !busy) },
+        confirmButton = { TextButton(onClick = {
+            val index = itemEditor!!.takeIf { it >= 0 }
+            onCommand(FlowCommand.EditChecklistItem(task.id, index, itemText, UUID.randomUUID().toString(), System.currentTimeMillis())) { itemEditor = null }
+        }, enabled = !busy && itemText.isNotBlank()) { Text("Зберегти") } },
+        dismissButton = { TextButton(onClick = { itemEditor = null }, enabled = !busy) { Text("Скасувати") } })
 }
 
 @Composable

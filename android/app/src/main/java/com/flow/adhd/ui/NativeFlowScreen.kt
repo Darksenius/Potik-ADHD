@@ -41,6 +41,15 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
     val busy by model.busy.collectAsStateWithLifecycle()
     val error by model.error.collectAsStateWithLifecycle()
     val feedback by model.feedback.collectAsStateWithLifecycle()
+    val undo by model.undo.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(undo?.commandId) {
+        snackbar.currentSnackbarData?.dismiss()
+        undo?.let { action ->
+            if (snackbar.showSnackbar("Дію збережено", "Скасувати", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) model.undoAction(action)
+            model.dismissUndo(action.commandId)
+        }
+    }
     var page by rememberSaveable { mutableStateOf("tasks") }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var editorId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -61,6 +70,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
         }
     }) {
         Scaffold(
+            snackbarHost = { if (!busy) SnackbarHost(snackbar) },
             topBar = {
                 if (!editorOpen) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(R.drawable.potik_mark), null, Modifier.size(32.dp))
@@ -90,10 +100,11 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                         else { CircularProgressIndicator(); Text("Відкриваю Потік…") }
                     }
                     editorOpen -> NativeTaskEditor(snapshot, editorId, busy, onSave = { payload ->
-                        val command = editorId?.let { FlowCommand.UpdateTask(it, payload, UUID.randomUUID().toString(), System.currentTimeMillis()) }
-                            ?: FlowCommand.CreateTask(payload, UUID.randomUUID().toString(), System.currentTimeMillis())
+                        val command = FlowCommand.SaveTaskEditor(editorId, payload, null, false, UUID.randomUUID().toString(), System.currentTimeMillis())
                         model.command(command) { editorOpen = false }
-                    }, onClose = { editorOpen = false }, modifier = Modifier.weight(1f))
+                    }, onClose = { model.flushDraft(); editorOpen = false }, modifier = Modifier.weight(1f),
+                        onSnooze = { payload, minutes, tomorrow -> model.command(FlowCommand.SaveTaskEditor(editorId, payload, minutes, tomorrow, UUID.randomUUID().toString(), System.currentTimeMillis())) { editorOpen = false } },
+                        onDraftChanged = model::editTaskDraft)
                     page == "notes" -> NativeNotesScreen(snapshot, draft, status, busy, model::editNotepad, model::command,
                         model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f))
                     page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f))

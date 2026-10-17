@@ -6,6 +6,7 @@ import android.os.Build
 import com.flow.adhd.data.CommandCommit
 import com.flow.adhd.data.NativeCommandRepository
 import com.flow.adhd.domain.FlowCommand
+import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,9 @@ class NativeRuntime internal constructor(
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
     private val mutableError = MutableStateFlow<String?>(null)
     val error = mutableError.asStateFlow()
+    private val editorDraftLock = Any()
+    private var pendingEditorDraft: String? = null
+    private var draftJob: Job? = null
 
     init {
         scope.launch {
@@ -32,10 +36,34 @@ class NativeRuntime internal constructor(
     }
 
     /** The application scope finishes a submitted save even if its Activity is destroyed. */
-    fun submit(command: FlowCommand): Deferred<CommandCommit> = scope.async(start = CoroutineStart.UNDISPATCHED) {
+    fun submit(command: FlowCommand): Deferred<CommandCommit> {
+        if (command is FlowCommand.SaveTaskEditor) flushEditorDraft()
+        return submitInternal(command)
+    }
+
+    private fun submitInternal(command: FlowCommand): Deferred<CommandCommit> = scope.async(start = CoroutineStart.UNDISPATCHED) {
         operations.withLock {
             val pendingFailure = drainPending()
             finish(pendingFailure ?: repository.dispatch(command))
+        }
+    }
+
+    /** Coalesced draft writes survive Activity destruction; submit/flush orders them before a task save. */
+    fun scheduleEditorDraft(text: String) {
+        synchronized(editorDraftLock) {
+            if (pendingEditorDraft == text) return
+            pendingEditorDraft = text
+            draftJob?.cancel()
+            draftJob = scope.launch { delay(250); flushEditorDraft() }
+        }
+    }
+
+    fun flushEditorDraft() {
+        synchronized(editorDraftLock) {
+            draftJob?.cancel(); draftJob = null
+            val text = pendingEditorDraft ?: return
+            pendingEditorDraft = null
+            submitInternal(FlowCommand.SetTaskEditorDraft(text, UUID.randomUUID().toString(), System.currentTimeMillis()))
         }
     }
 
@@ -47,8 +75,11 @@ class NativeRuntime internal constructor(
         }
     }
 
-    fun flushBackup() = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+    fun flushBackup(): Job {
+      flushEditorDraft()
+      return scope.launch(start = CoroutineStart.UNDISPATCHED) {
         operations.withLock { FlowBackupStore.get(context).flush() }
+      }
     }
 
     private suspend fun drainPending(): CommandCommit? {

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 
 data class NativeFeedback(val serial: Long, val amount: Double)
+data class NativeUndoAction(val taskId: Long, val receipt: JsonObject, val commandId: String)
 
 /** UI drafts are local; only committed Room snapshots supply task, note and reward state. */
 class NativeFlowViewModel(private val runtime: NativeRuntime, private val content: NativeContent) : ViewModel() {
@@ -29,6 +30,8 @@ class NativeFlowViewModel(private val runtime: NativeRuntime, private val conten
     val projection = mutableProjection.asStateFlow()
     private val mutableFeedback = MutableStateFlow<NativeFeedback?>(null)
     val feedback = mutableFeedback.asStateFlow()
+    private val mutableUndo = MutableStateFlow<NativeUndoAction?>(null)
+    val undo = mutableUndo.asStateFlow()
     private var draftDirty = false
     private var revision = 0L
     private var autosave: Job? = null
@@ -47,6 +50,7 @@ class NativeFlowViewModel(private val runtime: NativeRuntime, private val conten
     }
 
     fun refresh() { runtime.refresh() }
+    fun editTaskDraft(text: String) = runtime.scheduleEditorDraft(text)
 
     fun editNotepad(text: String) {
         mutableDraft.value = text
@@ -59,6 +63,7 @@ class NativeFlowViewModel(private val runtime: NativeRuntime, private val conten
 
     /** Called before backgrounding; the application owns the submitted write after this returns. */
     fun flushDraft() {
+        runtime.flushEditorDraft()
         autosave?.cancel()
         if (draftDirty) {
             val text = mutableDraft.value
@@ -93,6 +98,12 @@ class NativeFlowViewModel(private val runtime: NativeRuntime, private val conten
                 if (!persistDraft()) return@launch
                 val result = runtime.submit(command).await()
                 if (result is CommandCommit.Committed) {
+                    val taskId = when (command) {
+                        is FlowCommand.SetTaskDone -> command.taskId
+                        is FlowCommand.DeferTask -> command.taskId
+                        else -> null
+                    }
+                    mutableUndo.value = if (result.undoReceipt != null && taskId != null) NativeUndoAction(taskId, result.undoReceipt, command.commandId) else null
                     val amount = result.events.filter { it.type == "xp_awarded" }.sumOf {
                         (it.payload["amount"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
                     }
@@ -109,6 +120,8 @@ class NativeFlowViewModel(private val runtime: NativeRuntime, private val conten
     }
 
     fun fileNotepad(folder: String?, onCommitted: () -> Unit) = command(FlowCommand.FileNotepadAsNote(folder, id(), now()), onCommitted)
+    fun undoAction(action: NativeUndoAction) = command(FlowCommand.UndoTask(action.taskId, id(), now(), receipt = action.receipt))
+    fun dismissUndo(commandId: String) { if (mutableUndo.value?.commandId == commandId) mutableUndo.value = null }
     fun makeTask(onCreated: (Long) -> Unit) {
         val existing = ((snapshots.value as? SnapshotRead.Ready)?.snapshot?.tasks ?: emptyList()).map { it.id }.toSet()
         command(FlowCommand.ConvertNotepadToTask(id(), now())) {

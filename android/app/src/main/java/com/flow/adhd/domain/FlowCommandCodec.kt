@@ -18,6 +18,12 @@ object FlowCommandCodec {
             is FlowCommand.CaptureTask -> fields("CaptureTask", command, "title" to str(command.title), "origin" to str(command.origin.name), "requestedId" to nullableId(command.requestedId))
             is FlowCommand.CreateTask -> fields("CreateTask", command, "payload" to command.payload)
             is FlowCommand.UpdateTask -> fields("UpdateTask", command, "taskId" to id(command.taskId), "payload" to command.payload)
+            is FlowCommand.SaveTaskEditor -> fields("SaveTaskEditor", command, "taskId" to nullableId(command.taskId), "payload" to command.payload, "postponeMinutes" to nullableTime(command.postponeMinutes), "tomorrow" to bool(command.tomorrow))
+            is FlowCommand.DuplicateTask -> fields("DuplicateTask", command, "taskId" to id(command.taskId))
+            is FlowCommand.EditChecklistItem -> fields("EditChecklistItem", command, "taskId" to id(command.taskId), "index" to (command.index?.let(::num) ?: JsonNull), "text" to str(command.text))
+            is FlowCommand.DeleteChecklistItem -> fields("DeleteChecklistItem", command, "taskId" to id(command.taskId), "index" to num(command.index))
+            is FlowCommand.SetContextTags -> fields("SetContextTags", command, "taskId" to id(command.taskId), "tags" to JsonArray(command.tags.map(::str)))
+            is FlowCommand.SnoozeTask -> fields("SnoozeTask", command, "taskId" to id(command.taskId), "minutes" to nullableTime(command.minutes), "tomorrow" to bool(command.tomorrow))
             is FlowCommand.SetTaskDone -> fields("SetTaskDone", command, "taskId" to id(command.taskId), "done" to bool(command.done), "completedAt" to nullableTime(command.completedAt))
             is FlowCommand.UndoTask -> fields("UndoTask", command, "taskId" to id(command.taskId), "receipt" to nullable(command.receipt), "nativePayload" to nullable(command.nativePayload))
             is FlowCommand.SetChecklistItem -> fields("SetChecklistItem", command, "taskId" to id(command.taskId), "index" to num(command.index), "checked" to bool(command.checked))
@@ -95,6 +101,12 @@ object FlowCommandCodec {
                 }
                 "CreateTask" -> read(value, "payload") { c -> FlowCommand.CreateTask(c.obj("payload"), c.commandId, c.activityAt) }
                 "UpdateTask" -> read(value, "taskId", "payload") { c -> FlowCommand.UpdateTask(c.id("taskId"), c.obj("payload"), c.commandId, c.activityAt) }
+                "SaveTaskEditor" -> read(value, "taskId", "payload", "postponeMinutes", "tomorrow") { c -> FlowCommand.SaveTaskEditor(c.nullableId("taskId"), c.obj("payload"), c.nullableTime("postponeMinutes"), c.bool("tomorrow"), c.commandId, c.activityAt) }
+                "DuplicateTask" -> read(value, "taskId") { c -> FlowCommand.DuplicateTask(c.id("taskId"), c.commandId, c.activityAt) }
+                "EditChecklistItem" -> read(value, "taskId", "index", "text") { c -> FlowCommand.EditChecklistItem(c.id("taskId"), if (value["index"] == JsonNull) null else c.int("index"), c.string("text"), c.commandId, c.activityAt) }
+                "DeleteChecklistItem" -> read(value, "taskId", "index") { c -> FlowCommand.DeleteChecklistItem(c.id("taskId"), c.int("index"), c.commandId, c.activityAt) }
+                "SetContextTags" -> read(value, "taskId", "tags") { c -> FlowCommand.SetContextTags(c.id("taskId"), (value["tags"] as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: malformed("tags must contain strings") } ?: malformed("tags must be an array"), c.commandId, c.activityAt) }
+                "SnoozeTask" -> read(value, "taskId", "minutes", "tomorrow") { c -> FlowCommand.SnoozeTask(c.id("taskId"), c.nullableTime("minutes"), c.bool("tomorrow"), c.commandId, c.activityAt) }
                 "SetTaskDone" -> read(value, "taskId", "done", "completedAt") { c -> FlowCommand.SetTaskDone(c.id("taskId"), c.bool("done"), c.nullableTime("completedAt"), c.commandId, c.activityAt) }
                 "UndoTask" -> read(value, "taskId", "receipt", "nativePayload") { c -> FlowCommand.UndoTask(c.id("taskId"), c.commandId, c.activityAt, c.nullableObj("receipt"), c.nullableObj("nativePayload")) }
                 "SetChecklistItem" -> read(value, "taskId", "index", "checked") { c -> FlowCommand.SetChecklistItem(c.id("taskId"), c.int("index"), c.bool("checked"), c.commandId, c.activityAt) }
@@ -168,7 +180,7 @@ object FlowCommandCodec {
     }
 
     private val kinds = setOf(
-        "CaptureTask", "CreateTask", "UpdateTask", "SetTaskDone", "UndoTask", "SetChecklistItem", "ChangeCounter", "RecordNegative", "DeferTask",
+        "CaptureTask", "CreateTask", "UpdateTask", "SaveTaskEditor", "DuplicateTask", "EditChecklistItem", "DeleteChecklistItem", "SetContextTags", "SnoozeTask", "SetTaskDone", "UndoTask", "SetChecklistItem", "ChangeCounter", "RecordNegative", "DeferTask",
         "MoveTask", "MoveTaskToSomeday", "RestoreTaskFromSomeday", "TrashTask", "RestoreTrashedTask", "HardDeleteTask", "SetPriority",
         "AddQuickNote", "CaptureNote", "RecordPastTaskDone", "MarkTaskReminderFired", "ApplyNotificationEvent", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "FileNotepadAsNote", "ConvertNotepadToTask", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
         "CreateZone", "UpdateZone", "DeleteZone", "SetZoneOff", "SetPlanDay", "SetPlanRestDay", "SetPlanDayNote", "ResetPlanDay", "SetPlanZoneOff", "EditPlanZoneForDay", "AddPlanItem", "UpdatePlanItem", "DeletePlanItem",

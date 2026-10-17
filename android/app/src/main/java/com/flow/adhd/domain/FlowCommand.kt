@@ -26,6 +26,20 @@ sealed class FlowCommand(
     }
     data class CreateTask(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateTask(val taskId: Long, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class SaveTaskEditor(val taskId: Long?, val payload: JsonObject, val postponeMinutes: Long?, val tomorrow: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
+        init { require(postponeMinutes == null || postponeMinutes > 0); require(!tomorrow || postponeMinutes == null) }
+    }
+    data class DuplicateTask(val taskId: Long, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class EditChecklistItem(val taskId: Long, val index: Int?, val text: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
+        init { require(index == null || index >= 0) }
+    }
+    data class DeleteChecklistItem(val taskId: Long, val index: Int, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
+        init { require(index >= 0) }
+    }
+    data class SetContextTags(val taskId: Long, val tags: List<String>, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class SnoozeTask(val taskId: Long, val minutes: Long?, val tomorrow: Boolean, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt) {
+        init { require((minutes != null) != tomorrow); require(minutes == null || minutes > 0) }
+    }
     data class SetTaskDone(val taskId: Long, val done: Boolean, val completedAt: Long?, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UndoTask(
         val taskId: Long, override val commandId: String, override val activityAt: Long,

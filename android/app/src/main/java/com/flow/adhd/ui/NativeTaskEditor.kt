@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -70,6 +71,8 @@ fun NativeTaskEditor(
     onSave: (JsonObject) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onSnooze: ((JsonObject, Long?, Boolean) -> Unit)? = null,
+    onDraftChanged: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val catalog by produceState<EditorTypeCatalog?>(null, context) {
@@ -114,6 +117,7 @@ fun NativeTaskEditor(
     var reminderEnabled by rememberSaveable(taskId) { mutableStateOf(seed.editorBoolean("reminderEnabled", true)) }
     var reminderAdvance by rememberSaveable(taskId) { mutableStateOf(seed.editorNumberText("remindBeforeMinutes", "0")) }
     var tags by rememberSaveable(taskId) { mutableStateOf((seed["tags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { entry -> entry.isString }?.content }.joinToString(", ")) }
+    var contextTags by rememberSaveable(taskId) { mutableStateOf((seed["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }.joinToString(", ")) }
     var checklist by rememberSaveable(taskId) { mutableStateOf(seed.editorText("checklistDraft").orEmpty()) }
     var keepPast by rememberSaveable(taskId) { mutableStateOf(false) }
     var error by rememberSaveable(taskId) { mutableStateOf("") }
@@ -135,7 +139,20 @@ fun NativeTaskEditor(
     val pastTime = scheduled && parsedDate != null && parsedTime != null &&
         LocalDateTime.of(parsedDate, parsedTime).atZone(localZone).toInstant().toEpochMilli() < System.currentTimeMillis()
 
-    fun save() {
+    val draftText = buildJsonObject {
+        put("version", 2)
+        put("values", buildJsonObject {
+            put("title", title); put("type", type); put("zoneId", zoneId.toLongOrNull()?.let(::JsonPrimitive) ?: JsonNull); put("folderId", folderId)
+            put("planDate", date); put("schedDate", date); put("schedTime", time); put("alarmTime", alarmTime); put("windowStart", windowStart); put("windowEnd", windowEnd)
+            put("note", note); put("repeat", repeat); put("repeatDays", JsonArray(List(7) { JsonPrimitive(repeatMask and (1 shl it) != 0) }))
+            put("repeatInterval", repeatInterval); put("repeatUnit", repeatUnit); put("counterEnabled", counterEnabled); put("counterTarget", counterTarget); put("counterStep", counterStep); put("counterUnit", counterUnit)
+            put("negXp", negativeXp); put("reminderEnabled", reminderEnabled); put("remindBeforeMinutes", reminderAdvance); put("checklistDraft", checklist)
+            put("tags", JsonArray(tags.split(',').map { JsonPrimitive(it.trim()) })); put("ctxTags", JsonArray(contextTags.split(',').map { JsonPrimitive(it.trim()) }))
+        })
+    }.toString()
+    LaunchedEffect(taskId, draftText) { if (taskId == null) onDraftChanged(draftText) }
+
+    fun save(postponeMinutes: Long? = null, tomorrow: Boolean = false) {
         val step = editorWholeNumber(counterStep)
         val target = editorWholeNumber(counterTarget)
         val penalty = editorWholeNumber(negativeXp)
@@ -158,7 +175,7 @@ fun NativeTaskEditor(
             hasCounter && (step == null || step <= 0 || target == null) -> "Крок лічильника має бути цілим і більшим за 0, ціль — цілим числом від 0."
             type == "negative" && penalty == null -> "Штраф досвіду має бути цілим числом від 0."
             (scheduled || type == "alarm") && advance == null -> "Час додаткового нагадування має бути цілим числом хвилин від 0."
-            pastTime && !keepPast -> "Цей час уже минув. Підтвердь збереження з минулим часом або зміни його."
+            pastTime && !keepPast && postponeMinutes == null && !tomorrow -> "Цей час уже минув. Підтвердь збереження з минулим часом або зміни його."
             else -> null
         }
         if (problem != null) { error = problem; return }
@@ -170,6 +187,7 @@ fun NativeTaskEditor(
             put("note", JsonPrimitive(note))
             put("repeat", JsonPrimitive(repeat)); put("repeatDays", JsonArray(List(7) { JsonPrimitive(repeatMask and (1 shl it) != 0) }))
             put("tags", JsonArray(tags.split(',').mapNotNull { it.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) }))
+            if (type == "ctx") put("ctxTags", JsonArray(contextTags.split(',').mapNotNull { it.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) }))
             put("counterEnabled", JsonPrimitive(hasCounter))
             if (hasCounter) {
                 put("counterStep", JsonPrimitive(step!!)); put("counterTarget", JsonPrimitive(target!!))
@@ -192,7 +210,8 @@ fun NativeTaskEditor(
             }.toList()))
         }
         error = ""
-        onSave(JsonObject(payload))
+        if (onSnooze != null && (postponeMinutes != null || tomorrow)) onSnooze(JsonObject(payload), postponeMinutes, tomorrow)
+        else onSave(JsonObject(payload))
     }
 
     Column(modifier.fillMaxSize().imePadding().testTag("native-task-editor")) {
@@ -315,9 +334,15 @@ fun NativeTaskEditor(
                     "native-task-folder", "Папку видалено") { folderId = it; error = "" }
             }
             item { EditorInput("Мітки через кому", tags, { tags = it; error = "" }, "native-task-tags", enabled) }
+            if (type == "ctx") item { EditorInput("Ручні контекстні мітки через кому", contextTags, { contextTags = it; error = "" }, "native-task-context-tags", enabled) }
         }
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (taskId != null && onSnooze != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = { save(15) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("+15 хв") }
+                TextButton(onClick = { save(60) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("+1 год") }
+                TextButton(onClick = { save(tomorrow = true) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("Завтра") }
+            }
             val message = if (unavailable) "Цієї задачі вже немає. Закрий редактор і онови список." else error
             if (message.isNotEmpty()) Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }.testTag("native-task-editor-error"),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -401,7 +426,8 @@ private const val EDITOR_MAX_INTEGER = 9_007_199_254_740_991L
 private fun JsonObject.editorText(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 private fun JsonObject.editorBoolean(key: String, fallback: Boolean) = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull ?: fallback
 private fun JsonObject.editorNumberText(key: String, fallback: String): String {
-    val primitive = (this[key] as? JsonPrimitive)?.takeUnless { it.isString } ?: return fallback
+    val primitive = this[key] as? JsonPrimitive ?: return fallback
+    if (primitive.isString) return primitive.content
     val number = primitive.doubleOrNull?.takeIf { it.isFinite() } ?: return fallback
     return if (number % 1.0 == 0.0 && number in -EDITOR_MAX_INTEGER.toDouble()..EDITOR_MAX_INTEGER.toDouble()) number.toLong().toString()
         else primitive.content
@@ -421,6 +447,7 @@ private fun editorRepeatsOn(repeat: String, mask: Int, date: LocalDate): Boolean
 /** Existing web drafts and plain native title drafts are read without altering their stored form. */
 private fun newEditorSeed(raw: String): JsonObject {
     val draft = runCatching { Json.parseToJsonElement(raw) as? JsonObject }.getOrNull()
+    if (draft?.get("version") == JsonPrimitive(2)) return draft["values"] as? JsonObject ?: JsonObject(emptyMap())
     val values = draft?.takeIf { it["version"] == JsonPrimitive(1) }?.get("values") as? JsonObject
         ?: return buildJsonObject { put("title", if (draft == null) raw else "") }
     val translated = values.toMutableMap()
