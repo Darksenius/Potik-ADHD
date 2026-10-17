@@ -27,6 +27,7 @@
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name="com.flow.adhd.MainActivity"
+            android:enabled="${legacyActivityEnabled}"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
@@ -54,6 +55,24 @@
         </provider>
 
         <!-- FLOW власний foreground service -->
+        <activity
+            android:name="com.flow.adhd.NativeFlowActivity"
+            android:enabled="${nativeActivityEnabled}"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name="com.flow.adhd.FlowNotifService"
             android:foregroundServiceType="specialUse"

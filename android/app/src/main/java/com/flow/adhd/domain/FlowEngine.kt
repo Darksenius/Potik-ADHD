@@ -5,6 +5,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /** Pure command dispatch. Storage and command deduplication belong to the N3 repository. */
 class FlowEngine(private val taskXp: Map<String, Double>) {
@@ -54,6 +56,36 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
         is FlowCommand.ImportSnapshot, is FlowCommand.RestoreSnapshot -> import(snapshot, command, zone, now)
         is FlowCommand.MoveTask -> TaskOrderReducer.reduce(snapshot, command)
         is FlowCommand.ApplyNotificationEvent -> NotificationEventReducer.reduce(snapshot, command, zone, now, this)
+        is FlowCommand.FileNotepadAsNote, is FlowCommand.ConvertNotepadToTask -> commitNotepad(snapshot, command, zone, now)
+    }
+
+    /** Filing, reward and clearing the draft form one atomic user action. */
+    private fun commitNotepad(snapshot: FlowSnapshot, command: FlowCommand, zone: ZoneId, now: Long): FlowCommandResult {
+        val text = snapshot.notepad.trim()
+        if (text.isEmpty()) return FlowCommandResult.Rejected("empty-notepad", "Notepad is empty")
+        val result = when (command) {
+            is FlowCommand.FileNotepadAsNote -> NotesReducer.reduce(snapshot,
+                FlowCommand.SaveNotepadAsNote(command.folderId, command.commandId, command.activityAt), zone, now)
+            is FlowCommand.ConvertNotepadToTask -> {
+                val body = if (text.startsWith("...")) text.drop(3).trim() else text
+                val lines = body.lines()
+                if (lines.first().isBlank()) return FlowCommandResult.Rejected("empty-title", "Task title must not be blank")
+                val created = TaskEditorReducer.reduce(snapshot, FlowCommand.CreateTask(buildJsonObject {
+                    put("title", lines.first().trim()); put("type", "simple"); put("note", lines.drop(1).joinToString("\n"))
+                }, command.commandId, command.activityAt), zone, taskXp.keys, now)
+                if (created !is FlowCommandResult.Applied) return created
+                FlowCommandResult.Applied(FlowSnapshot.fromData(JsonObject(created.snapshot.data + ("notepad" to JsonPrimitive("")))), created.events)
+            }
+            else -> error("Expected a notepad action")
+        }
+        if (result !is FlowCommandResult.Applied) return result
+        val award = Experience.award(result.snapshot.data, if (command is FlowCommand.ConvertNotepadToTask) 10.0 else 1.0, command.activityAt, zone, now)
+        val followUp = if (command is FlowCommand.FileNotepadAsNote) result.snapshot.qnotes.firstOrNull()?.takeIf {
+            (it["folder"] as? JsonPrimitive)?.content == "impulse"
+        }?.let { listOf(FlowEvent("note_review_requested", command.activityAt, buildJsonObject {
+            put("noteId", it.getValue("id")); put("dueAt", command.activityAt + 5 * 60_000L)
+        })) }.orEmpty() else emptyList()
+        return FlowCommandResult.Applied(FlowSnapshot.fromData(award.state), result.events + award.events + followUp)
     }
 
     private fun import(snapshot: FlowSnapshot, command: FlowCommand, zone: ZoneId, now: Long): FlowCommandResult = try {

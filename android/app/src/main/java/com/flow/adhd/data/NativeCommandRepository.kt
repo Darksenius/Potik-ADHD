@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 
 sealed interface CommandCommit {
-    /** Only this result confirms that state and acknowledgement became durable together. */
+    /** Only this result confirms a durable transaction, including receipts and acknowledgements for commands. */
     data class Committed(
         val snapshot: FlowSnapshot, val commandId: String, val replayed: Boolean,
         val events: List<FlowEvent>, val undoReceipt: JsonObject? = null,
@@ -23,7 +23,7 @@ sealed interface CommandCommit {
     data class Failed(val code: String) : CommandCommit
 }
 
-/** Prepared N3 writer. Not connected to React or notification receivers during migration. */
+/** Transactional owner, activated only when the build has exclusive native write ownership. */
 class NativeCommandRepository(
     private val store: CommandStore,
     private val engine: FlowEngine,
@@ -48,6 +48,42 @@ class NativeCommandRepository(
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SnapshotFormatException) { SnapshotRead.Unavailable("invalid_snapshot").also { mutableState.value = it } }
             catch (_: Exception) { SnapshotRead.Unavailable("storage_error").also { mutableState.value = it } }
+        }
+    }
+
+    /**
+     * Idempotent system maintenance: snapshot and notifications commit without a replay receipt or queue acknowledgement.
+     * `native-lifecycle` is descriptive only. Here `replayed` means the persisted snapshot was already current;
+     * notifications still refresh from the injected clock. Creating the first persisted snapshot counts as a change.
+     */
+    suspend fun maintain(): CommandCommit = withContext(Dispatchers.IO) {
+        lane.withLock {
+            try {
+                val at = clock()
+                val timeZone = zone()
+                val (committed, stateChanged) = store.transaction { tx ->
+                    val raw = tx.readSnapshot()
+                    val initializing = raw.isNullOrBlank()
+                    val before = if (initializing) FlowSnapshot.fromData(initialState()) else FlowSnapshot.parse(raw!!)
+                    when (val result = engine.apply(before, FlowCommand.LifecycleTick("native-lifecycle", at), timeZone, at)) {
+                        is FlowCommandResult.Rejected -> CommandCommit.Rejected(result.code, result.message) to false
+                        is FlowCommandResult.Applied -> {
+                            val changed = initializing || before.data != result.snapshot.data
+                            if (changed) tx.writeSnapshot(result.snapshot.toJson())
+                            tx.writeNotification(notificationProjection(result.snapshot, at, timeZone).toString())
+                            CommandCommit.Committed(result.snapshot, "native-lifecycle", !changed, result.events) to changed
+                        }
+                    }
+                }
+                if (committed is CommandCommit.Committed) {
+                    mutableState.value = SnapshotRead.Ready(committed.snapshot)
+                    // A derived backup is needed only when persisted state changed, never for a timer-only refresh.
+                    if (stateChanged) try { afterCommit(committed.snapshot.toJson()) } catch (_: Exception) { }
+                }
+                committed
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SnapshotFormatException) { CommandCommit.Failed("invalid_snapshot") }
+            catch (_: Exception) { CommandCommit.Failed("storage_error") }
         }
     }
 

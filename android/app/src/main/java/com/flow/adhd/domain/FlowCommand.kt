@@ -63,6 +63,8 @@ sealed class FlowCommand(
     data class SetNotepad(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SetNotepadFolder(val folderId: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class SaveNotepadAsNote(val folderId: String?, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class FileNotepadAsNote(val folderId: String?, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
+    data class ConvertNotepadToTask(override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class CreateNoteFolder(val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class UpdateNoteFolder(val folderId: String, val payload: JsonObject, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)
     data class DeleteNoteFolder(val folderId: String, override val commandId: String, override val activityAt: Long) : FlowCommand(commandId, activityAt)

@@ -121,6 +121,37 @@ class NativeCommandRepositoryTest {
         assertTrue(FlowSnapshot.parse(store.snapshot!!).tasks.isEmpty())
     }
 
+    @Test fun repeatedMaintenanceDoesNotGrowReceiptsOrRewriteTheBackup() = runBlocking {
+        val store = MemoryCommandStore(null, pending = listOf(44))
+        var at = now
+        var backups = 0
+        val repo = NativeCommandRepository(store, FlowEngine(mapOf("simple" to 10.0)), { zone }, { at },
+            { kotlinx.serialization.json.Json.parseToJsonElement(initial) as JsonObject }, { backups++ })
+        val first = repo.maintain() as CommandCommit.Committed
+        assertFalse(first.replayed)
+        val snapshot = store.snapshot
+        repeat(10) {
+            at += 60_000
+            assertTrue((repo.maintain() as CommandCommit.Committed).replayed)
+        }
+        assertEquals(snapshot, store.snapshot)
+        assertEquals(null, store.journal)
+        assertEquals(listOf(44L), store.pending)
+        assertEquals(1, backups)
+    }
+
+    @Test fun failedMaintenanceProjectionRollsBackStateAndDoesNotPublish() = runBlocking {
+        val store = MemoryCommandStore(initial)
+        val repo = repository(store)
+        repo.read()
+        val previous = repo.state.value
+        store.failNextAt = "notification"
+        assertTrue(repo.maintain() is CommandCommit.Failed)
+        assertEquals(initial, store.snapshot)
+        assertEquals(null, store.journal)
+        assertEquals(previous, repo.state.value)
+    }
+
     /** Transactional test double: mutations are private copies until the block returns normally. */
     private class MemoryCommandStore(
         snapshot: String?,

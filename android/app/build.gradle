@@ -26,6 +26,8 @@ android {
         versionCode packageVersionCode.toInteger()
         versionName packageVersion.replace('-r', '.r')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField 'boolean', 'NATIVE_RUNTIME', 'false'
+        manifestPlaceholders = [legacyActivityEnabled: 'true', nativeActivityEnabled: 'false']
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
@@ -48,6 +50,14 @@ android {
         }
     }
     buildTypes {
+        nativeDebug {
+            initWith debug
+            applicationIdSuffix '.native'
+            versionNameSuffix '-native'
+            matchingFallbacks = ['debug']
+            buildConfigField 'boolean', 'NATIVE_RUNTIME', 'true'
+            manifestPlaceholders = [legacyActivityEnabled: 'false', nativeActivityEnabled: 'true']
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -56,6 +66,9 @@ android {
             }
         }
     }
+    // A separate development install proves single native ownership without touching the owner's app.
+    sourceSets.nativeDebug.java.srcDirs += 'src/debug/java'
+    testBuildType project.findProperty('flowTestBuildType') ?: 'debug'
     compileOptions {
         coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_21
@@ -94,6 +107,7 @@ dependencies {
     androidTestImplementation platform('androidx.compose:compose-bom:2025.10.01')
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
+    nativeDebugImplementation 'androidx.compose.ui:ui-test-manifest'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"

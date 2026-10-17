@@ -113,6 +113,7 @@ public class FlowNotifService extends Service {
     private final Runnable refreshTick = new Runnable() {
         @Override public void run() {
             if (destroyed) return;
+            NativeRuntime.requestRefresh(FlowNotifService.this);
             FlowDatabase.executeStorage(() -> {
                 if (destroyed) return;
                 try {
@@ -171,6 +172,8 @@ public class FlowNotifService extends Service {
                 }
             } finally {
                 scheduleCoalescedUiRefresh();
+                if (queuedIntent == null || !NativeRuntime.ACTION_PROJECTION_UPDATED.equals(queuedIntent.getAction()))
+                    NativeRuntime.requestRefresh(FlowNotifService.this);
             }
         });
         return START_STICKY;
@@ -182,6 +185,10 @@ public class FlowNotifService extends Service {
         if (action == null) { rebuildFromDb(); return; }
 
         switch (action) {
+            case NativeRuntime.ACTION_PROJECTION_UPDATED:
+                rebuildFromDb();
+                if (hasActiveQuestNotifications()) showTaskNotifications();
+                break;
             case ACTION_DONE:
                 pushAndNotify("done_first");
                 rebuildFromDb();
@@ -516,7 +523,7 @@ public class FlowNotifService extends Service {
     }
 
     static Intent createDailyInsightOpenIntent(Context context, String day) {
-        Intent intent = new Intent(context, MainActivity.class);
+        Intent intent = new Intent(context, NativeRuntime.entryClass());
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         intent.setData(Uri.parse("flow://daily-insight/" + Uri.encode(day)));
         intent.putExtra("openInsightDay", day);
@@ -641,7 +648,7 @@ public class FlowNotifService extends Service {
             String routine, String body, String time, int done, int total, int energy) {
         if (destroyed) return;
 
-        Intent openIntent = new Intent(this, MainActivity.class);
+        Intent openIntent = new Intent(this, NativeRuntime.entryClass());
         openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         openIntent.putExtra("nav", "tasks");
         PendingIntent openPI = PendingIntent.getActivity(
@@ -1577,7 +1584,7 @@ public class FlowNotifService extends Service {
     }
 
     private PendingIntent openTasksPI() {
-        Intent openIntent = new Intent(this, MainActivity.class);
+        Intent openIntent = new Intent(this, NativeRuntime.entryClass());
         openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         openIntent.putExtra("nav", "tasks");
         return PendingIntent.getActivity(this, 0, openIntent,
@@ -1585,7 +1592,7 @@ public class FlowNotifService extends Service {
     }
 
     public static PendingIntent openTaskPendingIntent(Context context, String taskId) {
-        Intent openIntent = new Intent(context, MainActivity.class);
+        Intent openIntent = new Intent(context, NativeRuntime.entryClass());
         openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         openIntent.putExtra("nav", "tasks");
         openIntent.putExtra("openTaskId", taskId);

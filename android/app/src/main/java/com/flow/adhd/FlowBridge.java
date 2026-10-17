@@ -49,6 +49,7 @@ public class FlowBridge {
     /** window.FlowBridge.save(json) — зберігає повний стан */
     @JavascriptInterface
     public void save(String json) {
+        NativeRuntime.requireLegacyWriter();
         callStorage(() -> {
             dao.writeState(json);
             scheduleBackupAfterCommit(json);
@@ -59,6 +60,7 @@ public class FlowBridge {
     /** Acknowledgement cannot become durable without its resulting state. */
     @JavascriptInterface
     public boolean saveWithEvents(String json, String eventIdsJson) {
+        NativeRuntime.requireLegacyWriter();
         org.json.JSONArray values;
         List<Long> ids = new ArrayList<>();
         try {
@@ -150,6 +152,7 @@ public class FlowBridge {
     /** window.FlowBridge.saveNotif(json) — зберігає snapshot для сповіщення */
     @JavascriptInterface
     public void saveNotif(String notifJson) {
+        NativeRuntime.requireLegacyWriter();
         callStorage(() -> {
             dao.writeNotif(notifJson);
             // Keep the saved snapshot and its derived alarm update in FIFO order.
@@ -209,6 +212,7 @@ public class FlowBridge {
     /** window.FlowBridge.clearEvents() — лише прочитані (до lastReadEventId) */
     @JavascriptInterface
     public void clearEvents() {
+        NativeRuntime.requireLegacyWriter();
         callStorage(() -> {
             if (lastReadEventId > 0) dao.clearEventsUpTo(lastReadEventId);
             else dao.clearEvents();
@@ -219,6 +223,7 @@ public class FlowBridge {
     /** Викликається з Java-коду (не JS) */
     public void pushEvent(String event) {
         callStorage(() -> { dao.insertEvent(new PendingEvent(event)); return null; });
+        NativeRuntime.requestRefresh(ctx);
     }
 
     /** Queues an event with the action timestamp carried by its payload. */
@@ -229,6 +234,7 @@ public class FlowBridge {
             dao.insertEvent(queued);
             return null;
         });
+        NativeRuntime.requestRefresh(ctx);
     }
 
     /**
@@ -237,7 +243,7 @@ public class FlowBridge {
      */
     public String queueCapturedTask(String title) {
         if (title == null || title.trim().isEmpty()) return null;
-        return callStorage(() -> {
+        String queuedEvent = callStorage(() -> {
             long createdAt = System.currentTimeMillis();
             try {
                 String stateJson = dao.getStateJson();
@@ -260,6 +266,8 @@ public class FlowBridge {
                 return null;
             }
         });
+        if (queuedEvent != null) NativeRuntime.requestRefresh(ctx);
+        return queuedEvent;
     }
 
     static long allocateCapturedTaskId(long now, long savedNextId,

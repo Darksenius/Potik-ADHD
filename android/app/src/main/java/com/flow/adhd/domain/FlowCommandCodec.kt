@@ -41,6 +41,8 @@ object FlowCommandCodec {
             is FlowCommand.SetNotepad -> fields("SetNotepad", command, "payload" to command.payload)
             is FlowCommand.SetNotepadFolder -> fields("SetNotepadFolder", command, "folderId" to str(command.folderId))
             is FlowCommand.SaveNotepadAsNote -> fields("SaveNotepadAsNote", command, "folderId" to (command.folderId?.let(::str) ?: JsonNull))
+            is FlowCommand.FileNotepadAsNote -> fields("FileNotepadAsNote", command, "folderId" to (command.folderId?.let(::str) ?: JsonNull))
+            is FlowCommand.ConvertNotepadToTask -> fields("ConvertNotepadToTask", command)
             is FlowCommand.CreateNoteFolder -> fields("CreateNoteFolder", command, "payload" to command.payload)
             is FlowCommand.UpdateNoteFolder -> fields("UpdateNoteFolder", command, "folderId" to str(command.folderId), "payload" to command.payload)
             is FlowCommand.DeleteNoteFolder -> fields("DeleteNoteFolder", command, "folderId" to str(command.folderId))
@@ -116,6 +118,8 @@ object FlowCommandCodec {
                 "SetNotepad" -> read(value, "payload") { c -> FlowCommand.SetNotepad(c.obj("payload"), c.commandId, c.activityAt) }
                 "SetNotepadFolder" -> read(value, "folderId") { c -> FlowCommand.SetNotepadFolder(c.string("folderId"), c.commandId, c.activityAt) }
                 "SaveNotepadAsNote" -> read(value, "folderId") { c -> FlowCommand.SaveNotepadAsNote(c.nullableString("folderId"), c.commandId, c.activityAt) }
+                "FileNotepadAsNote" -> read(value, "folderId") { c -> FlowCommand.FileNotepadAsNote(c.nullableString("folderId"), c.commandId, c.activityAt) }
+                "ConvertNotepadToTask" -> read(value) { c -> FlowCommand.ConvertNotepadToTask(c.commandId, c.activityAt) }
                 "CreateNoteFolder" -> read(value, "payload") { c -> FlowCommand.CreateNoteFolder(c.obj("payload"), c.commandId, c.activityAt) }
                 "UpdateNoteFolder" -> read(value, "folderId", "payload") { c -> FlowCommand.UpdateNoteFolder(c.string("folderId"), c.obj("payload"), c.commandId, c.activityAt) }
                 "DeleteNoteFolder" -> read(value, "folderId") { c -> FlowCommand.DeleteNoteFolder(c.string("folderId"), c.commandId, c.activityAt) }
@@ -166,7 +170,7 @@ object FlowCommandCodec {
     private val kinds = setOf(
         "CaptureTask", "CreateTask", "UpdateTask", "SetTaskDone", "UndoTask", "SetChecklistItem", "ChangeCounter", "RecordNegative", "DeferTask",
         "MoveTask", "MoveTaskToSomeday", "RestoreTaskFromSomeday", "TrashTask", "RestoreTrashedTask", "HardDeleteTask", "SetPriority",
-        "AddQuickNote", "CaptureNote", "RecordPastTaskDone", "MarkTaskReminderFired", "ApplyNotificationEvent", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
+        "AddQuickNote", "CaptureNote", "RecordPastTaskDone", "MarkTaskReminderFired", "ApplyNotificationEvent", "UpdateQuickNote", "DeleteQuickNote", "SetNotepad", "SetNotepadFolder", "SaveNotepadAsNote", "FileNotepadAsNote", "ConvertNotepadToTask", "CreateNoteFolder", "UpdateNoteFolder", "DeleteNoteFolder",
         "CreateZone", "UpdateZone", "DeleteZone", "SetZoneOff", "SetPlanDay", "SetPlanRestDay", "SetPlanDayNote", "ResetPlanDay", "SetPlanZoneOff", "EditPlanZoneForDay", "AddPlanItem", "UpdatePlanItem", "DeletePlanItem",
         "CreateTemplate", "UpdateTemplate", "DeleteTemplate", "ApplyTemplate", "CreateWeekTemplate", "UpdateWeekTemplate", "DeleteWeekTemplate", "ApplyWeekTemplate", "DeletePlanRule",
         "SetFocus", "ClearFocus", "AddFocusChip", "RemoveFocusChip", "SetEnergy", "SetPreferences", "SetTaskEditorDraft", "CreateRareEvent", "ChangeRareEvent", "DeleteRareEvent", "LifecycleTick", "ImportSnapshot", "RestoreSnapshot",
