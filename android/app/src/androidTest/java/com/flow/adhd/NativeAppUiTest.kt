@@ -129,4 +129,46 @@ class NativeAppUiTest {
             compose.onNodeWithText("Колекція знаків", substring = true).assertIsDisplayed()
         }
     }
+
+    @Test fun authoringAndReapplyingADayPresetKeepsIndependentDateCompletions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assumeTrue(BuildConfig.NATIVE_RUNTIME && context.packageName.endsWith(".native"))
+        val app = AppContainer.get(context)
+        val name = "Пресет ${System.currentTimeMillis()}"
+        ActivityScenario.launch(NativeFlowActivity::class.java).use {
+            compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("native-nav-more").performClick()
+            compose.onNodeWithText("Пресети дня", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithTag("native-preset-create").performClick()
+            compose.onNodeWithTag("native-preset-name").performTextInput(name)
+            compose.onNodeWithText("+ Типова задача").performScrollTo().performClick()
+            compose.onNodeWithTag("native-task-title").performTextInput("Типова справа $name")
+            compose.waitUntil(10_000) { runCatching { compose.onNodeWithTag("native-task-save").assertIsEnabled(); true }.getOrDefault(false) }
+            compose.onNodeWithTag("native-task-save").performClick()
+            compose.onNodeWithTag("native-form-save").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-preset-editor").fetchSemanticsNodes().isEmpty() }
+            fun snapshot() = (app.commandRepository.state.value as SnapshotRead.Ready).snapshot
+            val template = (snapshot().data["dayTemplates"] as kotlinx.serialization.json.JsonArray).filterIsInstance<kotlinx.serialization.json.JsonObject>().first { (it["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content == name }
+            val id = (template["id"] as kotlinx.serialization.json.JsonPrimitive).content
+            fun apply() {
+                compose.onNodeWithTag("native-presets").performScrollToNode(hasTestTag("native-preset-apply-$id"))
+                compose.onNodeWithTag("native-preset-apply-$id").performClick()
+                compose.onNodeWithTag("native-preset-span").performTextReplacement("2")
+                compose.onNodeWithTag("native-preset-apply-confirm").performClick()
+                compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-preset-apply-confirm").fetchSemanticsNodes().isEmpty() }
+            }
+            apply()
+            val copies = snapshot().tasks.filter { task -> (task.raw["dayPresetKey"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.startsWith("$id:") == true }
+            assertEquals(2, copies.size)
+            assertEquals(2, copies.map { task -> task.raw["planDate"] }.distinct().size)
+            val todayTask = copies.first { task -> task.raw["planDate"] == kotlinx.serialization.json.JsonPrimitive(java.time.LocalDate.now().toString()) }
+            runBlocking { app.nativeRuntime.submit(com.flow.adhd.domain.FlowCommand.SetTaskDone(todayTask.id, true, System.currentTimeMillis(), java.util.UUID.randomUUID().toString(), System.currentTimeMillis())).await() }
+            compose.waitForIdle()
+            apply()
+            val repeated = snapshot().tasks.filter { task -> (task.raw["dayPresetKey"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.startsWith("$id:") == true }
+            assertEquals(2, repeated.size)
+            assertTrue(repeated.first { task -> task.id == todayTask.id }.done)
+            assertFalse(repeated.first { task -> task.id != todayTask.id }.done)
+        }
+    }
 }

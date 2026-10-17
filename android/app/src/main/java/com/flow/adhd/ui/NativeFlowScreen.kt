@@ -158,6 +158,7 @@ private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject
             when (destination) {
                 "zones" -> NativeZonesScreen(snapshot, busy, onCommand, Modifier.weight(1f))
                 "folders" -> NativeFoldersScreen(snapshot, busy, onCommand, Modifier.weight(1f))
+                "presets" -> NativePresetsScreen(snapshot, busy, onCommand, Modifier.weight(1f))
                 "stats" -> NativeStatsScreen(snapshot, content, busy, onCommand, onInsight, Modifier.weight(1f))
                 "state" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "daily",
                     header = { NativeStateControls(snapshot, busy, onCommand) })
@@ -173,6 +174,7 @@ private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject
         Text("Рів ${snapshot.level} · ${snapshot.xpTotal.toLong()} од")
         OutlinedButton(onClick = { destination = "zones" }) { Text("Зони") }
         OutlinedButton(onClick = { destination = "folders" }) { Text("Папки нотаток") }
+        OutlinedButton(onClick = { destination = "presets" }) { Text("Пресети дня") }
         OutlinedButton(onClick = { destination = "alltasks" }) { Text("Усі задачі") }
         OutlinedButton(onClick = { destination = "state" }) { Text("Стан") }
         OutlinedButton(onClick = { destination = "stats" }) { Text("Статистика") }
