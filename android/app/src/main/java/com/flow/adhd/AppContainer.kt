@@ -4,6 +4,8 @@ import android.content.Context
 import com.flow.adhd.data.LegacyRoomSnapshotRepository
 import com.flow.adhd.data.NativeContent
 import com.flow.adhd.data.NativeCommandRepository
+import com.flow.adhd.data.SnapshotPreparation
+import kotlinx.serialization.json.*
 import com.flow.adhd.domain.FlowEngine
 import com.flow.adhd.domain.NotificationProjection
 import com.flow.adhd.domain.FlowStateReader
@@ -17,10 +19,21 @@ class AppContainer private constructor(context: Context) {
             RoomCommandStore(FlowDatabase.getInstance(context.applicationContext)), FlowEngine(nativeContent.taskXp),
             afterCommit = { FlowBackupStore.get(context.applicationContext).onRoomCommit(it) },
             notificationProjection = { snapshot, at, zone -> NotificationProjection.build(snapshot, at, zone, nativeContent.insights) },
+            archiveBeforeReplacement = { snapshotPreparation.archiveReplacement(it) },
         )
     }
-    val notificationInbox by lazy { NativeNotificationInbox(FlowDatabase.getInstance(context.applicationContext), commandRepository) }
-    val nativeRuntime by lazy { NativeRuntime(context.applicationContext, commandRepository, notificationInbox) }
+    val snapshotPreparation by lazy {
+        SnapshotPreparation(nativeContent.taskXp.keys, archive = { source, raw ->
+            val saved = FlowBridge(context).archiveRecovery(buildJsonObject {
+                put("savedAt", System.currentTimeMillis())
+                put("sources", JsonArray(listOf(buildJsonObject { put("source", source); put("raw", raw) })))
+            }.toString())
+            if (saved) context.getSharedPreferences("native_recovery", Context.MODE_PRIVATE).edit().putBoolean("notice", true).apply()
+            saved
+        })
+    }
+    val notificationInbox by lazy { NativeNotificationInbox(FlowDatabase.getInstance(context.applicationContext), commandRepository, snapshotPreparation::archivePending) }
+    val nativeRuntime by lazy { NativeRuntime(context.applicationContext, commandRepository, notificationInbox, snapshotPreparation) }
 
     companion object {
         @Volatile

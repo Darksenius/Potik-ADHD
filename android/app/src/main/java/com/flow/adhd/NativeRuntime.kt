@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import com.flow.adhd.data.CommandCommit
 import com.flow.adhd.data.NativeCommandRepository
+import com.flow.adhd.data.SnapshotPreparation
 import com.flow.adhd.domain.FlowCommand
 import java.util.UUID
 import kotlinx.coroutines.*
@@ -19,6 +20,7 @@ class NativeRuntime internal constructor(
     private val context: Context,
     val repository: NativeCommandRepository,
     private val inbox: NativeNotificationInbox,
+    private val preparation: SnapshotPreparation,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val operations = Mutex()
@@ -28,6 +30,7 @@ class NativeRuntime internal constructor(
     private val editorDraftLock = Any()
     private var pendingEditorDraft: String? = null
     private var draftJob: Job? = null
+    private var initialized = false
 
     init {
         scope.launch {
@@ -43,7 +46,7 @@ class NativeRuntime internal constructor(
 
     private fun submitInternal(command: FlowCommand): Deferred<CommandCommit> = scope.async(start = CoroutineStart.UNDISPATCHED) {
         operations.withLock {
-            val pendingFailure = drainPending()
+            val pendingFailure = initialize() ?: drainPending()
             finish(pendingFailure ?: repository.dispatch(command))
         }
     }
@@ -69,7 +72,7 @@ class NativeRuntime internal constructor(
 
     fun refresh(): Deferred<CommandCommit> = scope.async(start = CoroutineStart.UNDISPATCHED) {
         operations.withLock {
-            val pendingFailure = drainPending()
+            val pendingFailure = initialize() ?: drainPending()
             if (repository.state.value is com.flow.adhd.domain.SnapshotRead.Loading) repository.read()
             finish(pendingFailure ?: repository.maintain())
         }
@@ -90,6 +93,13 @@ class NativeRuntime internal constructor(
                 else -> return batch
             }
         }
+    }
+
+    private suspend fun initialize(): CommandCommit? {
+        if (initialized) return null
+        val result = repository.initialize(preparation)
+        if (result is CommandCommit.Committed) { initialized = true; return null }
+        return result
     }
 
     private fun finish(result: CommandCommit): CommandCommit {

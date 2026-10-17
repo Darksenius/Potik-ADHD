@@ -32,11 +32,41 @@ class NativeCommandRepository(
     private val initialState: () -> JsonObject = { FlowDefaults.create() },
     private val afterCommit: (String) -> Unit = {},
     private val notificationProjection: (FlowSnapshot, Long, ZoneId) -> JsonObject = { snapshot, at, zone -> NotificationProjection.build(snapshot, at, zone) },
+    private val archiveBeforeReplacement: ((String) -> Boolean)? = null,
 ) : SnapshotSource {
     // Also orders observer publication after a transaction. Never expose optimistic state.
     private val lane = Mutex()
     private val mutableState = MutableStateFlow<SnapshotRead>(SnapshotRead.Loading)
     val state: StateFlow<SnapshotRead> = mutableState.asStateFlow()
+
+    /** Exclusive runtime startup. Files are archived before the transaction can replace incompatible data. */
+    suspend fun initialize(preparation: SnapshotPreparation): CommandCommit = withContext(Dispatchers.IO) {
+        lane.withLock {
+            try {
+                val at = clock(); val timeZone = zone()
+                val result = store.transaction { tx ->
+                    val raw = tx.readSnapshot()
+                    val prepared = preparation.prepare(raw)
+                    val journal = tx.readJournal()
+                    try { readJournal(journal) }
+                    catch (error: JournalFormatException) {
+                        if (!preparation.archiveJournal(journal.orEmpty())) throw error
+                        tx.writeJournal(readJournal(null).toString())
+                    }
+                    val changed = raw.isNullOrBlank() || runCatching { FlowSnapshot.parse(raw).data != prepared.data }.getOrDefault(true)
+                    if (changed) tx.writeSnapshot(prepared.toJson())
+                    tx.writeNotification(notificationProjection(prepared, at, timeZone).toString())
+                    CommandCommit.Committed(prepared, "native-initialize", !changed, emptyList())
+                }
+                mutableState.value = SnapshotRead.Ready(result.snapshot)
+                if (!result.replayed) try { afterCommit(result.snapshot.toJson()) } catch (_: Exception) { }
+                result
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SnapshotFormatException) { CommandCommit.Failed("recovery_archive_failed") }
+            catch (_: JournalFormatException) { CommandCommit.Failed("invalid_command_journal") }
+            catch (_: Exception) { CommandCommit.Failed("storage_error") }
+        }
+    }
 
     override suspend fun read(): SnapshotRead = withContext(Dispatchers.IO) {
         lane.withLock {
@@ -113,6 +143,10 @@ class NativeCommandRepository(
                     when (val result = engine.apply(before, command, timeZone, at)) {
                         is FlowCommandResult.Rejected -> CommandCommit.Rejected(result.code, result.message)
                         is FlowCommandResult.Applied -> {
+                            if ((command is FlowCommand.RestoreSnapshot || command is FlowCommand.ImportSnapshot) &&
+                                (before.data - setOf("saveDate", "qnid")) != (result.snapshot.data - setOf("saveDate", "qnid")) &&
+                                archiveBeforeReplacement?.invoke(before.toJson()) == false)
+                                return@transaction CommandCommit.Rejected("recovery-archive-failed", "Could not archive the current state; import was not applied")
                             entries[command.commandId] = buildJsonObject { put("sha256", digest); put("at", at) }
                             tx.writeSnapshot(result.snapshot.toJson())
                             tx.writeNotification(notificationProjection(result.snapshot, at, timeZone).toString())
@@ -136,7 +170,7 @@ class NativeCommandRepository(
     }
 
     /** FIFO events, the final lifecycle tick, notification projection and exact ack commit together. */
-    suspend fun dispatchPending(envelopes: List<QueuedNotification>): CommandCommit = withContext(Dispatchers.IO) {
+    suspend fun dispatchPending(envelopes: List<QueuedNotification>, archiveRejected: ((QueuedNotification, String) -> Boolean)? = null): CommandCommit = withContext(Dispatchers.IO) {
         lane.withLock {
             if (envelopes.isEmpty() || envelopes.size > 500 || envelopes.any { it.id <= 0 || it.createdAt !in 0..8_640_000_000_000_000L }
                 || envelopes.zipWithNext().any { (a, b) -> a.id >= b.id })
@@ -162,7 +196,12 @@ class NativeCommandRepository(
                             continue
                         }
                         when (val result = engine.apply(snapshot, command, timeZone, at)) {
-                            is FlowCommandResult.Rejected -> return@transaction CommandCommit.Rejected(result.code, result.message)
+                            is FlowCommandResult.Rejected -> {
+                                if (archiveRejected?.invoke(envelope, result.code) != true) return@transaction CommandCommit.Rejected(result.code, result.message)
+                                entries[command.commandId] = buildJsonObject { put("sha256", hash); put("at", at) }
+                                events += FlowEvent("queued_event_archived", at, buildJsonObject { put("eventId", envelope.id) })
+                                allReplayed = false
+                            }
                             is FlowCommandResult.Applied -> {
                                 snapshot = result.snapshot
                                 events += result.events

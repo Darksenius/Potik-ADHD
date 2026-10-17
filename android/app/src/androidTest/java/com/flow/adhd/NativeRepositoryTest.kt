@@ -260,4 +260,42 @@ class NativeRepositoryTest {
         assertEquals(JsonPrimitive(1), notification["dailyInsight"]!!.jsonObject["cardId"])
         assertEquals(content.insights.getValue(1)["text"], notification["dailyInsight"]!!.jsonObject["text"])
     }
+
+    @Test fun startupArchivesIncompatibleStateAndCorruptJournalBeforeReplacingThem() = runBlocking {
+        val raw = """{"formatVersion":999,"original":"preserve"}"""
+        FlowDatabase.callStorage {
+            database.flowDao().writeState(raw)
+            database.flowDao().saveState(AppState("broken journal", "").apply { id = 2 })
+        }
+        val archives = mutableListOf<Pair<String, String>>()
+        val blocked = com.flow.adhd.data.SnapshotPreparation(setOf("simple"), { _, _ -> false })
+        assertTrue(repository().initialize(blocked) is CommandCommit.Failed)
+        assertEquals(raw, FlowDatabase.callStorage { database.flowDao().stateJson })
+        val preparation = com.flow.adhd.data.SnapshotPreparation(setOf("simple"), { source, bytes -> archives += source to bytes; true })
+        assertTrue(repository().initialize(preparation) is CommandCommit.Committed)
+        assertTrue(state().tasks.isEmpty())
+        assertTrue(archives.contains("native-incompatible-state" to raw))
+        assertTrue(archives.contains("native-command-journal" to "broken journal"))
+        assertEquals(JsonPrimitive(1), Json.parseToJsonElement(FlowDatabase.callStorage { database.flowDao().commandJournalJson })!!.jsonObject["version"])
+    }
+
+    @Test fun invalidQueuedEventIsAcknowledgedOnlyAfterItsExactPayloadIsArchived() = runBlocking {
+        queueRaw("capture_task:Keep valid prefix", at)
+        val invalid = queueRaw("unknown-event:keep exact bytes", at)
+        queueRaw("capture_note:Keep valid suffix", at)
+        val archived = mutableListOf<com.flow.adhd.data.QueuedNotification>()
+        val blocked = NativeNotificationInbox(database, repository()) { _, _ -> false }
+        assertTrue(blocked.drain() is CommandCommit.Rejected)
+        assertEquals(3, pending().size)
+        assertTrue(state().tasks.isEmpty())
+        val inbox = NativeNotificationInbox(database, repository()) { envelope, _ -> archived += envelope; true }
+        assertTrue(inbox.drain() is CommandCommit.Committed)
+        assertEquals(1, archived.size)
+        assertEquals(invalid, archived.single().id)
+        assertEquals("unknown-event:keep exact bytes", archived.single().event)
+        assertTrue(pending().isEmpty())
+        assertEquals("Keep valid prefix", state().tasks.single().title)
+        assertEquals(JsonPrimitive("Keep valid suffix"), state().qnotes.single()["txt"])
+        assertEquals(11.0, state().xpTotal, 0.0)
+    }
 }
