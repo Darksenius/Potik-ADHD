@@ -2,12 +2,17 @@ package com.flow.adhd.ui
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Context
+import android.content.res.Configuration
+import android.view.ContextThemeWrapper
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -39,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -53,6 +59,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -232,12 +239,13 @@ fun NativeTaskEditor(
         else onSave(JsonObject(payload))
     }
 
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     Column(modifier.fillMaxSize().imePadding().testTag("native-task-editor")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-editor-close")) { Text("Назад") }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(if (taskId == null) "Нова задача" else "Редагування задачі", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-                Text("Спочатку назва й час. Решту можна налаштувати за потреби.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!keyboardVisible) Text("Спочатку назва. Решту можна налаштувати за потреби.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         HorizontalDivider()
@@ -416,7 +424,7 @@ private fun EditorDateInput(label: String, value: String, onChange: (String) -> 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         EditorInput(label, value, onChange, "native-task-date", enabled, ascii = true, modifier = Modifier.weight(1f))
         OutlinedButton(onClick = {
-            DatePickerDialog(context, dialogTheme, { _, year, month, day ->
+            DatePickerDialog(ukrainianDialogContext(context), dialogTheme, { _, year, month, day ->
                 onChange(LocalDate.of(year, month + 1, day).toString())
             }, initial.year, initial.monthValue - 1, initial.dayOfMonth).show()
         }, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-date-picker")) {
@@ -433,12 +441,20 @@ private fun EditorTimeInput(label: String, value: String, tag: String, onChange:
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         EditorInput(label, value, onChange, tag, enabled, ascii = true, modifier = Modifier.weight(1f))
         OutlinedButton(onClick = {
-            TimePickerDialog(context, dialogTheme, { _, hour, minute -> onChange("%02d:%02d".format(java.util.Locale.ROOT, hour, minute)) },
+            TimePickerDialog(ukrainianDialogContext(context), dialogTheme, { _, hour, minute -> onChange("%02d:%02d".format(Locale.ROOT, hour, minute)) },
                 initial.hour, initial.minute, true).show()
         }, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag("$tag-picker")) {
             Text("Годинник")
         }
     }
+}
+
+/** Applies the app's supported dialog language locally while retaining its Activity base context and picker theme. */
+private fun ukrainianDialogContext(context: Context): ContextThemeWrapper {
+    val configuration = Configuration(context.resources.configuration).apply {
+        setLocale(Locale.forLanguageTag("uk"))
+    }
+    return ContextThemeWrapper(context, 0).apply { applyOverrideConfiguration(configuration) }
 }
 
 @Composable

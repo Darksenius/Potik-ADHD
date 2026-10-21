@@ -119,6 +119,7 @@ class NativeAppUiTest {
             assertEquals(kotlinx.serialization.json.JsonPrimitive(java.time.LocalDate.now().toString()), saved.raw["planDate"])
             assertEquals(kotlinx.serialization.json.JsonPrimitive("10:15"), saved.raw["schedTime"])
             compose.onNodeWithTag("native-nav-more").performClick()
+            compose.onNodeWithTag("native-more").performScrollToNode(hasText("Зони"))
             compose.onNodeWithText("Зони", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("native-zone-edit-1").performScrollTo().performClick()
             compose.onNodeWithTag("native-zone-editor").assertIsDisplayed()
@@ -136,11 +137,15 @@ class NativeAppUiTest {
         ActivityScenario.launch(NativeFlowActivity::class.java).use {
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-nav-more").performClick()
+            compose.onNodeWithTag("native-more").performScrollToNode(hasText("Стан"))
             compose.onNodeWithText("Стан", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("native-energy-5").performClick()
             compose.waitUntil(10_000) { ((app.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.data?.get("energy") as? kotlinx.serialization.json.JsonPrimitive)?.content == "5" }
             compose.onNodeWithTag("native-tasks").performScrollToNode(hasTestTag("native-focus-input"))
             compose.onNodeWithTag("native-focus-input").performTextInput(focus)
+            compose.onNodeWithTag("native-focus-input").assertTextContains(focus)
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitForIdle()
             compose.onNodeWithTag("native-focus-start").performScrollTo().performClick()
             compose.waitUntil(10_000) { ((app.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.data?.get("currentFocus") as? kotlinx.serialization.json.JsonPrimitive)?.content == focus }
             compose.onNodeWithText("← Ще").performClick()
@@ -162,13 +167,19 @@ class NativeAppUiTest {
         ActivityScenario.launch(NativeFlowActivity::class.java).use {
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-nav-more").performClick()
-            compose.onNodeWithText("Пресети дня", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithTag("native-more").performScrollToNode(hasText("Пресети дня"))
+            compose.onNodeWithText("Пресети дня", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("native-preset-create").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-nav-more").fetchSemanticsNodes().isEmpty() }
             compose.onNodeWithTag("native-preset-name").performTextInput(name)
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitForIdle()
             compose.onNodeWithText("+ Типова задача").performScrollTo().performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-task-editor").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-task-title").performTextInput("Типова справа $name")
             compose.waitUntil(10_000) { runCatching { compose.onNodeWithTag("native-task-save").assertIsEnabled(); true }.getOrDefault(false) }
-            compose.onNodeWithTag("native-task-save").performClick()
+            compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-task-editor").fetchSemanticsNodes().isEmpty() }
             compose.onNodeWithTag("native-form-save").performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-preset-editor").fetchSemanticsNodes().isEmpty() }
             fun snapshot() = (app.commandRepository.state.value as SnapshotRead.Ready).snapshot

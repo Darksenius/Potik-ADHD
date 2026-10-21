@@ -22,7 +22,7 @@ import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withText
+import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.flow.adhd.domain.FlowCommand
@@ -187,22 +187,30 @@ class NativeTaskEditorTest {
 
         scrollTo("native-task-date-picker")
         compose.onNodeWithTag("native-task-date-picker").performClick()
-        onView(isAssignableFrom(DatePicker::class.java)).check(matches(isDisplayed()))
-        onView(withText(android.R.string.ok)).perform(click())
+        onView(isAssignableFrom(DatePicker::class.java)).check(matches(isDisplayed())).check { view, _ ->
+            assertEquals("uk", view.context.resources.configuration.locales[0].language)
+        }
+        onView(withId(android.R.id.button1)).perform(click())
         compose.onNodeWithTag("native-task-date").assertTextContains("2099-01-02")
         compose.onNodeWithTag("native-task-date-picker").performClick()
-        onView(isAssignableFrom(DatePicker::class.java)).check(matches(isDisplayed()))
-        onView(withText(android.R.string.cancel)).perform(click())
+        onView(isAssignableFrom(DatePicker::class.java)).check(matches(isDisplayed())).check { view, _ ->
+            assertEquals("uk", view.context.resources.configuration.locales[0].language)
+        }
+        onView(withId(android.R.id.button2)).perform(click())
         compose.onNodeWithTag("native-task-date").assertTextContains("2099-01-02")
 
         scrollTo("native-task-time-picker")
         compose.onNodeWithTag("native-task-time-picker").performClick()
-        onView(isAssignableFrom(TimePicker::class.java)).check(matches(isDisplayed()))
-        onView(withText(android.R.string.ok)).perform(click())
+        onView(isAssignableFrom(TimePicker::class.java)).check(matches(isDisplayed())).check { view, _ ->
+            assertEquals("uk", view.context.resources.configuration.locales[0].language)
+        }
+        onView(withId(android.R.id.button1)).perform(click())
         compose.onNodeWithTag("native-task-time").assertTextContains("13:45")
         compose.onNodeWithTag("native-task-time-picker").performClick()
-        onView(isAssignableFrom(TimePicker::class.java)).check(matches(isDisplayed()))
-        onView(withText(android.R.string.cancel)).perform(click())
+        onView(isAssignableFrom(TimePicker::class.java)).check(matches(isDisplayed())).check { view, _ ->
+            assertEquals("uk", view.context.resources.configuration.locales[0].language)
+        }
+        onView(withId(android.R.id.button2)).perform(click())
         compose.onNodeWithTag("native-task-time").assertTextContains("13:45")
 
         compose.onNodeWithTag("native-task-save").performClick()

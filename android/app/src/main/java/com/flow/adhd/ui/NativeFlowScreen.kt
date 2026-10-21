@@ -66,6 +66,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
     }
     var page by rememberSaveable { mutableStateOf("tasks") }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var moreAuthoring by rememberSaveable { mutableStateOf(false) }
     var editorId by rememberSaveable { mutableStateOf<Long?>(null) }
     var insightDay by rememberSaveable { mutableStateOf<String?>(null) }
     var openedNote by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -90,6 +91,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
         }
     }
     BackHandler(editorOpen && !busy) { editorOpen = false }
+    val shellChromeVisible = !editorOpen && !(page == "more" && moreAuthoring)
 
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(Unit) {
         awaitPointerEventScope {
@@ -102,7 +104,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
         Scaffold(
             snackbarHost = { if (!busy) SnackbarHost(snackbar) },
             topBar = {
-                if (!editorOpen) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (shellChromeVisible) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(R.drawable.potik_mark), null, Modifier.size(32.dp))
                     Text("Потік", Modifier.weight(1f).padding(start = 10.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     if ((snapshot?.data?.get("preferences") as? JsonObject)?.get("showGamification") != JsonPrimitive(false))
@@ -113,7 +115,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                 }
             },
             bottomBar = {
-                if (!editorOpen) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
+                if (shellChromeVisible) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                     listOf("tasks" to "Зараз", "plan" to "План", "notes" to "Нотатки", "more" to "Ще").forEachIndexed { index, (key, label) ->
                         NavigationBarItem(selected = page == key, onClick = { model.flushDraft(); page = key },
                             icon = { NativeNavigationIcon(index) }, label = { Text(label) }, modifier = Modifier.testTag("native-nav-$key"),
@@ -151,7 +153,9 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                         model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f), openNoteId = openedNote)
                     page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f))
                     page == "more" -> NativeMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
-                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, tools = tools, modifier = Modifier.weight(1f))
+                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, tools = tools, modifier = Modifier.weight(1f),
+                        presetAuthoring = moreAuthoring,
+                        onAuthoringChanged = { moreAuthoring = it })
                     else -> NativeTasksScreen(snapshot, projection, busy, model::command,
                         onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f))
                 }
@@ -216,16 +220,20 @@ private fun NativeNavigationIcon(index: Int) {
 
 @Composable
 private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: NativeContent, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit,
-    onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, tools: NativeStorageTools, modifier: Modifier) {
+    onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, tools: NativeStorageTools, modifier: Modifier,
+    presetAuthoring: Boolean = false, onAuthoringChanged: (Boolean) -> Unit = {}) {
     var destination by rememberSaveable { mutableStateOf("") }
+    DisposableEffect(Unit) { onDispose { onAuthoringChanged(false) } }
     if (destination.isNotEmpty()) {
-        BackHandler { destination = "" }
+        BackHandler(destination.isNotEmpty() && !presetAuthoring) { destination = "" }
         Column(modifier) {
-            TextButton(onClick = { destination = "" }) { Text("← Ще") }
+            if (!(destination == "presets" && presetAuthoring)) TextButton(onClick = { destination = "" }) { Text("← Ще") }
             when (destination) {
                 "zones" -> NativeZonesScreen(snapshot, busy, onCommand, Modifier.weight(1f))
                 "folders" -> NativeFoldersScreen(snapshot, busy, onCommand, Modifier.weight(1f))
-                "presets" -> NativePresetsScreen(snapshot, busy, onCommand, Modifier.weight(1f))
+                "presets" -> NativePresetsScreen(snapshot, busy, onCommand, Modifier.weight(1f), onAuthoringChanged = { active ->
+                    onAuthoringChanged(active)
+                })
                 "stats" -> NativeStatsScreen(snapshot, content, busy, onCommand, onInsight, Modifier.weight(1f))
                 "settings" -> NativeSettingsScreen(snapshot, busy, onCommand, tools, Modifier.weight(1f))
                 "state" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "daily",

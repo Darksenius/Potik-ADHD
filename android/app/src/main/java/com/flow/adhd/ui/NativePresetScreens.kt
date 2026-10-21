@@ -14,7 +14,13 @@ import com.flow.adhd.domain.*
 import java.time.LocalDate
 import kotlinx.serialization.json.*
 
-@Composable fun NativePresetsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit, modifier: Modifier = Modifier) {
+@Composable fun NativePresetsScreen(
+    snapshot: FlowSnapshot,
+    busy: Boolean,
+    onCommand: (FlowCommand, () -> Unit) -> Unit,
+    modifier: Modifier = Modifier,
+    onAuthoringChanged: (Boolean) -> Unit = {},
+) {
     var kind by rememberSaveable { mutableStateOf("") }
     var editorId by rememberSaveable { mutableStateOf<String?>(null) }
     var applyKind by rememberSaveable { mutableStateOf("") }
@@ -26,8 +32,14 @@ import kotlinx.serialization.json.*
     var deleteId by rememberSaveable { mutableStateOf("") }
     val dayTemplates = snapshot.data.objects("dayTemplates")
     val weekTemplates = snapshot.data.objects("weekTemplates")
+    LaunchedEffect(kind) { onAuthoringChanged(kind.isNotEmpty()) }
+    DisposableEffect(Unit) { onDispose { onAuthoringChanged(false) } }
+    fun closeAuthoring() {
+        kind = ""
+        onAuthoringChanged(false)
+    }
     if (kind.isNotEmpty()) {
-        BackHandler(!busy) { kind = "" }
+        BackHandler(!busy) { closeAuthoring() }
         val source = (if (kind == "day") dayTemplates else weekTemplates).firstOrNull { it.text("id") == editorId }
         val save: (JsonObject) -> Unit = { payload ->
             val id = newCommandId(); val at = commandTime()
@@ -37,10 +49,10 @@ import kotlinx.serialization.json.*
                 editorId != null -> FlowCommand.UpdateWeekTemplate(editorId!!, payload, id, at)
                 else -> FlowCommand.CreateWeekTemplate(payload, id, at)
             }
-            onCommand(command) { kind = "" }
+            onCommand(command) { closeAuthoring() }
         }
-        if (kind == "day") NativeDayPresetEditor(snapshot, source, busy, save, { kind = "" }, modifier)
-        else NativeCycleEditor(dayTemplates, source, busy, save, { kind = "" }, modifier)
+        if (kind == "day") NativeDayPresetEditor(snapshot, source, busy, save, { closeAuthoring() }, modifier)
+        else NativeCycleEditor(dayTemplates, source, busy, save, { closeAuthoring() }, modifier)
         return
     }
     LazyColumn(modifier.fillMaxSize().testTag("native-presets"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
