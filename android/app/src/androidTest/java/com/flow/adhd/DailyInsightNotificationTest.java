@@ -131,11 +131,18 @@ public class DailyInsightNotificationTest {
         // test's Room fixture and repost a different daily insight.
         android.content.Intent intent = new android.content.Intent(context, FlowNotifService.class)
                 .setAction(NativeRuntime.ACTION_PROJECTION_UPDATED);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
-            context.startForegroundService(intent);
-        else
-            context.startService(intent);
-        bridge.getNotifJson(); // FIFO storage barrier after the service's projection refresh.
+        android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        instrumentation.runOnMainSync(() -> {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+                context.startForegroundService(intent);
+            else
+                context.startService(intent);
+        });
+        // Service startup and onStartCommand are delivered on the main queue.
+        // Drain that queue before the FIFO storage barrier, otherwise an older
+        // refresh can run after the fixture is changed for the next assertion.
+        instrumentation.waitForIdleSync();
+        bridge.getNotifJson();
     }
 
     private static StatusBarNotification findDaily(NotificationManager manager) {
