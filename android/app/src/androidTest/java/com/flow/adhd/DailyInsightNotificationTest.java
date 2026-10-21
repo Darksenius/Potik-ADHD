@@ -126,7 +126,15 @@ public class DailyInsightNotificationTest {
     }
 
     private static void refresh(Context context, FlowBridge bridge) {
-        FlowNotifService.start(context);
+        // Refresh only the service projection. A plain service start also wakes
+        // NativeRuntime, whose cached repository snapshot can rewrite this
+        // test's Room fixture and repost a different daily insight.
+        android.content.Intent intent = new android.content.Intent(context, FlowNotifService.class)
+                .setAction(NativeRuntime.ACTION_PROJECTION_UPDATED);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+            context.startForegroundService(intent);
+        else
+            context.startService(intent);
         bridge.getNotifJson(); // FIFO storage barrier after the service's projection refresh.
     }
 
