@@ -2,7 +2,7 @@
 
 Для продовження з другом або іншим ШІ: [передача роботи](docs/CONTINUING-WORK.md). Стандартний вхід для агентів — [AGENTS.md](AGENTS.md).
 
-Актуальний стек — Kotlin/Compose, ViewModel/StateFlow та Room, Java-компоненти Android для сповіщень і файлів. Поточне завдання — [повний нативний перехід](docs/roadmap/NATIVE-MIGRATION.md) у refactor/native-compose. Стару вебреалізацію збережено в archive/web-reference як довідку; вона не є активним застосунком. [README](README.md) описує складання, [WORKFLOW](docs/WORKFLOW.md) — випуск.
+Актуальний стек — Kotlin/Compose, ViewModel/StateFlow та Room, Java-компоненти Android для сповіщень і файлів. [Повний нативний перехід](docs/roadmap/NATIVE-MIGRATION.md) N1–N5 завершено й опубліковано у v1.7.6.r26. Для нової роботи починайте від актуального main; контрольні SHA та перевірки — у передачі роботи. Стару вебреалізацію збережено в archive/web-reference як довідку; вона не є активним застосунком. [README](README.md) описує складання, [WORKFLOW](docs/WORKFLOW.md) — випуск.
 
 ## Межі
 
