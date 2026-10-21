@@ -4,9 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Environment;
-import android.database.sqlite.SQLiteFullException;
 import android.util.AtomicFile;
-import android.webkit.JavascriptInterface;
 import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -17,6 +15,7 @@ import java.util.concurrent.Callable;
 import java.util.HashMap;
 import java.util.Map;
 
+/** Native platform facade for FIFO event capture, recovery archives and file export. */
 public class FlowBridge {
 
     private static final long MAX_SAFE_JS_INTEGER = 9_007_199_254_740_991L;
@@ -28,7 +27,6 @@ public class FlowBridge {
     // Injection is retained for recovery-archive tests and legacy read-only import.
     private final File publicBackupOverride;
     private final File privateBackupOverride;
-    private volatile String lastSaveError = "";
 
     private static <T> T callStorage(Callable<T> work) {
         return FlowDatabase.callStorage(work);
@@ -46,67 +44,7 @@ public class FlowBridge {
         recoveryArchiveStore = new RecoveryArchiveStore(ctx.getFilesDir());
     }
 
-    /** window.FlowBridge.save(json) — зберігає повний стан */
-    @JavascriptInterface
-    public void save(String json) {
-        NativeRuntime.requireLegacyWriter();
-        callStorage(() -> {
-            dao.writeState(json);
-            scheduleBackupAfterCommit(json);
-            return null;
-        });
-    }
-
-    /** Acknowledgement cannot become durable without its resulting state. */
-    @JavascriptInterface
-    public boolean saveWithEvents(String json, String eventIdsJson) {
-        NativeRuntime.requireLegacyWriter();
-        org.json.JSONArray values;
-        List<Long> ids = new ArrayList<>();
-        try {
-            new org.json.JSONObject(json); // Reject malformed snapshots before the transaction.
-            values = new org.json.JSONArray(eventIdsJson);
-            if (values.length() > 500) { lastSaveError = "invalid_state"; return false; }
-            for (int i = 0; i < values.length(); i++) {
-                long id = values.getLong(i);
-                if (id <= 0) { lastSaveError = "invalid_state"; return false; }
-                ids.add(id);
-            }
-        } catch (org.json.JSONException | NullPointerException e) {
-            lastSaveError = "invalid_state";
-            android.util.Log.w("FlowBridge", "Invalid state or event ids");
-            return false;
-        }
-        return callStorage(() -> {
-            try {
-                dao.commitEvents(json, ids);
-                lastSaveError = "";
-                scheduleBackupAfterCommit(json);
-                return true;
-            } catch (SQLiteFullException e) {
-                lastSaveError = "storage_full";
-                android.util.Log.w("FlowBridge", "Command commit failed: storage_full", e);
-                return false;
-            } catch (Exception e) {
-                lastSaveError = "database_error";
-                android.util.Log.w("FlowBridge", "Command commit failed", e);
-                return false;
-            }
-        });
-    }
-
-    /** Sanitized code for the most recent failed snapshot commit. */
-    @JavascriptInterface
-    public String getLastSaveError() { return lastSaveError; }
-
-    private void scheduleBackupAfterCommit(String json) {
-        if (publicBackupOverride != null || privateBackupOverride != null) return;
-        try { FlowBackupStore.get(ctx).onRoomCommit(json); }
-        catch (Exception e) { android.util.Log.w("FlowBridge", "Unable to queue backup snapshot", e); }
-    }
-
     /** Preserve all recovery inputs in a new archive; never alters Room or backups. */
-    @JavascriptInterface
     public boolean archiveRecovery(String suppliedJson) {
         return callStorage(() -> archiveRecoveryOnStorage(suppliedJson));
     }
@@ -127,19 +65,16 @@ public class FlowBridge {
     }
 
     /** Returns the newest readable archive as JSON, or an empty string. */
-    @JavascriptInterface
     public String readRecoveryArchive() {
         return callStorage(recoveryArchiveStore::readLatest);
     }
 
     /** Metadata for readable immutable recovery archives, newest first. */
-    @JavascriptInterface
     public String listRecoveryArchives() {
         return callStorage(recoveryArchiveStore::list);
     }
 
     /** Read one archive by its generated filename only; reject traversal and paths. */
-    @JavascriptInterface
     public String readRecoveryArchiveFile(String name) {
         return callStorage(() -> recoveryArchiveStore.read(name));
     }
@@ -149,20 +84,7 @@ public class FlowBridge {
         return new AtomicFile(file).readFully();
     }
 
-    /** window.FlowBridge.saveNotif(json) — зберігає snapshot для сповіщення */
-    @JavascriptInterface
-    public void saveNotif(String notifJson) {
-        NativeRuntime.requireLegacyWriter();
-        callStorage(() -> {
-            dao.writeNotif(notifJson);
-            // Keep the saved snapshot and its derived alarm update in FIFO order.
-            try { FlowAlarmReceiver.scheduleNextDue(ctx, this); } catch (Exception ignored) {}
-            return null;
-        });
-    }
-
     /** window.FlowBridge.load() — повертає повний стан */
-    @JavascriptInterface
     public String load() {
         return callStorage(() -> {
             String s = dao.getStateJson();
@@ -172,26 +94,7 @@ public class FlowBridge {
 
     // id останньої прочитаної події — щоб clearEvents() видаляв лише її і старіші,
     // а не події, що прилетіли вже після читання (інакше нотатка зі шторки губиться)
-    private volatile long lastReadEventId = 0;
-
-    /** window.FlowBridge.getEvents() — повертає JSON-масив подій */
-    @JavascriptInterface
-    public String getEvents() {
-        return callStorage(() -> {
-            List<PendingEvent> events = dao.getPendingEvents();
-            if (events.isEmpty()) return "[]";
-            org.json.JSONArray arr = new org.json.JSONArray();
-            long maxId = lastReadEventId;
-            for (PendingEvent e : events) {
-                arr.put(e.event != null ? e.event : "");
-                if (e.id > maxId) maxId = e.id;
-            }
-            lastReadEventId = maxId;
-            return arr.toString();
-        });
-    }
-
-    /** New app versions read commands without removing them. Old string API remains compatible. */
+    /** Read bounded FIFO envelopes without acknowledging them. */
     public String getEventEnvelopes() {
         return callStorage(() -> {
             org.json.JSONArray arr = new org.json.JSONArray();
@@ -209,18 +112,7 @@ public class FlowBridge {
         });
     }
 
-    /** window.FlowBridge.clearEvents() — лише прочитані (до lastReadEventId) */
-    @JavascriptInterface
-    public void clearEvents() {
-        NativeRuntime.requireLegacyWriter();
-        callStorage(() -> {
-            if (lastReadEventId > 0) dao.clearEventsUpTo(lastReadEventId);
-            else dao.clearEvents();
-            return null;
-        });
-    }
-
-    /** Викликається з Java-коду (не JS) */
+    /** Durable event capture; the native repository owns application and acknowledgement. */
     public void pushEvent(String event) {
         callStorage(() -> { dao.insertEvent(new PendingEvent(event)); return null; });
         NativeRuntime.requestRefresh(ctx);
@@ -344,12 +236,6 @@ public class FlowBridge {
         });
     }
 
-    /** window.FlowBridge.appVersion() — версія з build.gradle (єдине джерело правди) */
-    @JavascriptInterface
-    public String appVersion() {
-        return BuildConfig.VERSION_NAME;
-    }
-
     /** Historical locations are kept read-only so older installs can recover existing files. */
     private File getLegacyPublicBackupDir() {
         if (publicBackupOverride != null) return publicBackupOverride;
@@ -362,71 +248,7 @@ public class FlowBridge {
         return new File(base != null ? base : ctx.getFilesDir(), "FLOW-backup");
     }
 
-    /** Compatibility entry point; only the internal last-good store is written directly. */
-    @JavascriptInterface
-    public boolean writeBackup(String json) {
-        return FlowBackupStore.get(ctx).writeCompatibilitySnapshot(json);
-    }
-
-    /** Force queued backup output when the app leaves the foreground. */
-    public void flushBackup() {
-        FlowDatabase.executeStorage(() -> {
-            try {
-                String current = dao.getStateJson();
-                if (current != null && !current.isEmpty()) scheduleBackupAfterCommit(current);
-            } catch (Exception e) {
-                android.util.Log.w("FlowBridge", "Unable to refresh backup snapshot", e);
-            }
-            try { FlowBackupStore.get(ctx).flush(); }
-            catch (Exception e) { android.util.Log.w("FlowBridge", "Unable to flush backup", e); }
-        });
-    }
-
-    /**
-     * window.FlowBridge.readBackup()
-     * Повертає вміст резервного файлу або "" якщо нема.
-     */
-    @JavascriptInterface
-    public String readBackup() {
-        return callStorage(() -> {
-            String local = FlowBackupStore.get(ctx).localBackup();
-            if (!local.isEmpty()) return local;
-            return readLegacyBackupOnStorage();
-        });
-    }
-
-    private String readLegacyBackupOnStorage() {
-        File pub = new File(getLegacyPublicBackupDir(), FlowBackupStore.BACKUP_FILE);
-        File priv = new File(getLegacyPrivateBackupDir(), FlowBackupStore.BACKUP_FILE);
-        File[] candidates = pub.lastModified() >= priv.lastModified()
-                ? new File[] {pub, priv} : new File[] {priv, pub};
-        String unreadable = "";
-        for (File candidate : candidates) {
-            try {
-                String json = new String(new AtomicFile(candidate).readFully(), StandardCharsets.UTF_8);
-                if (unreadable.isEmpty()) unreadable = json;
-                new org.json.JSONObject(json);
-                return json;
-            } catch (Exception ignored) {}
-        }
-        return unreadable; // Let the UI protect and export damaged copies instead of overwriting them.
-    }
-
-    /** window.FlowBridge.hasBackup() — true якщо є резервний файл */
-    @JavascriptInterface
-    public boolean hasBackup() {
-        try {
-            return !readBackup().isEmpty();
-        } catch (Exception e) { return false; }
-    }
-
-    /**
-     * window.FlowBridge.exportTxt(filename, content)
-     * Записує текст у файл і відкриває системний діалог "Поділитися"
-     * (зберегти у Файли / надіслати терапевту). Працює у WebView, де
-     * <a download> не спрацьовує.
-     */
-    @JavascriptInterface
+    /** Export an explicit owner-requested file through the Android share sheet. */
     public boolean exportTxt(String filename, String content) {
         try {
             File dir = new File(ctx.getCacheDir(), "exports");

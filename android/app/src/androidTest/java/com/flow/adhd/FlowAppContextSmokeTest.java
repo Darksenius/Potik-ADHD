@@ -13,6 +13,6 @@ import org.junit.runner.RunWith;
 public class FlowAppContextSmokeTest {
     @Test public void targetApplicationContextUsesFlowPackage() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        assertEquals("com.flow.adhd", appContext.getPackageName());
+        assertEquals(BuildConfig.APPLICATION_ID, appContext.getPackageName());
     }
 }

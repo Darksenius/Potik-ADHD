@@ -138,6 +138,7 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
         } }
         item { SettingsGroup("about", "Про застосунок і допомога", "Офлайн-довідка та оновлення", group, { group = it }) {
             Text("Потік ${BuildConfig.VERSION_NAME}")
+            Text("Ревізія: ${BuildConfig.SOURCE_REVISION}", style = MaterialTheme.typography.bodySmall)
             Text("Задачі, нотатки, календар, 100 думок і довідка працюють офлайн. Мережа потрібна лише для переходу на GitHub або надсилання експортованого файла.")
             OutlinedButton(onClick = { tools.openUrl("https://github.com/Darksenius/Potik-ADHD/releases/latest") }) { Text("Завантажити останній реліз") }
             OutlinedButton(onClick = { tools.openUrl("https://github.com/Darksenius/Potik-ADHD") }) { Text("Репозиторій на GitHub") }

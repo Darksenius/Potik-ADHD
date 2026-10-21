@@ -1,0 +1,35 @@
+{
+  "name": "flow-app",
+  "version": "1.7.6-r26",
+  "description": "Потік — органайзер для людей з РДУГ (ADHD)",
+  "private": true,
+  "type": "module",
+  "author": "Darksenius",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "test": "playwright test",
+    "test:report": "playwright show-report",
+    "dev": "vite",
+    "build": "node scripts/check-release-notes.mjs && tsc && vite build",
+    "preview": "vite preview",
+    "embed-oss": "node scripts/embed-oss.js",
+    "embed-oss:clean": "node scripts/embed-oss.js --clean",
+    "sync": "npm run build && node scripts/embed-oss.js && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

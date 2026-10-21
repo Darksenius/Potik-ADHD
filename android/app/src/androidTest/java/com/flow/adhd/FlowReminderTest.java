@@ -5,8 +5,10 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.service.notification.StatusBarNotification;
+import androidx.room.Room;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import static org.junit.Assume.assumeTrue;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.text.SimpleDateFormat;
@@ -14,12 +16,27 @@ import java.util.Calendar;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.UUID;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-/** Runs against Android notification delivery and the actual Room command queue. */
+/** Runs against Android notification delivery with a per-test in-memory command queue. */
 @RunWith(AndroidJUnit4.class)
 public class FlowReminderTest {
+    private FlowDatabase db;
+    private FlowDao dao;
+
+    @Before public void setUp() {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        db = Room.inMemoryDatabaseBuilder(context, FlowDatabase.class).build();
+        dao = db.flowDao();
+    }
+
+    @After public void closeDatabase() {
+        if (db != null) db.close();
+    }
+
     @Test public void calendarRecurrenceHelpersHandleWeekdaysWeekendPreAndDst() throws Exception {
         TimeZone kyiv = TimeZone.getTimeZone("Europe/Kiev");
         JSONObject daily = calendarRow("daily", "2026-10-13", "09:00", 0, new JSONArray());
@@ -56,9 +73,8 @@ public class FlowReminderTest {
 
     @Test public void recurringAlarmDeliversEachOccurrenceOnceWithoutActivity() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        FlowBridge bridge = new FlowBridge(context);
-        String previous = bridge.getNotifJson();
-        String originalState = bridge.load();
+        requireIsolated(context);
+        FlowBridge bridge = new LocalFlowBridge(context, dao);
         String id = "qa-repeat-" + UUID.randomUUID();
         String doneId = "qa-done-repeat-" + UUID.randomUUID();
         TimeZone zone = TimeZone.getDefault();
@@ -76,12 +92,12 @@ public class FlowReminderTest {
         NotificationManager notifications = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         long firstDue = at(zone, firstDay.get(Calendar.YEAR), firstDay.get(Calendar.MONTH), firstDay.get(Calendar.DAY_OF_MONTH), 9, 0);
         long secondDue = at(zone, secondDay.get(Calendar.YEAR), secondDay.get(Calendar.MONTH), secondDay.get(Calendar.DAY_OF_MONTH), 9, 0);
+        JSONArray liveTasks = new JSONArray()
+                .put(new JSONObject().put("id", id).put("type", "sched").put("done", false).put("trashed", false))
+                .put(new JSONObject().put("id", doneId).put("type", "sched").put("done", false).put("trashed", false));
+        writeState(dao, new JSONObject().put("tasks", liveTasks).toString());
+        writeNotif(dao, new JSONObject().put("schedList", new JSONArray().put(reminder).put(doneReminder)).toString());
         try {
-            JSONArray liveTasks = new JSONArray()
-                    .put(new JSONObject().put("id", id).put("type", "sched").put("done", false).put("trashed", false))
-                    .put(new JSONObject().put("id", doneId).put("type", "sched").put("done", false).put("trashed", false));
-            bridge.save(new JSONObject().put("tasks", liveTasks).toString());
-            bridge.saveNotif(new JSONObject().put("schedList", new JSONArray().put(reminder).put(doneReminder)).toString());
             bridge.pushEvent("task_done:" + doneId);
             receiver.checkSchedAt(context, bridge, firstDue + 60_000L, zone);
             receiver.checkSchedAt(context, bridge, firstDue + 60_000L, zone);
@@ -99,32 +115,25 @@ public class FlowReminderTest {
         } finally {
             notifications.cancel("flow-task:" + id, 5000);
             notifications.cancel("flow-task:" + doneId, 5000);
-            acknowledgeTestReceipts(bridge, id, doneId, originalState);
-            bridge.save(originalState == null ? "" : originalState);
-            bridge.saveNotif(previous == null || previous.isEmpty() ? "{}" : previous);
         }
     }
 
     @Test public void delayedReminderHasOneNotificationAndOneReceiptForItsDeadline() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        FlowBridge bridge = new FlowBridge(context);
-        String previous = bridge.getNotifJson();
-        String originalState = bridge.load();
+        requireIsolated(context);
+        FlowBridge bridge = new LocalFlowBridge(context, dao);
         String id = "qa-" + System.currentTimeMillis();
         long due = System.currentTimeMillis() - 5000;
         String receipt = "sched_fired:" + id + ":" + due;
         JSONObject reminder = new JSONObject().put("id", id).put("title", "QA deadline").put("dueMs", due).put("fired", false);
         NotificationManager notifications = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        FlowAlarmReceiver receiver = new FlowAlarmReceiver();
         try {
-            bridge.save(new JSONObject().put("tasks", new JSONArray().put(new JSONObject()
+            writeState(dao, new JSONObject().put("tasks", new JSONArray().put(new JSONObject()
                     .put("id", id).put("type", "sched").put("done", false).put("trashed", false))).toString());
-            bridge.saveNotif(new JSONObject().put("schedList", new JSONArray().put(reminder)).toString());
-            receiver.onReceive(context, new Intent(FlowAlarmReceiver.ACTION_TASK_DUE));
-            receiver.onReceive(context, new Intent(FlowAlarmReceiver.ACTION_TASK_DUE));
-            // Direct receiver fixtures enqueue work on the shared FIFO lane; this synchronous bridge read
-            // waits behind both deliveries before the test inspects notification side effects.
-            bridge.getEventEnvelopes();
+            writeNotif(dao, new JSONObject().put("schedList", new JSONArray().put(reminder)).toString());
+            FlowAlarmReceiver receiver = new FlowAlarmReceiver();
+            receiver.checkSchedAt(context, bridge, due + 5_000L, TimeZone.getDefault());
+            receiver.checkSchedAt(context, bridge, due + 5_000L, TimeZone.getDefault());
             int shown = 0;
             for (StatusBarNotification notification : notifications.getActiveNotifications()) {
                 if (("flow-task:" + id).equals(notification.getTag())) shown++;
@@ -138,16 +147,13 @@ public class FlowReminderTest {
             assertEquals("Receipt identifies the exact deadline, once", 1, acknowledged);
         } finally {
             notifications.cancel("flow-task:" + id, 5000);
-            acknowledgeTestReceipts(bridge, id, "", originalState);
-            bridge.save(originalState == null ? "" : originalState);
-            bridge.saveNotif(previous == null || previous.isEmpty() ? "{}" : previous);
         }
     }
 
     @Test public void snoozeIntentKeepsTitleRoundsDeadlineAndDeduplicatesOccurrence() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        FlowBridge bridge = new FlowBridge(context);
-        String originalState = bridge.load();
+        requireIsolated(context);
+        FlowBridge bridge = new LocalFlowBridge(context, dao);
         String id = "qa-snooze-" + UUID.randomUUID();
         long unrounded = 1_792_000_123_456L;
         long due = FlowAlarmReceiver.roundUpToMinute(unrounded);
@@ -162,7 +168,7 @@ public class FlowReminderTest {
         FlowAlarmReceiver receiver = new FlowAlarmReceiver();
         NotificationManager notifications = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         try {
-            bridge.save(new JSONObject().put("tasks", new JSONArray().put(task)).toString());
+            writeState(dao, new JSONObject().put("tasks", new JSONArray().put(task)).toString());
             assertTrue("The first delivery shows the cached title", receiver.deliverSnoozeAt(
                     context, bridge, id, snooze.getStringExtra("snooze_title"), due));
             assertFalse("The same scheduled deadline cannot notify twice", receiver.deliverSnoozeAt(
@@ -178,17 +184,6 @@ public class FlowReminderTest {
             assertEquals(1, countEvent(events, "task_remind:" + id));
         } finally {
             notifications.cancel("flow-task:" + id, 5000);
-            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
-            JSONArray ids = new JSONArray();
-            for (int i = 0; i < events.length(); i++) {
-                JSONObject event = events.getJSONObject(i);
-                String value = event.optString("event", "");
-                if (value.equals("sched_fired:" + id + ":" + due) || value.equals("task_remind:" + id)) {
-                    ids.put(event.getLong("id"));
-                }
-            }
-            if (ids.length() > 0) bridge.saveWithEvents(originalState, ids.toString());
-            bridge.save(originalState);
         }
     }
 
@@ -211,17 +206,29 @@ public class FlowReminderTest {
         return count;
     }
 
-    private static void acknowledgeTestReceipts(FlowBridge bridge, String id, String doneId, String state) throws Exception {
-        JSONArray events = new JSONArray(bridge.getEventEnvelopes());
-        JSONArray ids = new JSONArray();
-        String prefix = "sched_fired:" + id + ":";
-        for (int i = 0; i < events.length(); i++) {
-            JSONObject row = events.getJSONObject(i);
-            String event = row.optString("event", "");
-            if (event.startsWith(prefix) || event.startsWith("sched_fired:" + doneId + ":")
-                    || event.equals("task_done:" + doneId)) ids.put(row.getLong("id"));
+    private static void requireIsolated(Context context) {
+        assumeTrue("This integration test requires the isolated native build", BuildConfig.NATIVE_RUNTIME);
+        assertTrue("Refusing to touch the owner's application data", context.getPackageName().endsWith(".native"));
+    }
+
+    private static void writeState(FlowDao dao, String json) {
+        FlowDatabase.callStorage(() -> { dao.writeState(json); return null; });
+    }
+
+    private static void writeNotif(FlowDao dao, String json) {
+        FlowDatabase.callStorage(() -> { dao.writeNotif(json); return null; });
+    }
+
+    private static final class LocalFlowBridge extends FlowBridge {
+        private final FlowDao localDao;
+
+        LocalFlowBridge(Context context, FlowDao dao) {
+            super(context, dao, null, null);
+            localDao = dao;
         }
-        if (ids.length() > 0) bridge.saveWithEvents(state == null || state.isEmpty() ? "{}" : state, ids.toString());
-        bridge.save(state == null ? "" : state);
+
+        @Override public void pushEvent(String event) {
+            FlowDatabase.callStorage(() -> { localDao.insertEvent(new PendingEvent(event)); return null; });
+        }
     }
 }

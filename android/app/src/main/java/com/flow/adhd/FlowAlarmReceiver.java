@@ -24,15 +24,7 @@ import java.util.Map;
 import java.util.Locale;
 import java.util.TimeZone;
 
-/**
- * Обробляє два типи будильників навіть коли апка закрита:
- *  - ACTION_SCHED_CHECK: перевіряє sched-задачі, чий час настав → heads-up нагадування
- *  - ACTION_DAILY_RESET: скидання о 00:10 (timewin.completedToday, рутина) через подію в Room
- *
- * Оскільки JS-логіка живе у WebView, фактичний скид робить апка при наступному
- * відкритті (читаючи saveDate). Тут ми пишемо подію-маркер у Room і оновлюємо
- * сповіщення, щоб користувач побачив нагадування одразу.
- */
+/** Native alarms queue durable commands; NativeRuntime applies them without an Activity. */
 public class FlowAlarmReceiver extends BroadcastReceiver {
 
     public static final String ACTION_SCHED_CHECK = "com.flow.adhd.SCHED_CHECK";
@@ -107,13 +99,9 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
         }
     }
 
-    /** Пише подію в Room + шле broadcast для миттєвої доставки в JS */
+    /** Captures in Room; the platform facade wakes the native command owner. */
     private void pushAndNotify(Context context, FlowBridge bridge, String event) {
         bridge.pushEvent(event);
-        Intent b = new Intent(FlowNotifService.FLOW_EVENT);
-        b.putExtra("event", event);
-        b.setPackage(context.getPackageName());
-        context.sendBroadcast(b);
     }
 
     /** Перевіряє notif_json (масив schedList), чи настав час якоїсь задачі */
@@ -145,7 +133,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                         && !suppressedBySameDayAction(bridge, id, due, zone)) {
                     if (!isReminderTaskEligible(bridge, id)
                             || !fireReminder(context, id, s.optString("title", "Нагадування"))) continue;
-                    // Keep delivery deduplication available when the WebView is closed.
+                    // Keep delivery deduplication available when the Activity is closed.
                     SharedPreferences.Editor editor = delivered.edit().putLong(deliveryKey, due);
                     if (!recurring) editor.putLong("due:" + id, due);
                     editor.commit();
@@ -469,7 +457,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
 
     /**
      * Overlays durable native commands on the last JS reminder snapshot. This
-     * prevents an old scheduled alarm from firing while the WebView is closed
+     * prevents an old scheduled alarm from firing while the Activity is closed
      * and installs the one-off time derived from a pending deferral.
      */
     static JSONArray effectiveSchedList(JSONObject snapshot, FlowBridge bridge, long now, TimeZone zone) {

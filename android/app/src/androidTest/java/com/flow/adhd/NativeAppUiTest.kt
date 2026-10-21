@@ -39,6 +39,18 @@ class NativeAppUiTest {
                 val state = container.commandRepository.state.value as? SnapshotRead.Ready
                 state?.snapshot?.tasks?.firstOrNull { it.id == task.id }?.done == true
             }
+            compose.onNodeWithText("Скасувати").performClick()
+            compose.waitUntil(10_000) {
+                val state = container.commandRepository.state.value as? SnapshotRead.Ready
+                state?.snapshot?.tasks?.firstOrNull { it.id == task.id }?.done == false
+            }
+            val undone = runBlocking { (container.commandRepository.read() as SnapshotRead.Ready).snapshot }
+            assertEquals("Undo restores the experience of the saved task", saved.xpTotal, undone.xpTotal, 0.000001)
+            compose.onNodeWithTag("native-task-complete-${task.id}").performScrollTo().performClick()
+            compose.waitUntil(10_000) {
+                val state = container.commandRepository.state.value as? SnapshotRead.Ready
+                state?.snapshot?.tasks?.firstOrNull { it.id == task.id }?.done == true
+            }
             scenario.recreate()
             compose.waitForIdle()
             val reopened = runBlocking { (container.commandRepository.read() as SnapshotRead.Ready).snapshot }

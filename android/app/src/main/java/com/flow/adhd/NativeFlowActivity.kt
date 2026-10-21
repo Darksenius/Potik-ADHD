@@ -12,7 +12,7 @@ import com.flow.adhd.ui.FlowTheme
 import com.flow.adhd.ui.NativeFlowScreen
 import com.flow.adhd.ui.NativeFlowViewModel
 
-/** The native development variant disables MainActivity and uses its own application ID/data. */
+/** Production entry point; UI and background commands share the application-owned runtime. */
 class NativeFlowActivity : ComponentActivity() {
     private lateinit var model: NativeFlowViewModel
     private var incomingTaskId: Long? = null
@@ -50,7 +50,11 @@ class NativeFlowActivity : ComponentActivity() {
         if (!shared && intent?.action == Intent.ACTION_SEND && intent.type == "text/plain" && !intent.getBooleanExtra("shared", false)) {
             val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString()?.trim().orEmpty().take(500)
             val body = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim().orEmpty()
-            val text = listOf(subject, body).filter { it.isNotEmpty() }.joinToString("\n\n").take(12_000)
+            val combined = listOf(subject, body).filter { it.isNotEmpty() }.joinToString("\n\n")
+            val suffix = "\n\n[Довгий текст скорочено…]"
+            val limit = if (combined.length > 12_000) 12_000 - suffix.length else combined.length
+            val safeLimit = if (limit > 0 && limit < combined.length && combined[limit - 1].isHighSurrogate()) limit - 1 else limit
+            val text = combined.take(safeLimit) + if (combined.length > 12_000) suffix else ""
             if (text.isNotBlank()) {
                 FlowBridge(this).pushEvent("share_text:$text")
                 intent.putExtra("shared", true)

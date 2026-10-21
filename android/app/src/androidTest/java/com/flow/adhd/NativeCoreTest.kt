@@ -207,7 +207,7 @@ class NativeCoreTest {
 
     @Test fun allEditorTypesRetainDetailsAndDailyCounterStartsNewOccurrence() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val catalog = context.assets.open("public/contracts/task-types.json").bufferedReader().use { Json.parseToJsonElement(it.readText()) as JsonObject }
+        val catalog = context.assets.open("content/task-types.json").bufferedReader().use { Json.parseToJsonElement(it.readText()) as JsonObject }
         val engine = FlowEngine(catalog.mapValues { (_, row) -> ((row as JsonObject)["xp"] as JsonPrimitive).content.toDouble() })
         val zone = ZoneId.systemDefault()
         val at = System.currentTimeMillis()
@@ -246,7 +246,7 @@ class NativeCoreTest {
 
     @Test fun captureCompleteReopenCounterAndNotesShareOneActivityDayOnAndroid() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val catalog = context.assets.open("public/contracts/task-types.json").bufferedReader().use {
+        val catalog = context.assets.open("content/task-types.json").bufferedReader().use {
             Json.parseToJsonElement(it.readText()) as JsonObject
         }
         assertEquals(10, catalog.size)

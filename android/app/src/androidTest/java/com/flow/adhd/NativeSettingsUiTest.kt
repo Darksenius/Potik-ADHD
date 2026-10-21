@@ -33,7 +33,8 @@ class NativeSettingsUiTest {
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-settings").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Світла").assertExists()
             compose.onNodeWithText("Що нового · ${BuildConfig.VERSION_NAME}").performScrollTo().performClick()
-            compose.onNodeWithText("${BuildConfig.VERSION_NAME.removeSuffix("-native")} · Резервні копії у твоїй папці").assertExists()
+            val latest = Json.parseToJsonElement(com.flow.adhd.data.NativeContent.read(context, "release-notes.json")).jsonArray.first().jsonObject
+            compose.onNodeWithText("${latest.getValue("version").jsonPrimitive.content} · ${latest.getValue("title").jsonPrimitive.content}").assertExists()
             compose.onNodeWithText("← Назад").performClick()
             compose.onNodeWithTag("native-settings").performScrollToNode(hasTestTag("native-settings-about"))
             compose.onNodeWithTag("native-settings-about").performClick()

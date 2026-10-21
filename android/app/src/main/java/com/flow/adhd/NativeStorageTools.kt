@@ -114,6 +114,11 @@ class NativeStorageTools(private val context: Context, private val runtime: Nati
         updateStatus(if (status()["lastError"] == JsonPrimitive("")) "Резервну копію перевірено й оновлено." else "Копію не вдалося оновити. Перевір стан папки.")
     }
     fun readChosenBackup() = work { preview(store.readSelectedBackup(), true, true) }
+    fun exportOriginal() = work {
+        val raw = FlowBridge(context).load()
+        check(raw.isNotBlank() && FlowBridge(context).exportTxt("Potik-original.json", raw))
+        updateStatus("Оригінальні дані підготовлено для збереження.")
+    }
     fun exportSnapshot(markdown: Boolean = false, analysis: Boolean = false) = work {
         check(runtime.refresh().await() is CommandCommit.Committed)
         val snapshot = runtime.repository.read()

@@ -65,7 +65,6 @@ public class FlowNotifService extends Service {
     public static final String EXTRA_KIND = "flow_kind"; // "tasks" | "rc"
     static final String EXTRA_ACTION_GENERATION = "flow_action_generation";
     private static final String EXTRA_UNDO_TOKEN = "flow_undo_token";
-    public static final String FLOW_EVENT = "com.flow.adhd.FLOW_EVENT";
 
     private static final int  COLOR_FLOW   = 0xFF4f8ef7;
     private static final long REFRESH_MS   = 60_000L;  // оновлення основного щохвилини
@@ -211,13 +210,11 @@ public class FlowNotifService extends Service {
                             } else {
                                 setCaptureReceipt("Запис задачі збережено");
                                 // queueCapturedTask already inserted this command in Room.
-                                broadcastEvent(event);
                             }
                         } else {
                             String event = "capture_note:" + value;
                             bridge.pushEvent(event);
                             setCaptureReceipt("Нотатку збережено");
-                            broadcastEvent(event);
                         }
                     } catch (Exception e) {
                         setCaptureReceipt("Не вдалося зберегти запис");
@@ -252,7 +249,6 @@ public class FlowNotifService extends Service {
                     String event = "task_done:" + id;
                     bridge.pushEventAt(event, actionAt);
                     if (before != null) storePendingUndo(task, "done", actionAt, before, findQuestTask(id));
-                    broadcastEvent(event);
                     setCaptureReceipt("Виконано: " + receiptTaskTitle(task));
                     FlowAlarmReceiver.scheduleNextDue(this, bridge);
                 }
@@ -281,9 +277,8 @@ public class FlowNotifService extends Service {
                             String event = deferral.asEvent(id);
                             bridge.pushEventAt(event, deferral.requestedAt);
                             if (before != null) storePendingUndo(task, "defer", deferral.requestedAt, before, findQuestTask(id));
-                            broadcastEvent(event);
                             setCaptureReceipt(deferralReceipt(task, deferral));
-                            // Replace any old date alarm immediately; the WebView may stay closed.
+                            // Replace any old date alarm immediately; the Activity may stay closed.
                             FlowAlarmReceiver.scheduleNextDue(this, bridge);
                         } else setCaptureReceipt("Відкрий Потік, щоб оновити зони");
                     } else {
@@ -1315,14 +1310,9 @@ public class FlowNotifService extends Service {
         for (int i = 0; i < count; i++) cancelNotif(base + i);
     }
 
-    /**
-     * Пише подію в Room (надійний резерв через polling) І одразу шле broadcast,
-     * який FlowPlugin перетворює на flowEvent для JS — миттєво, без 3-сек затримки.
-     * Якщо апка закрита — broadcast нікуди не дійде, але Room+polling спрацює при відкритті.
-     */
+    /** Capture once in Room; NativeRuntime drains the FIFO without a UI process. */
     private void pushAndNotify(String event) {
         bridge.pushEvent(event);
-        broadcastEvent(event);
     }
 
     private static final class UndoCapture {
@@ -1531,7 +1521,6 @@ public class FlowNotifService extends Service {
             String event = "task_undo:" + payload.toString();
             bridge.pushEventAt(event, now);
             invalidatePendingUndo(token);
-            broadcastEvent(event);
             setCaptureReceipt("Скасовано: " + receiptTaskTitle(task));
             FlowAlarmReceiver.scheduleNextDue(this, bridge);
         } catch (Exception e) {
@@ -1574,13 +1563,6 @@ public class FlowNotifService extends Service {
             if (row != null && id != null && id.equals(row.optString("id", ""))) return row;
         }
         return null;
-    }
-
-    private void broadcastEvent(String event) {
-        Intent b = new Intent(FLOW_EVENT);
-        b.putExtra("event", event);
-        b.setPackage(getPackageName());
-        try { sendBroadcast(b); } catch (Exception ignored) { /* Room already holds the durable command. */ }
     }
 
     private PendingIntent openTasksPI() {

@@ -5,10 +5,8 @@ import static org.junit.Assume.assumeTrue;
 
 import android.app.Notification;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.service.notification.StatusBarNotification;
-import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.text.SimpleDateFormat;
@@ -21,16 +19,19 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import androidx.core.app.NotificationManagerCompat;
 
-/** Verifies daily insight delivery against persisted Room state and the real tap queue. */
+/** Verifies daily insight delivery against persisted Room state and native Activity routing. */
 @RunWith(AndroidJUnit4.class)
 public class DailyInsightNotificationTest {
     private static final String DELIVERY_PREFS = "flow_daily_insight_delivery";
     private static final String DELIVERED_DAYS = "delivered_days";
     private static final long WAIT_MS = 8_000L;
 
-    @Test public void earnedRoomClaimPostsOnceAndTapQueuesArchiveOpenWithoutCredit() throws Exception {
+    @Test public void earnedRoomClaimPostsOnceAndTapTargetsNativeArchiveWithoutCredit() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        assumeTrue("This integration test requires the isolated native build", BuildConfig.NATIVE_RUNTIME);
+        assertTrue("Refusing to touch the owner's application data", context.getPackageName().endsWith(".native"));
         FlowBridge bridge = new FlowBridge(context);
+        FlowDao dao = FlowDatabase.getInstance(context).flowDao();
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         String oldState = bridge.load();
         String oldProjection = bridge.getNotifJson();
@@ -39,7 +40,6 @@ public class DailyInsightNotificationTest {
         boolean hadDeliveredDays = prefs.contains(DELIVERED_DAYS);
         Set<String> oldDeliveredDays = prefs.getStringSet(DELIVERED_DAYS, null) == null
                 ? null : new HashSet<>(prefs.getStringSet(DELIVERED_DAYS, null));
-        Set<Long> priorEventIds = eventIds(bridge);
         FlowNotifService.stop(context);
         manager.cancel(FlowNotifService.NOTIF_ID);
         manager.cancel(FlowNotifService.DAILY_INSIGHT_NOTIF_ID);
@@ -60,8 +60,7 @@ public class DailyInsightNotificationTest {
         try {
             assumeTrue("Notifications must be enabled for this delivery test",
                     NotificationManagerCompat.from(context).areNotificationsEnabled());
-            bridge.save(state.toString());
-            bridge.saveNotif(projection.toString());
+            writeFixture(dao, state.toString(), projection.toString());
             refresh(context, bridge);
             NotificationChannelState channel = waitForChannel(manager);
             assumeTrue("The daily insight channel must be enabled", channel.enabled);
@@ -70,26 +69,26 @@ public class DailyInsightNotificationTest {
             JSONArray archivedClaim = new JSONArray().put(new JSONObject().put("day", today).put("cardId", 7)
                     .put("sequence", 1).put("earnedAt", 0));
             state.put("dailyInsightClaims", archivedClaim);
-            bridge.save(state.toString());
+            writeFixture(dao, state.toString(), projection.toString());
             refresh(context, bridge);
             assertNull("An archived claim with earnedAt=0 must not notify", findDaily(manager));
 
             JSONArray earnedClaim = new JSONArray().put(new JSONObject().put("day", today).put("cardId", 7)
                     .put("sequence", 1).put("earnedAt", System.currentTimeMillis()));
             state.put("dailyInsightClaims", earnedClaim);
-            bridge.save(state.toString());
+            writeFixture(dao, state.toString(), projection.toString());
             projection.put("dailyInsight", new JSONObject(insight.toString()).put("title", repeat('Т', 161)));
-            bridge.saveNotif(projection.toString());
+            writeFixture(dao, state.toString(), projection.toString());
             refresh(context, bridge);
             assertNull("Oversized titles must be rejected", findDaily(manager));
 
             projection.put("dailyInsight", new JSONObject(insight.toString()).put("text", repeat('Д', 2001)));
-            bridge.saveNotif(projection.toString());
+            writeFixture(dao, state.toString(), projection.toString());
             refresh(context, bridge);
             assertNull("Oversized text must be rejected", findDaily(manager));
 
             projection.put("dailyInsight", insight);
-            bridge.saveNotif(projection.toString());
+            writeFixture(dao, state.toString(), projection.toString());
             refresh(context, bridge);
             StatusBarNotification posted = awaitDaily(manager, true);
             assertNotNull(posted);
@@ -106,34 +105,20 @@ public class DailyInsightNotificationTest {
             refresh(context, bridge);
             assertNull("A delivered local date must not repost after another projection refresh", awaitDaily(manager, false));
 
-            // Exercise the same Activity intent path as the notification without
-            // letting an old packaged WebView consume the event before inspection.
-            JSONObject beforeTap = new JSONObject(bridge.load());
+            // Verify the notification targets the production native Activity and preserves its archive day.
             android.content.Intent tapIntent = FlowNotifService.createDailyInsightOpenIntent(context, today);
-            assertTrue(MainActivity.queueInsightOpenIntent(bridge, tapIntent));
-            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
-            assertEquals("The tap queues one durable archive-open event", 1,
-                    countEvent(events, priorEventIds, "open_insight:" + today));
+            assertEquals(NativeFlowActivity.class.getName(), tapIntent.getComponent().getClassName());
+            assertEquals(today, tapIntent.getStringExtra("openInsightDay"));
+            assertEquals("flow://daily-insight/" + today, tapIntent.getDataString());
             JSONObject afterTap = new JSONObject(bridge.load());
-            assertEquals(beforeTap.getJSONArray("progressDays").toString(), afterTap.getJSONArray("progressDays").toString());
-            assertEquals(beforeTap.getJSONArray("dailyInsightClaims").toString(), afterTap.getJSONArray("dailyInsightClaims").toString());
+            assertEquals(progressDays.toString(), afterTap.getJSONArray("progressDays").toString());
+            assertEquals(earnedClaim.toString(), afterTap.getJSONArray("dailyInsightClaims").toString());
         } finally {
             FlowNotifService.stop(context);
             manager.cancel(FlowNotifService.NOTIF_ID);
             manager.cancel(FlowNotifService.DAILY_INSIGHT_NOTIF_ID);
-            JSONArray events = new JSONArray(bridge.getEventEnvelopes());
-            JSONArray acknowledgements = new JSONArray();
-            for (int i = 0; i < events.length(); i++) {
-                JSONObject event = events.getJSONObject(i);
-                if (!priorEventIds.contains(event.optLong("id", -1L))
-                        && event.optString("event", "").equals("open_insight:" + today)) {
-                    acknowledgements.put(event.getLong("id"));
-                }
-            }
-            if (acknowledgements.length() > 0) bridge.saveWithEvents(oldState == null || oldState.isEmpty() ? "{}" : oldState,
-                    acknowledgements.toString());
-            bridge.save(oldState == null ? "" : oldState);
-            bridge.saveNotif(oldProjection == null || oldProjection.isEmpty() ? "{}" : oldProjection);
+            writeFixture(dao, oldState == null ? "" : oldState,
+                    oldProjection == null || oldProjection.isEmpty() ? "{}" : oldProjection);
             if (hadDeliveredDays) prefs.edit().putStringSet(DELIVERED_DAYS,
                     oldDeliveredDays == null ? java.util.Collections.<String>emptySet() : oldDeliveredDays).commit();
             else prefs.edit().remove(DELIVERED_DAYS).commit();
@@ -176,20 +161,12 @@ public class DailyInsightNotificationTest {
         return new NotificationChannelState(false);
     }
 
-    private static Set<Long> eventIds(FlowBridge bridge) throws Exception {
-        Set<Long> result = new HashSet<>();
-        JSONArray events = new JSONArray(bridge.getEventEnvelopes());
-        for (int i = 0; i < events.length(); i++) result.add(events.getJSONObject(i).optLong("id", -1L));
-        return result;
-    }
-
-    private static int countEvent(JSONArray events, Set<Long> priorIds, String exact) throws Exception {
-        int count = 0;
-        for (int i = 0; i < events.length(); i++) {
-            JSONObject event = events.getJSONObject(i);
-            if (!priorIds.contains(event.optLong("id", -1L)) && exact.equals(event.optString("event", ""))) count++;
-        }
-        return count;
+    private static void writeFixture(FlowDao dao, String state, String projection) {
+        FlowDatabase.callStorage(() -> {
+            dao.writeState(state);
+            dao.writeNotif(projection);
+            return null;
+        });
     }
 
     private static String repeat(char value, int count) {

@@ -15,6 +15,19 @@ if (versionMinor > 99 || versionPatch > 99 || versionRevision > 99) {
 }
 def packageVersionCode = versionMajor * 1000000L + versionMinor * 10000L + versionPatch * 100L + versionRevision
 if (packageVersionCode < 1 || packageVersionCode > 2100000000L) throw new GradleException('Android versionCode is out of range')
+def sourceRevision = System.getenv('SOURCE_REVISION')?.trim()
+if (sourceRevision && !(sourceRevision ==~ /[a-fA-F0-9]{40}/)) throw new GradleException('SOURCE_REVISION must be a full Git SHA')
+if (!sourceRevision) {
+    try {
+        sourceRevision = providers.exec { commandLine 'git', '-C', rootProject.file('..').absolutePath, 'rev-parse', 'HEAD' }.standardOutput.asText.get().trim()
+    } catch (Exception ignored) {
+        def marker = rootProject.file('../SOURCE_REVISION')
+        sourceRevision = marker.exists() ? marker.text.trim() : 'unknown'
+    }
+}
+if (sourceRevision != 'unknown' && !(sourceRevision ==~ /[a-fA-F0-9]{40}/)) throw new GradleException('Invalid source revision marker')
+def releaseNotes = new groovy.json.JsonSlurper().parse(rootProject.file('../src/content/release-notes.json'))
+if (releaseNotes[0].version != packageVersion.replace('-r', '.r')) throw new GradleException('Add release notes for the current package version')
 
 android {
     namespace = "com.flow.adhd"
@@ -26,8 +39,8 @@ android {
         versionCode packageVersionCode.toInteger()
         versionName packageVersion.replace('-r', '.r')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField 'boolean', 'NATIVE_RUNTIME', 'false'
-        manifestPlaceholders = [legacyActivityEnabled: 'true', nativeActivityEnabled: 'false']
+        buildConfigField 'boolean', 'NATIVE_RUNTIME', 'true'
+        buildConfigField 'String', 'SOURCE_REVISION', '"' + sourceRevision.toLowerCase() + '"'
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
@@ -56,7 +69,6 @@ android {
             versionNameSuffix '-native'
             matchingFallbacks = ['debug']
             buildConfigField 'boolean', 'NATIVE_RUNTIME', 'true'
-            manifestPlaceholders = [legacyActivityEnabled: 'false', nativeActivityEnabled: 'true']
         }
         release {
             minifyEnabled false
@@ -76,19 +88,12 @@ android {
         targetCompatibility JavaVersion.VERSION_21
     }
     kotlinOptions {
-        // Capacitor's generated build script also targets 21 during transition.
         jvmTarget = '21'
     }
     buildFeatures {
         // потрібно, щоб FlowBridge.appVersion() бачив BuildConfig.VERSION_NAME
         compose true
         buildConfig true
-    }
-}
-
-repositories {
-    flatDir{
-        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
 
@@ -111,13 +116,10 @@ dependencies {
     nativeDebugImplementation 'androidx.compose.ui:ui-test-manifest'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-    implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
-    implementation project(':capacitor-cordova-android-plugins')
 
     // ── Room Database ──────────────────────────────────────
     // Kotlin 2.2 metadata requires the current Room processor; database schema stays v1.
@@ -154,9 +156,7 @@ afterEvaluate {
     if (project.hasProperty('flowApkOutput')) tasks.named('assembleDebug').configure { finalizedBy 'copyApkToFlow' }
 }
 
-apply from: 'capacitor.build.gradle'
-
-// Native content is packaged directly from authored sources, independently of Vite/Capacitor sync.
+// The installed APK contains authored local content only; no web bundle or network loader.
 def nativeAssets = layout.buildDirectory.dir('generated/potikAssets')
 tasks.register('prepareNativeContent', Sync) {
     into nativeAssets
@@ -165,21 +165,14 @@ tasks.register('prepareNativeContent', Sync) {
     from(rootProject.file('../README.md')) { into 'content'; rename { 'readme.md' } }
     def nativeSources = fileTree('src/main/java') { include '**/*.java', '**/*.kt' }
     inputs.files(nativeSources)
+    inputs.property('sourceRevision', sourceRevision)
     doLast {
-        def text = new StringBuilder('Potik native sources\n\n')
+        def text = new StringBuilder('Potik native sources\nRevision: ' + sourceRevision + '\n\n')
         nativeSources.files.sort { a, b -> a.path <=> b.path }.each { source ->
             text.append('\n\n=== ').append(project.relativePath(source)).append(' ===\n').append(source.getText('UTF-8'))
         }
         new File(nativeAssets.get().asFile, 'content/source.txt').setText(text.toString(), 'UTF-8')
     }
 }
-android.sourceSets.main.assets.srcDir(nativeAssets)
+android.sourceSets.main.assets.srcDirs = [nativeAssets]
 tasks.named('preBuild').configure { dependsOn 'prepareNativeContent' }
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}

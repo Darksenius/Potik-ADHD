@@ -146,17 +146,13 @@ class NativeRuntimeTest {
         val insightIntent = FlowNotifService.createDailyInsightOpenIntent(context, LocalDate.now().toString())
         assertEquals("Actual notification navigation must target the native entry Activity", NativeFlowActivity::class.java.name, insightIntent.component?.className)
         @Suppress("DEPRECATION")
-        val legacyInfo = context.packageManager.getActivityInfo(ComponentName(context, MainActivity::class.java), PackageManager.MATCH_DISABLED_COMPONENTS)
-        assertFalse("The legacy WebView Activity must be disabled in the native build", legacyInfo.enabled)
+        val legacyInfo = context.packageManager.getActivityInfo(ComponentName(context, "com.flow.adhd.MainActivity"), PackageManager.MATCH_DISABLED_COMPONENTS)
+        assertEquals("Older shortcuts must resolve to the native screen", NativeFlowActivity::class.java.name, legacyInfo.targetActivity)
     }
 
     private fun assertLegacyWritersRejected(bridge: FlowBridge, before: StoreView) {
-        // Reuse unchanged contents so a failed guard can never replace the current records with a fixture.
-        val saved = before.state.toString()
-        assertTrue("Native state ownership must reject legacy save", runCatching { bridge.save(saved) }.exceptionOrNull() is IllegalStateException)
-        assertTrue("Legacy state-and-ack writer must also be disabled", runCatching { bridge.saveWithEvents(saved, "[]") }.exceptionOrNull() is IllegalStateException)
-        assertTrue("Legacy notification writer must also be disabled", runCatching { bridge.saveNotif(before.notification.toString()) }.exceptionOrNull() is IllegalStateException)
-        assertEquals(saved, JSONObject(bridge.load()).toString())
+        assertTrue("Platform capture must expose no independent snapshot writer or acknowledgement", FlowBridge::class.java.methods.none { it.name in setOf("save", "saveWithEvents", "saveNotif", "clearEvents") })
+        assertEquals(before.state.toString(), JSONObject(bridge.load()).toString())
     }
 
     private fun assertAward(before: JSONObject, after: JSONObject, requested: Double) {

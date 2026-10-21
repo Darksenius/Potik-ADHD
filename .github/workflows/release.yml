@@ -23,7 +23,6 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
       - name: Check tag and package complete source from the validated commit
         run: |
           VERSION=$(node -p "require('./package.json').version.replace('-r', '.r')")
@@ -32,8 +31,6 @@ jobs:
             exit 1
           fi
           node scripts/package-source.mjs
-      - run: npm ci --no-audit --no-fund
-      - run: npm run sync
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

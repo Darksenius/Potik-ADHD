@@ -10,7 +10,7 @@ import com.flow.adhd.domain.FlowEngine
 import com.flow.adhd.domain.NotificationProjection
 import com.flow.adhd.domain.FlowStateReader
 
-/** Manual composition root. Preparing the writer does not activate it in legacy UI or services. */
+/** Application composition root: UI, receivers and service share one transactional writer. */
 class AppContainer private constructor(context: Context) {
     val flowStateReader = FlowStateReader(LegacyRoomSnapshotRepository(context.applicationContext))
     val nativeContent by lazy { NativeContent.load(context.applicationContext) }

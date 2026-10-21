@@ -31,7 +31,7 @@ class NativeRuntime internal constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val operations = Mutex()
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
-    private val effectQueue = Channel<NativeRuntimeEffect>(Channel.UNLIMITED)
+    private val effectQueue = Channel<NativeRuntimeEffect>(Channel.CONFLATED)
     /** One-shot committed effects; buffered until an Activity collects, never launches UI itself. */
     val effects: Flow<NativeRuntimeEffect> = effectQueue.receiveAsFlow()
     private val mutableError = MutableStateFlow<String?>(null)
@@ -144,7 +144,7 @@ class NativeRuntime internal constructor(
             if (note != null && due != null) try { FlowNoteReview.schedule(context, note, due) }
             catch (error: Exception) { android.util.Log.w("NativeRuntime", "Unable to schedule note review", error) }
         }
-        nativeRuntimeEffects(result).forEach { effectQueue.trySend(it) }
+        nativeRuntimeEffects(result).filter { it.event.type != "note_review_requested" }.forEach { effectQueue.trySend(it) }
     }
 
     companion object {
@@ -155,11 +155,8 @@ class NativeRuntime internal constructor(
             if (BuildConfig.NATIVE_RUNTIME) AppContainer.get(context).nativeRuntime.wakeups.trySend(Unit)
         }
 
-        @JvmStatic fun entryClass(): Class<*> = if (BuildConfig.NATIVE_RUNTIME) NativeFlowActivity::class.java else MainActivity::class.java
+        @JvmStatic fun entryClass(): Class<*> = NativeFlowActivity::class.java
 
-        @JvmStatic fun requireLegacyWriter() {
-            check(!BuildConfig.NATIVE_RUNTIME) { "Native runtime owns the state in this build" }
-        }
     }
 }
 

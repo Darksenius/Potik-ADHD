@@ -14,6 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -37,7 +40,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 
-/** Native development shell. It uses the same command owner as the background service. */
+/** Native application shell. It uses the same command owner as the background service. */
 @Composable
 fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingInsight: String?, content: NativeContent, incomingNote: Long? = null) {
     val context = LocalContext.current
@@ -129,6 +132,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                     snapshot == null -> Column(Modifier.padding(24.dp)) {
                         if (read is SnapshotRead.Unavailable) Text("Збережені дані не вдалося прочитати. Вони залишилися на місці.")
                         else { CircularProgressIndicator(); Text("Відкриваю Потік…") }
+                        if (error != null) OutlinedButton(onClick = { tools.exportOriginal() }) { Text("Експортувати оригінальні дані") }
                     }
                     editorOpen -> NativeTaskEditor(snapshot, editorId, busy, onSave = { payload ->
                         val command = FlowCommand.SaveTaskEditor(editorId, payload, null, false, UUID.randomUUID().toString(), System.currentTimeMillis())
@@ -139,7 +143,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                     page == "notes" -> NativeNotesScreen(snapshot, draft, status, busy, model::editNotepad, model::command,
                         model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f), openNoteId = openedNote)
                     page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f))
-                    page == "more" -> NativeDevelopmentMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
+                    page == "more" -> NativeMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
                         onCreate = { editorId = null; editorOpen = true }, onEdit = edit, tools = tools, modifier = Modifier.weight(1f))
                     else -> NativeTasksScreen(snapshot, projection, busy, model::command,
                         onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f))
@@ -181,16 +185,30 @@ private fun NativeNavigationIcon(index: Int) {
     val color = LocalContentColor.current
     Canvas(Modifier.size(22.dp)) {
         val stroke = 2.dp.toPx()
-        if (index == 3) for (x in listOf(.2f, .5f, .8f)) drawCircle(color, stroke, Offset(size.width * x, size.height * .5f))
-        else for (y in listOf(.25f, .5f, .75f)) {
-            if (index == 0) drawCircle(color, stroke, Offset(size.width * .15f, size.height * y))
-            drawLine(color, Offset(size.width * .35f, size.height * y), Offset(size.width * .9f, size.height * y), stroke)
+        fun at(x: Float, y: Float) = Offset(size.width * x, size.height * y)
+        when (index) {
+            3 -> for (x in listOf(.2f, .5f, .8f)) drawCircle(color, stroke, at(x, .5f))
+            1 -> {
+                drawRoundRect(color, at(.12f, .2f), Size(size.width * .76f, size.height * .7f), CornerRadius(stroke), style = Stroke(stroke))
+                drawLine(color, at(.12f, .4f), at(.88f, .4f), stroke)
+                for (x in listOf(.3f, .7f)) drawLine(color, at(x, .08f), at(x, .3f), stroke)
+                for (x in listOf(.33f, .66f)) for (y in listOf(.57f, .75f)) drawCircle(color, stroke / 1.5f, at(x, y))
+            }
+            2 -> {
+                drawRoundRect(color, at(.18f, .08f), Size(size.width * .68f, size.height * .84f), CornerRadius(stroke), style = Stroke(stroke))
+                drawLine(color, at(.31f, .08f), at(.31f, .92f), stroke)
+                for (y in listOf(.3f, .5f, .7f)) drawLine(color, at(.43f, y), at(.73f, y), stroke)
+            }
+            else -> for (y in listOf(.25f, .5f, .75f)) {
+                drawCircle(color, stroke, at(.15f, y))
+                drawLine(color, at(.35f, y), at(.9f, y), stroke)
+            }
         }
     }
 }
 
 @Composable
-private fun NativeDevelopmentMore(snapshot: FlowSnapshot, projection: JsonObject, content: NativeContent, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit,
+private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: NativeContent, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit,
     onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, tools: NativeStorageTools, modifier: Modifier) {
     var destination by rememberSaveable { mutableStateOf("") }
     if (destination.isNotEmpty()) {

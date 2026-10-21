@@ -138,14 +138,6 @@ fun NativeTasksScreen(
         item { header() }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (showGamification) {
-                    Text(
-                        "Рів ${snapshot.level} · ${taskNumber(snapshot.xpTotal)} од",
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.testTag("native-task-progress"),
-                    )
-                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         taskFilterLabel(filter),

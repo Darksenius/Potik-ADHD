@@ -2,6 +2,7 @@ package com.flow.adhd;
 
 import static org.junit.Assert.*;
 import android.content.Context;
+import android.content.ContextWrapper;
 import androidx.room.Room;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -98,7 +99,13 @@ public class FlowPersistenceTest {
             return null;
         });
 
-        FlowBridge bridge = new FlowBridge(ctx, dao, publicDir, privateDir);
+        File isolatedFiles = new File(temp, "files");
+        assertTrue(isolatedFiles.mkdirs());
+        Context isolatedContext = new ContextWrapper(ctx) {
+            @Override public Context getApplicationContext() { return this; }
+            @Override public File getFilesDir() { return isolatedFiles; }
+        };
+        FlowBridge bridge = new FlowBridge(isolatedContext, dao, publicDir, privateDir);
         String supplied = "{\"recovered\":true}";
         JSONArray beforeArchives = new JSONArray(bridge.listRecoveryArchives());
         assertTrue(bridge.archiveRecovery(supplied));
@@ -129,6 +136,8 @@ public class FlowPersistenceTest {
         org.json.JSONObject backups = root.getJSONObject("backups");
         assertArrayEquals(publicBytes, Base64.decode(backups.getJSONObject("public").getString("bytesBase64"), Base64.DEFAULT));
         assertArrayEquals(privateBytes, Base64.decode(backups.getJSONObject("private").getString("bytesBase64"), Base64.DEFAULT));
+        assertTrue(bridge.archiveRecovery(supplied));
+        assertEquals("Identical recovery must reuse its archive", archives.length(), new JSONArray(bridge.listRecoveryArchives()).length());
         storage(() -> {
             assertEquals("not valid json", dao.getStateJson());
             assertEquals("original-notification", dao.getNotifJson());
@@ -136,28 +145,21 @@ public class FlowPersistenceTest {
             return null;
         });
 
-        assertTrue(bridge.saveWithEvents(supplied, "[]"));
-        assertEquals("", bridge.getLastSaveError());
         storage(() -> {
+            dao.writeState(supplied);
             assertEquals(supplied, dao.getStateJson());
             assertEquals("capture_note:queued", dao.getPendingEvents().get(0).event);
             return null;
         });
     }
 
-    @Test public void mainThreadBridgeCallsStaySynchronousWhileRawRoomAccessIsRejected() throws Exception {
-        Context ctx = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        FlowBridge bridge = new FlowBridge(ctx, dao, null, null);
-        AtomicReference<String> loaded = new AtomicReference<>("");
+    @Test public void rawRoomAccessFromMainThreadIsRejected() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
-            bridge.save("{\"sync\":true}");
-            loaded.set(bridge.load());
             try {
                 dao.getStateJson();
                 fail("Raw Room access on the main thread must be rejected");
             } catch (IllegalStateException expected) { }
         });
-        assertEquals("{\"sync\":true}", loaded.get());
     }
 
     @Test public void storageLaneIsFifoAndSupportsReentrantSynchronousBridgeWork() {
