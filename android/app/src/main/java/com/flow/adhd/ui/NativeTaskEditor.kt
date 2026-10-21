@@ -1,5 +1,8 @@
 package com.flow.adhd.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -118,6 +122,8 @@ fun NativeTaskEditor(
     var reminderAdvance by rememberSaveable(taskId) { mutableStateOf(seed.editorNumberText("remindBeforeMinutes", "0")) }
     var tags by rememberSaveable(taskId) { mutableStateOf((seed["tags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { entry -> entry.isString }?.content }.joinToString(", ")) }
     var contextTags by rememberSaveable(taskId) { mutableStateOf((seed["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }.joinToString(", ")) }
+    val hasSavedAdvancedValues = folderId.isNotBlank() || zoneId.isNotBlank() || tags.isNotBlank() || contextTags.isNotBlank() || counterEnabled || type == "counter"
+    var advancedExpanded by rememberSaveable(taskId) { mutableStateOf(hasSavedAdvancedValues) }
     var checklist by rememberSaveable(taskId) { mutableStateOf(seed.editorText("checklistDraft") ?: if (checklistDefinition)
         (seed["items"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().joinToString("\n") { it.editorText("text").orEmpty() } else "") }
     var keepPast by rememberSaveable(taskId) { mutableStateOf(false) }
@@ -139,6 +145,13 @@ fun NativeTaskEditor(
     val parsedTime = editorTime(time)
     val pastTime = scheduled && parsedDate != null && parsedTime != null &&
         LocalDateTime.of(parsedDate, parsedTime).atZone(localZone).toInstant().toEpochMilli() < System.currentTimeMillis()
+
+    fun chooseType(id: String) {
+        type = id
+        error = ""
+        if (id == "counter") { counterEnabled = true; if (counterTarget == "0") counterTarget = "10" }
+        if (id == "sched" && date.isEmpty()) date = LocalDate.now(localZone).toString()
+    }
 
     val draftText = buildJsonObject {
         put("version", 2)
@@ -179,7 +192,11 @@ fun NativeTaskEditor(
             pastTime && !keepPast && postponeMinutes == null && !tomorrow -> "Цей час уже минув. Підтвердь збереження з минулим часом або зміни його."
             else -> null
         }
-        if (problem != null) { error = problem; return }
+        if (problem != null) {
+            if (hasCounter && (step == null || step <= 0 || target == null)) advancedExpanded = true
+            error = problem
+            return
+        }
         val payload = (existing?.raw ?: JsonObject(emptyMap())).toMutableMap().apply {
             put("title", JsonPrimitive(title.trim())); put("type", JsonPrimitive(type))
             put("zoneId", zoneId.toLongOrNull()?.let(::JsonPrimitive) ?: JsonNull)
@@ -218,7 +235,10 @@ fun NativeTaskEditor(
     Column(modifier.fillMaxSize().imePadding().testTag("native-task-editor")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-editor-close")) { Text("Назад") }
-            Text(if (taskId == null) "Нова задача" else "Редагування задачі", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(if (taskId == null) "Нова задача" else "Редагування задачі", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+                Text("Спочатку назва й час. Решту можна налаштувати за потреби.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         HorizontalDivider()
         LazyColumn(
@@ -226,15 +246,20 @@ fun NativeTaskEditor(
             contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                EditorInput("Що зробити?", title, { title = it; error = "" }, "native-task-title", enabled, minLines = 2)
+                EditorInput("Що потрібно зробити?", title, { title = it; error = "" }, "native-task-title", enabled, minLines = 1, maxLines = 2)
             }
             item {
-                EditorPicker("Тип задачі", type, catalog?.types.orEmpty().map { EditorChoice(it.id, it.label) }, enabled,
-                    "native-task-type", onSelect = {
-                        type = it; error = ""
-                        if (it == "counter") { counterEnabled = true; if (counterTarget == "0") counterTarget = "10" }
-                        if (it == "sched" && date.isEmpty()) date = LocalDate.now(localZone).toString()
-                    })
+                Text("Тип задачі", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("simple", "sched").forEach { commonId ->
+                        val label = catalog?.types?.firstOrNull { it.id == commonId }?.label ?: if (commonId == "simple") "Звичайна" else "Запланована"
+                        FilterChip(selected = type == commonId, onClick = { chooseType(commonId) }, enabled = enabled,
+                            label = { Text(label) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-type-$commonId"))
+                    }
+                }
+                val otherTypes = catalog?.types.orEmpty().filterNot { it.id == "simple" || it.id == "sched" }
+                EditorPicker("Інший тип", type.takeIf { it !in setOf("simple", "sched") }.orEmpty(),
+                    otherTypes.map { EditorChoice(it.id, it.label) }, enabled, "native-task-type", "Вибрати інший тип") { chooseType(it) }
                 catalog?.types?.firstOrNull { it.id == type }?.hint?.takeIf { it.isNotEmpty() }?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -253,7 +278,7 @@ fun NativeTaskEditor(
                     Text("Наявні кроки зберігаються разом із їхнім поступом.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            item { EditorInput("Нотатка до задачі", note, { note = it; error = "" }, "native-task-note", enabled, minLines = 4) }
+            item { EditorInput("Нотатка до задачі", note, { note = it; error = "" }, "native-task-note", enabled, minLines = 3, maxLines = 5) }
             item {
                 EditorHeading("Коли?")
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -261,16 +286,15 @@ fun NativeTaskEditor(
                     TextButton(onClick = { date = LocalDate.now(localZone).toString(); keepPast = false; error = "" }, enabled = enabled) { Text("Сьогодні") }
                     TextButton(onClick = { date = LocalDate.now(localZone).plusDays(1).toString(); keepPast = false; error = "" }, enabled = enabled) { Text("Завтра") }
                 }
-                EditorInput("Дата (РРРР-ММ-ДД)${if (scheduled) " — обов’язково" else " — необов’язково"}", date,
-                    { date = it; keepPast = false; error = "" }, "native-task-date", enabled, ascii = true)
-                Text("Часовий пояс: ${localZone.id}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                EditorDateInput("Дата${if (scheduled) " — обов’язково" else " — необов’язково"}", date,
+                    { date = it; keepPast = false; error = "" }, enabled, localZone)
             }
-            if (scheduled) item { EditorInput("Час задачі (ГГ:ХХ)", time, { time = it; keepPast = false; error = "" }, "native-task-time", enabled, ascii = true) }
-            if (type == "alarm") item { EditorInput("Час будильника (ГГ:ХХ)", alarmTime, { alarmTime = it; error = "" }, "native-task-alarm-time", enabled, ascii = true) }
+            if (scheduled) item { EditorTimeInput("Час задачі", time, "native-task-time", { time = it; keepPast = false; error = "" }, enabled) }
+            if (type == "alarm") item { EditorTimeInput("Час будильника", alarmTime, "native-task-alarm-time", { alarmTime = it; error = "" }, enabled) }
             if (type == "timewin") item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    EditorInput("Початок вікна (ГГ:ХХ)", windowStart, { windowStart = it; error = "" }, "native-task-window-start", enabled, ascii = true)
-                    EditorInput("Кінець вікна (ГГ:ХХ)", windowEnd, { windowEnd = it; error = "" }, "native-task-window-end", enabled, ascii = true)
+                    EditorTimeInput("Початок вікна", windowStart, "native-task-window-start", { windowStart = it; error = "" }, enabled)
+                    EditorTimeInput("Кінець вікна", windowEnd, "native-task-window-end", { windowEnd = it; error = "" }, enabled)
                     Text("Вікно може переходити через північ.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -284,10 +308,10 @@ fun NativeTaskEditor(
                         { reminderAdvance = it; error = "" }, "native-task-reminder-advance", enabled, number = true)
                 }
             }
-            item {
-                EditorPicker("У якій зоні?", zoneId, listOf(EditorChoice("", "Будь-яка зона")) + zoneOptions, enabled,
+            if (type == "zonelinked" || repeat == "everyzone") item {
+                EditorPicker("Потрібна зона", zoneId, zoneOptions, enabled,
                     "native-task-zone", "Зону видалено — вибери іншу") { zoneId = it; error = "" }
-                if (type == "zonelinked" || repeat == "everyzone") Text("Для цього налаштування потрібна наявна зона.", style = MaterialTheme.typography.bodySmall)
+                Text("Для цього налаштування потрібна наявна зона.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             item {
                 EditorHeading("Повторення")
@@ -313,10 +337,7 @@ fun NativeTaskEditor(
                     EditorPicker("Одиниця інтервалу", repeatUnit, editorRepeatUnits, enabled, "native-task-repeat-unit") { repeatUnit = it; error = "" }
                 }
             }
-            if (type != "negative") item {
-                EditorToggle("Лічильник прогресу", type == "counter" || counterEnabled, { counterEnabled = it; error = "" }, enabled && type != "counter", "native-task-counter-enabled")
-            }
-            if (hasCounter) item {
+            if (hasCounter && (type == "counter" || advancedExpanded)) item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     EditorInput("Крок лічильника", counterStep, { counterStep = it; error = "" }, "native-task-counter-step", enabled, number = true)
                     EditorPicker("Одиниця лічильника", counterUnit, editorCounterUnits, enabled, "native-task-counter-unit") { counterUnit = it; error = "" }
@@ -331,11 +352,28 @@ fun NativeTaskEditor(
                 EditorInput("Штраф досвіду (0 — без штрафу)", negativeXp, { negativeXp = it; error = "" }, "native-task-negative-xp", enabled, number = true)
             }
             item {
-                EditorPicker("Папка", folderId, listOf(EditorChoice("", "Без папки")) + folderOptions, enabled,
-                    "native-task-folder", "Папку видалено") { folderId = it; error = "" }
+                HorizontalDivider()
+                TextButton(onClick = { advancedExpanded = !advancedExpanded }, enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-task-advanced-toggle")) {
+                    Text(if (advancedExpanded) "Приховати додаткові налаштування" else "Додатково · папка, мітки, лічильник")
+                }
             }
-            item { EditorInput("Мітки через кому", tags, { tags = it; error = "" }, "native-task-tags", enabled) }
-            if (type == "ctx") item { EditorInput("Ручні контекстні мітки через кому", contextTags, { contextTags = it; error = "" }, "native-task-context-tags", enabled) }
+            if (advancedExpanded) {
+                if (type != "zonelinked" && repeat != "everyzone") item {
+                    EditorPicker("Зона", zoneId, listOf(EditorChoice("", "Будь-яка зона")) + zoneOptions, enabled,
+                        "native-task-zone", "Зону видалено — вибери іншу") { zoneId = it; error = "" }
+                }
+                if (type != "negative") item {
+                    EditorToggle("Лічильник прогресу", type == "counter" || counterEnabled,
+                        { counterEnabled = it; error = "" }, enabled && type != "counter", "native-task-counter-enabled")
+                }
+                item {
+                    EditorPicker("Папка", folderId, listOf(EditorChoice("", "Без папки")) + folderOptions, enabled,
+                        "native-task-folder", "Папку видалено") { folderId = it; error = "" }
+                }
+                item { EditorInput("Мітки через кому", tags, { tags = it; error = "" }, "native-task-tags", enabled) }
+                if (type == "ctx") item { EditorInput("Контекстні мітки через кому", contextTags, { contextTags = it; error = "" }, "native-task-context-tags", enabled) }
+            }
         }
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -347,7 +385,7 @@ fun NativeTaskEditor(
             val message = if (unavailable) "Цієї задачі вже немає. Закрий редактор і онови список." else error
             if (message.isNotEmpty()) Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }.testTag("native-task-editor-error"),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            Button(onClick = { save() }, enabled = enabled && catalog?.types?.isNotEmpty() == true,
+            Button(onClick = { save() }, enabled = enabled && catalog?.types?.isNotEmpty() == true, shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-task-save")) {
                 Text(if (busy) "Зберігаю…" else if (taskId == null) "Створити задачу" else "Зберегти зміни")
             }
@@ -358,15 +396,49 @@ fun NativeTaskEditor(
 @Composable
 private fun EditorInput(
     label: String, value: String, onChange: (String) -> Unit, tag: String, enabled: Boolean,
-    minLines: Int = 1, number: Boolean = false, ascii: Boolean = false,
+    minLines: Int = 1, maxLines: Int = if (minLines == 1) 1 else 8, number: Boolean = false, ascii: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(value = value, onValueChange = onChange, label = { Text(label) }, enabled = enabled,
-        modifier = Modifier.fillMaxWidth().testTag(tag), singleLine = minLines == 1, minLines = minLines,
-        maxLines = if (minLines == 1) 1 else 8,
+        modifier = modifier.fillMaxWidth().testTag(tag), singleLine = minLines == 1, minLines = minLines,
+        maxLines = maxLines,
         keyboardOptions = KeyboardOptions(
             capitalization = if (number || ascii) KeyboardCapitalization.None else KeyboardCapitalization.Sentences,
             keyboardType = if (number) KeyboardType.Decimal else if (ascii) KeyboardType.Ascii else KeyboardType.Text,
         ))
+}
+
+@Composable
+private fun EditorDateInput(label: String, value: String, onChange: (String) -> Unit, enabled: Boolean, localZone: ZoneId) {
+    val context = LocalContext.current
+    val initial = editorDate(value) ?: LocalDate.now(localZone)
+    val dialogTheme = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) com.flow.adhd.R.style.PotikPickerDark else com.flow.adhd.R.style.PotikPickerLight
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        EditorInput(label, value, onChange, "native-task-date", enabled, ascii = true, modifier = Modifier.weight(1f))
+        OutlinedButton(onClick = {
+            DatePickerDialog(context, dialogTheme, { _, year, month, day ->
+                onChange(LocalDate.of(year, month + 1, day).toString())
+            }, initial.year, initial.monthValue - 1, initial.dayOfMonth).show()
+        }, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-date-picker")) {
+            Text("Календар")
+        }
+    }
+}
+
+@Composable
+private fun EditorTimeInput(label: String, value: String, tag: String, onChange: (String) -> Unit, enabled: Boolean) {
+    val context = LocalContext.current
+    val initial = editorTime(value) ?: LocalTime.now()
+    val dialogTheme = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) com.flow.adhd.R.style.PotikPickerDark else com.flow.adhd.R.style.PotikPickerLight
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        EditorInput(label, value, onChange, tag, enabled, ascii = true, modifier = Modifier.weight(1f))
+        OutlinedButton(onClick = {
+            TimePickerDialog(context, dialogTheme, { _, hour, minute -> onChange("%02d:%02d".format(java.util.Locale.ROOT, hour, minute)) },
+                initial.hour, initial.minute, true).show()
+        }, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag("$tag-picker")) {
+            Text("Годинник")
+        }
+    }
 }
 
 @Composable
@@ -378,9 +450,9 @@ private fun EditorPicker(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge)
         Box {
-            OutlinedButton(onClick = { expanded = true }, enabled = enabled && options.isNotEmpty(),
+            OutlinedButton(onClick = { expanded = true }, enabled = enabled && options.isNotEmpty(), shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)) {
-                Text(options.firstOrNull { it.id == value }?.label ?: missingLabel)
+                Text(options.firstOrNull { it.id == value }?.label ?: missingLabel, Modifier.weight(1f)); Text("⌄")
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.heightIn(max = 360.dp)) {
                 options.forEach { option ->

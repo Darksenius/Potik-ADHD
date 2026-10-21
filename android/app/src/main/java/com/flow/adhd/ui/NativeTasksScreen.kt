@@ -1,6 +1,9 @@
 package com.flow.adhd.ui
 
 import android.content.Context
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -135,7 +140,7 @@ fun NativeTasksScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { header() }
+        if (initialFilter == "daily") item { header() }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -147,9 +152,10 @@ fun NativeTasksScreen(
                     )
                     Box {
                         OutlinedButton(
-                            onClick = { filterMenu = true },
+                            onClick = { if (filter == "now") { filter = "all"; search = "" } else filterMenu = true },
+                            shape = MaterialTheme.shapes.small,
                             modifier = Modifier.testTag("native-task-filter"),
-                        ) { Text("Показати") }
+                        ) { Text(if (filter == "now") "Усі задачі" else "Показати") }
                         DropdownMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }) {
                             for (key in listOf("now", "all", "daily", "someday", "journal", "trash")) {
                                 DropdownMenuItem(
@@ -161,7 +167,8 @@ fun NativeTasksScreen(
                         }
                     }
                 }
-                Text(
+                if (filter == "now") CurrentZoneCard(projection, questContext)
+                else Text(
                     when (filter) {
                         "now" -> "До п’яти доречних справ · ${projection.stringValue("zone") ?: "Вільний час"}"
                         "all" -> "Усі задачі, включно з майбутніми, відкладеними й виконаними."
@@ -173,11 +180,12 @@ fun NativeTasksScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                if (filter != "trash") {
+                if (filter != "trash" && filter != "now") {
                     Button(
                         onClick = onCreate,
                         enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().testTag("native-task-create"),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-task-create"),
+                        shape = MaterialTheme.shapes.medium,
                     ) { Text("+ Нова задача") }
                 }
                 if (filter != "now") {
@@ -200,13 +208,20 @@ fun NativeTasksScreen(
                 }
             }
         }
+        if (filter == "now") item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Квести · ${visible.size}/5", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Button(onClick = onCreate, enabled = !busy, shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-create")) { Text("+ Задача") }
+            }
+        }
         if (visible.isEmpty()) {
             item {
                 Card(Modifier.fillMaxWidth().testTag("native-tasks-empty")) {
                     Text(
                         when {
                             query.isNotEmpty() && filter != "now" -> "За цими умовами задач немає."
-                            filter == "now" -> "Зараз немає доречних справ. Решта задач доступна через «Показати» та в Плані."
+                            filter == "now" -> "Зараз немає доречних справ. Створи задачу або відкрий «Усі задачі» — майбутні й відкладені справи залишаються там та в Плані."
                             filter == "trash" -> "Кошик порожній."
                             filter == "someday" -> "Немає задач, відкладених на колись."
                             filter == "journal" -> "Ще немає журналів подій."
@@ -302,12 +317,29 @@ private fun NativeTaskCard(
         onCommand(factory(UUID.randomUUID().toString(), now)) {}
     }
 
+    val date = TaskSchedule.planDate(task.raw)?.let { raw ->
+        runCatching { java.time.LocalDate.parse(raw) }.getOrNull()?.let { date ->
+            when (date) {
+                java.time.LocalDate.now() -> "Сьогодні"
+                java.time.LocalDate.now().plusDays(1) -> "Завтра"
+                else -> date.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("uk")))
+            }
+        } ?: raw
+    }
+    val time = when (task.type) {
+        "sched" -> task.raw.stringValue("schedTime")
+        "alarm" -> task.raw.stringValue("alarmTime")
+        "timewin" -> listOfNotNull(task.raw.stringValue("windowStart"), task.raw.stringValue("windowEnd")).joinToString("–").takeIf { it.isNotBlank() }
+        else -> null
+    }
+    val metadata = listOfNotNull(zoneName, date, time, if (task.someday && !task.trashed) "Колись" else null)
+
     Card(
         modifier = Modifier.fillMaxWidth().testTag("native-task-${task.id}"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.dp, if (priorityIndex >= 0) MaterialTheme.colorScheme.primary.copy(alpha = .6f) else MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 if (!task.trashed && !task.someday && !isJournal) {
                     TaskCompletionTarget(
@@ -318,7 +350,8 @@ private fun NativeTaskCard(
                         },
                     )
                 }
-                Column(Modifier.weight(1f).padding(start = if (!task.trashed && !task.someday && !isJournal) 8.dp else 0.dp)) {
+                Column(Modifier.weight(1f).padding(start = if (!task.trashed && !task.someday && !isJournal) 8.dp else 0.dp)
+                    .clickable(enabled = !busy && !task.trashed, role = Role.Button, onClick = onEdit)) {
                     Text(
                         task.title,
                         style = MaterialTheme.typography.titleMedium,
@@ -333,6 +366,10 @@ private fun NativeTaskCard(
                         Surface(modifier = Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
                             Text(typeLabel, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
                         }
+                        if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false))
                         if (priorityIndex >= 0 && !task.trashed) {
                             Text("Пріоритет ${priorityIndex + 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
@@ -340,12 +377,10 @@ private fun NativeTaskCard(
                 }
                 if (!task.trashed) {
                     Box {
-                        TextButton(
-                            onClick = { menuOpen = true },
-                            enabled = !busy,
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                            modifier = Modifier.testTag("native-task-actions-${task.id}"),
-                        ) { Text("Дії") }
+                        IconButton(
+                            onClick = { menuOpen = true }, enabled = !busy,
+                            modifier = Modifier.semantics { contentDescription = "Дії: ${task.title}" }.testTag("native-task-actions-${task.id}"),
+                        ) { Text("⋯", style = MaterialTheme.typography.headlineSmall) }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("Редагувати") },
@@ -400,24 +435,6 @@ private fun NativeTaskCard(
                                     modifier = Modifier.testTag("native-task-down-${task.id}"),
                                 )
                             }
-                            if (canDefer && !isJournal && !task.done && !task.someday) {
-                                DropdownMenuItem(
-                                    text = { Text("Не зараз") },
-                                    enabled = !busy,
-                                    onClick = {
-                                        menuOpen = false
-                                        send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NEXT_ZONE, now, null, id, now) }
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Не сьогодні") },
-                                    enabled = !busy,
-                                    onClick = {
-                                        menuOpen = false
-                                        send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NOT_TODAY, now, null, id, now) }
-                                    },
-                                )
-                            }
                             DropdownMenuItem(
                                 text = { Text(if (task.someday) "Повернути з «Колись»" else "Відкласти на колись") },
                                 enabled = !busy,
@@ -438,17 +455,6 @@ private fun NativeTaskCard(
                         }
                     }
                 }
-            }
-            val date = TaskSchedule.planDate(task.raw)
-            val time = when (task.type) {
-                "sched" -> task.raw.stringValue("schedTime")
-                "alarm" -> task.raw.stringValue("alarmTime")
-                "timewin" -> listOfNotNull(task.raw.stringValue("windowStart"), task.raw.stringValue("windowEnd")).joinToString("–").takeIf { it.isNotBlank() }
-                else -> null
-            }
-            val metadata = listOfNotNull(zoneName, date, time, if (task.someday && !task.trashed) "Колись" else null)
-            if (metadata.isNotEmpty()) {
-                Text(metadata.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (!task.trashed && !task.someday && !isJournal) {
                 taskAvailabilityLabel(availability.reason)?.let {
@@ -518,16 +524,21 @@ private fun NativeTaskCard(
                     Text("−${taskNumber(cost)} од за подію", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            task.note?.takeIf { it.isNotBlank() }?.let { note ->
-                TextButton(
-                    onClick = { noteExpanded = !noteExpanded },
-                    contentPadding = PaddingValues(horizontal = 0.dp),
-                    modifier = Modifier.testTag("native-task-note-toggle-${task.id}"),
-                ) { Text(if (noteExpanded) "Сховати нотатку" else "Нотатка до задачі") }
-                if (noteExpanded) {
-                    Text(note, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("native-task-note-${task.id}"))
-                }
+            val canPostpone = canDefer && !isJournal && !task.done && !task.someday && !task.trashed
+            val note = task.note?.takeIf { it.isNotBlank() }
+            if (canPostpone || note != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (note != null) IconButton(onClick = { noteExpanded = !noteExpanded },
+                    modifier = Modifier.semantics { contentDescription = if (noteExpanded) "Сховати нотатку" else "Нотатка до задачі" }
+                        .testTag("native-task-note-toggle-${task.id}")) { Text("▤", style = MaterialTheme.typography.titleLarge) }
+                if (canPostpone) {
+                    TextButton(onClick = { send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NEXT_ZONE, now, null, id, now) } },
+                        enabled = !busy, modifier = Modifier.weight(1f).testTag("native-task-defer-${task.id}")) { Text("Не зараз") }
+                    TextButton(onClick = { send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NOT_TODAY, now, null, id, now) } },
+                        enabled = !busy, modifier = Modifier.weight(1f).testTag("native-task-tomorrow-${task.id}")) { Text("Не сьогодні") }
+                } else if (note != null) Text("Нотатка", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            if (note != null && noteExpanded) Text(note, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("native-task-note-${task.id}"))
             if (task.trashed) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
@@ -606,3 +617,31 @@ private fun JsonObject.stringValue(key: String): String? = (this[key] as? JsonPr
 private fun JsonObject.booleanValue(key: String): Boolean? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
 private fun JsonObject.numberValue(key: String): Double? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
 private fun JsonObject.numberId(key: String): Long? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
+
+@Composable private fun CurrentZoneCard(projection: JsonObject, context: QuestPolicy.Context) {
+    val fallback = MaterialTheme.colorScheme.secondary
+    val accent = remember(projection.stringValue("zoneColor"), fallback) {
+        runCatching { Color(android.graphics.Color.parseColor(projection.stringValue("zoneColor").orEmpty())) }.getOrDefault(fallback)
+    }
+    val current = context.timeline.firstOrNull { context.now >= it.startAt && context.now < it.endAt }
+    val clock = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+    val time = current?.let { java.time.Instant.ofEpochMilli(it.startAt).atZone(context.zone).format(clock) + "–" +
+        java.time.Instant.ofEpochMilli(it.endAt).atZone(context.zone).format(clock) }.orEmpty()
+    Card(Modifier.fillMaxWidth().testTag("native-current-zone"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(Modifier.width(4.dp).fillMaxHeight().background(accent))
+            Column(Modifier.weight(1f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("У фокусі зараз", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(time, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(projection.stringValue("zone") ?: "Вільний час", style = MaterialTheme.typography.titleLarge)
+                projection.stringValue("desc")?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}

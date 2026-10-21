@@ -1,7 +1,7 @@
 {
   "name": "potik-native",
-  "version": "1.7.6-r26",
-  "description": "РџРѕС‚С–Рє вЂ” РѕСЂРіР°РЅР°Р№Р·РµСЂ РґР»СЏ Р»СЋРґРµР№ Р· Р Р”РЈР“ (ADHD)",
+  "version": "1.7.6-r27",
+  "description": "Потік — органайзер для людей з РДУГ (ADHD)",
   "private": true,
   "type": "module",
   "author": "Darksenius",

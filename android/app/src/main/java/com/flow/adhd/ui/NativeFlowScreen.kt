@@ -3,6 +3,7 @@ package com.flow.adhd.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -101,18 +102,24 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
         Scaffold(
             snackbarHost = { if (!busy) SnackbarHost(snackbar) },
             topBar = {
-                if (!editorOpen) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!editorOpen) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(R.drawable.potik_mark), null, Modifier.size(32.dp))
-                    Text("Потік", Modifier.weight(1f).padding(start = 10.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Потік", Modifier.weight(1f).padding(start = 10.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     if ((snapshot?.data?.get("preferences") as? JsonObject)?.get("showGamification") != JsonPrimitive(false))
-                        Text("Рів ${snapshot?.level ?: 1} · ${snapshot?.xpTotal?.toLong() ?: 0} од", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.small) {
+                            Text("Рів ${snapshot?.level ?: 1} · ${snapshot?.xpTotal?.toLong() ?: 0} од", Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                        }
                 }
             },
             bottomBar = {
-                if (!editorOpen) NavigationBar {
+                if (!editorOpen) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                     listOf("tasks" to "Зараз", "plan" to "План", "notes" to "Нотатки", "more" to "Ще").forEachIndexed { index, (key, label) ->
                         NavigationBarItem(selected = page == key, onClick = { model.flushDraft(); page = key },
-                            icon = { NativeNavigationIcon(index) }, label = { Text(label) }, modifier = Modifier.testTag("native-nav-$key"))
+                            icon = { NativeNavigationIcon(index) }, label = { Text(label) }, modifier = Modifier.testTag("native-nav-$key"),
+                            colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant))
                     }
                 }
             },
@@ -228,20 +235,21 @@ private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: 
         }
         return
     }
-    LazyColumn(modifier, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item {
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Ще", style = MaterialTheme.typography.headlineSmall)
-        Text("Рів ${snapshot.level} · ${snapshot.xpTotal.toLong()} од")
-        OutlinedButton(onClick = { destination = "zones" }) { Text("Зони") }
-        OutlinedButton(onClick = { destination = "folders" }) { Text("Папки нотаток") }
-        OutlinedButton(onClick = { destination = "presets" }) { Text("Пресети дня") }
-        OutlinedButton(onClick = { destination = "alltasks" }) { Text("Усі задачі") }
-        OutlinedButton(onClick = { destination = "state" }) { Text("Стан") }
-        OutlinedButton(onClick = { destination = "stats" }) { Text("Статистика") }
-        OutlinedButton(onClick = { destination = "settings" }, modifier = Modifier.testTag("native-open-settings")) { Text("Налаштування") }
+    LazyColumn(modifier.testTag("native-more"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Text("Ще", style = MaterialTheme.typography.headlineSmall) }
+        item { PotikMenuRow("Налаштування", "Вигляд, сповіщення, дані та допомога", { destination = "settings" }, Modifier.padding(top = 8.dp).testTag("native-open-settings")) }
+        item { Text("Організувати", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { PotikMenuRow("Усі задачі", "Пошук, повторювані справи, «Колись» і кошик", { destination = "alltasks" }) }
+        item { PotikMenuRow("Зони", "Напрямки дня та їхній розклад", { destination = "zones" }) }
+        item { PotikMenuRow("Пресети дня", "Типові дні, справи й тижневі правила", { destination = "presets" }) }
+        item { PotikMenuRow("Папки нотаток", "Назви й порядок твоїх папок", { destination = "folders" }) }
+        item { Text("Твій поступ", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { PotikMenuRow("Стан", "Енергія, фокус і пріоритети дня", { destination = "state" }) }
+        item { PotikMenuRow("Статистика", "Активні дні, думки та відзнаки", { destination = "stats" }) }
         val insight = projection["dailyInsight"] as? JsonObject
-        if (insight != null) OutlinedButton(onClick = { onInsight((insight["day"] as? JsonPrimitive)?.content.orEmpty()) }) { Text("Думка дня") }
-        if (com.flow.adhd.BuildConfig.APPLICATION_ID.endsWith(".native")) Text("Тестові дані цієї збірки зберігаються окремо від основного застосунку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-    } }
+        if (insight != null) item { PotikMenuRow("Думка дня", "Відкрити сьогоднішню картку", { onInsight((insight["day"] as? JsonPrimitive)?.content.orEmpty()) }) }
+        if (com.flow.adhd.BuildConfig.APPLICATION_ID.endsWith(".native")) item {
+            Text("Окрема тестова збірка", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }

@@ -21,8 +21,8 @@ internal fun commandTime() = System.currentTimeMillis()
     Column {
         Text(label, style = MaterialTheme.typography.labelLarge)
         Box {
-            OutlinedButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(choices.firstOrNull { it.first == value }?.second ?: "Вибери значення")
+            OutlinedButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = MaterialTheme.shapes.medium) {
+                Text(choices.firstOrNull { it.first == value }?.second ?: "Вибери значення", Modifier.weight(1f)); Text("⌄")
             }
             DropdownMenu(open, { open = false }, Modifier.heightIn(max = 340.dp)) {
                 choices.forEach { (id, title) -> DropdownMenuItem(text = { Text(title) }, onClick = { open = false; onChange(id) }) }
@@ -43,7 +43,7 @@ internal fun commandTime() = System.currentTimeMillis()
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp)) {
             item { Column(verticalArrangement = Arrangement.spacedBy(14.dp), content = content) }
         }
-        Button(onClick = onSave, enabled = !busy, modifier = Modifier.fillMaxWidth().padding(12.dp).heightIn(min = 48.dp).testTag("native-form-save")) {
+        Button(onClick = onSave, enabled = !busy, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(12.dp).heightIn(min = 48.dp).testTag("native-form-save")) {
             Text(if (busy) "Зберігаю…" else "Зберегти")
         }
     }

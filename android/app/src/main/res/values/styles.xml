@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- Platform date/time dialogs follow the app's chosen Compose theme, not only the OS. -->
+    <style name="PotikPickerLight" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#A93610</item>
+    </style>
+    <style name="PotikPickerDark" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#FF8554</item>
+    </style>
+
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
         <!-- Customize your theme here. -->

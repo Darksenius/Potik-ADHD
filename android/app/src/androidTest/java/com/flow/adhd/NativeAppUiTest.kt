@@ -62,7 +62,7 @@ class NativeAppUiTest {
     @Test fun notepadSavesOnLeavingScreenAndFilesOnce() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assumeTrue(BuildConfig.NATIVE_RUNTIME && context.packageName.endsWith(".native"))
-        val text = "Native notepad ${System.currentTimeMillis()}\nSecond line stays"
+        val text = "Native notepad ${System.currentTimeMillis()}\n" + (1..12).joinToString("\n") { "Line $it remains readable in a saved note." }
         val container = AppContainer.get(context)
         ActivityScenario.launch(NativeFlowActivity::class.java).use { scenario ->
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
@@ -84,6 +84,13 @@ class NativeAppUiTest {
             }
             val snapshot = runBlocking { (container.commandRepository.read() as SnapshotRead.Ready).snapshot }
             assertEquals(1, snapshot.qnotes.count { (it["txt"] as? kotlinx.serialization.json.JsonPrimitive)?.content == text })
+            val note = snapshot.qnotes.single { (it["txt"] as? kotlinx.serialization.json.JsonPrimitive)?.content == text }
+            val noteId = (note["id"] as kotlinx.serialization.json.JsonPrimitive).content
+            val expandTag = "native-note-expand-$noteId"
+            compose.onNodeWithTag("native-notes").performScrollToNode(hasTestTag(expandTag))
+            compose.onNodeWithTag(expandTag).assertTextEquals("Читати повністю").performClick()
+            compose.onNodeWithTag("native-notes").performScrollToNode(hasTestTag(expandTag))
+            compose.onNodeWithTag(expandTag).assertTextEquals("Згорнути").performClick()
         }
     }
 
@@ -137,7 +144,8 @@ class NativeAppUiTest {
             compose.onNodeWithTag("native-focus-start").performScrollTo().performClick()
             compose.waitUntil(10_000) { ((app.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.data?.get("currentFocus") as? kotlinx.serialization.json.JsonPrimitive)?.content == focus }
             compose.onNodeWithText("← Ще").performClick()
-            compose.onNodeWithText("Статистика", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithTag("native-more").performScrollToNode(hasText("Статистика"))
+            compose.onNodeWithText("Статистика", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("native-stats").assertIsDisplayed()
             assertEquals(35, (app.nativeContent.progression["achievements"] as kotlinx.serialization.json.JsonArray).size)
             assertEquals(20, (app.nativeContent.progression["tokens"] as kotlinx.serialization.json.JsonArray).size)

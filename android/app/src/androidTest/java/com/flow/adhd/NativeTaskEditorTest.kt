@@ -15,6 +15,14 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
+import android.widget.DatePicker
+import android.widget.TimePicker
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.flow.adhd.domain.FlowCommand
@@ -56,13 +64,15 @@ class NativeTaskEditorTest {
         show(fixture()) { saved = it }
         compose.onNodeWithTag("native-task-title").performTextReplacement("Зібрати речі")
         catalog.forEach { (id, definition) ->
-            scrollTo("native-task-type")
-            compose.onNodeWithTag("native-task-type").performClick()
             val label = ((definition as JsonObject).getValue("label") as JsonPrimitive).content
-            compose.onNodeWithTag("native-task-type-$id").performScrollTo().assertIsDisplayed().assertTextContains(label).performClick()
-            compose.onNodeWithTag("native-task-type").assertTextContains(label)
+            chooseType(id)
+            if (id == "simple" || id == "sched") {
+                compose.onNodeWithTag("native-task-type-$id").assertIsDisplayed().assertTextContains(label)
+            } else {
+                compose.onNodeWithTag("native-task-type").assertTextContains(label)
+            }
         }
-        choose("native-task-type", "check")
+        chooseType("check")
         scrollTo("native-task-checklist")
         compose.onNodeWithTag("native-task-checklist").performTextReplacement("Документи\nКлючі\nНавушники")
         compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
@@ -90,6 +100,7 @@ class NativeTaskEditorTest {
         val snapshot = fixture(original)
         var saved: JsonObject? = null
         show(snapshot, 700) { saved = it }
+        expandAdvanced()
         scrollTo("native-task-counter-step")
         compose.onNodeWithTag("native-task-counter-step").performTextReplacement("250")
         choose("native-task-counter-unit", "ml")
@@ -127,6 +138,7 @@ class NativeTaskEditorTest {
         compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
         compose.onNodeWithTag("native-task-editor-error").assertIsDisplayed().assertTextContains("РРРР-ММ-ДД", substring = true)
         compose.runOnIdle { assertNull(saved) }
+        expandAdvanced()
         scrollTo("native-task-date")
         compose.onNodeWithTag("native-task-date").performTextReplacement("2099-01-02")
         scrollTo("native-task-note")
@@ -143,6 +155,61 @@ class NativeTaskEditorTest {
             assertEquals(JsonPrimitive(15), payload["remindBeforeMinutes"])
             assertEquals(JsonPrimitive("Адреса й документи\nПрийти за десять хвилин"), payload["note"])
             assertTrue(payload["reminderEnabled"] == JsonPrimitive(true))
+        }
+    }
+
+    @Test
+    fun freshSimpleTaskKeepsSecondaryOptionsCollapsedAndReachable() {
+        show(fixture()) { }
+        compose.onNodeWithTag("native-task-folder").assertDoesNotExist()
+        compose.onNodeWithTag("native-task-tags").assertDoesNotExist()
+        compose.onNodeWithTag("native-task-counter-enabled").assertDoesNotExist()
+        expandAdvanced()
+        scrollTo("native-task-folder")
+        compose.onNodeWithTag("native-task-folder").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-tags").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-counter-enabled").assertIsDisplayed()
+    }
+
+    @Test
+    fun nativeDateAndTimeDialogsConfirmAndCancelWithoutChangingConfiguredValues() {
+        val draft = buildJsonObject {
+            put("version", 1)
+            put("values", buildJsonObject {
+                put("title", "Візит")
+                put("type", "sched")
+                put("date", "2099-01-02")
+                put("time", "13:45")
+            })
+        }.toString()
+        var saved: JsonObject? = null
+        show(fixture(draft = draft)) { saved = it }
+
+        scrollTo("native-task-date-picker")
+        compose.onNodeWithTag("native-task-date-picker").performClick()
+        onView(isAssignableFrom(DatePicker::class.java)).check(matches(isDisplayed()))
+        onView(withText(android.R.string.ok)).perform(click())
+        compose.onNodeWithTag("native-task-date").assertTextContains("2099-01-02")
+        compose.onNodeWithTag("native-task-date-picker").performClick()
+        onView(isAssignableFrom(DatePicker::class.java)).check(matches(isDisplayed()))
+        onView(withText(android.R.string.cancel)).perform(click())
+        compose.onNodeWithTag("native-task-date").assertTextContains("2099-01-02")
+
+        scrollTo("native-task-time-picker")
+        compose.onNodeWithTag("native-task-time-picker").performClick()
+        onView(isAssignableFrom(TimePicker::class.java)).check(matches(isDisplayed()))
+        onView(withText(android.R.string.ok)).perform(click())
+        compose.onNodeWithTag("native-task-time").assertTextContains("13:45")
+        compose.onNodeWithTag("native-task-time-picker").performClick()
+        onView(isAssignableFrom(TimePicker::class.java)).check(matches(isDisplayed()))
+        onView(withText(android.R.string.cancel)).perform(click())
+        compose.onNodeWithTag("native-task-time").assertTextContains("13:45")
+
+        compose.onNodeWithTag("native-task-save").performClick()
+        compose.runOnIdle {
+            val payload = requireNotNull(saved)
+            assertEquals(JsonPrimitive("2099-01-02"), payload["schedDate"])
+            assertEquals(JsonPrimitive("13:45"), payload["schedTime"])
         }
     }
 
@@ -163,10 +230,25 @@ class NativeTaskEditorTest {
         compose.onNodeWithTag("native-task-editor-body").performScrollToNode(hasTestTag(tag))
     }
 
+    private fun expandAdvanced() {
+        scrollTo("native-task-advanced-toggle")
+        val toggle = compose.onNodeWithTag("native-task-advanced-toggle").assertIsDisplayed()
+        if (runCatching { toggle.assertTextContains("Приховати", substring = true) }.isFailure) toggle.performClick()
+    }
+
     private fun choose(tag: String, id: String) {
         scrollTo(tag)
         compose.onNodeWithTag(tag).performClick()
         compose.onNodeWithTag("$tag-$id").performScrollTo().performClick()
+    }
+
+    private fun chooseType(id: String) {
+        if (id == "simple" || id == "sched") {
+            scrollTo("native-task-type-$id")
+            compose.onNodeWithTag("native-task-type-$id").performClick()
+        } else {
+            choose("native-task-type", id)
+        }
     }
 
     private fun fixture(task: JsonObject? = null, draft: String = "") = FlowSnapshot.parse(JsonObject(FlowDefaults.create() + mapOf(

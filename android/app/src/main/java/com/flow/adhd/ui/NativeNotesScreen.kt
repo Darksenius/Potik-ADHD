@@ -1,5 +1,8 @@
 package com.flow.adhd.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.CardDefaults
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -135,27 +138,35 @@ fun NativeNotesScreen(
             )
         }
         if (editingId == null) item(key = "draft") {
-            Card(Modifier.fillMaxWidth()) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        saveStatus.ifBlank { "Автозбереження увімкнено" },
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-                            .testTag("native-notepad-save-status"),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "Блокнот",
+                            modifier = Modifier.weight(1f).semantics { heading() },
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            saveStatus.ifBlank { "Зберігається автоматично" },
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                                .testTag("native-notepad-save-status"),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
                     OutlinedTextField(
                         value = notepadText,
                         onValueChange = onNotepadChange,
                         modifier = Modifier.fillMaxWidth().testTag("native-notepad"),
-                        label = { Text("Нотатка") },
-                        placeholder = { Text("Напиши думку…") },
-                        minLines = 5,
+                        label = { Text("Твоя думка") },
+                        placeholder = { Text("Запиши те, що хочеш пам’ятати…") },
+                        minLines = 4,
                         maxLines = 12,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     )
                     Text(
-                        "Текст зберігається автоматично, без кнопки.",
+                        "Блокнот зберігається автоматично. Можна оформити текст окремою нотаткою або задачею.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -164,7 +175,7 @@ fun NativeNotesScreen(
                     Text(
                         "Слів: $words · Символів: ${notepadText.length}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                     )
                     NotesFolderPicker(
                         label = "Папка для нотатки",
@@ -178,31 +189,32 @@ fun NativeNotesScreen(
                             ) {}
                         },
                     )
-                    Button(
-                        onClick = {
-                            onSaveNotepadAsNote(destination.takeIf { it.isNotEmpty() }) {
-                                if (filterFolder != null) filterFolder = destination.takeIf { it.isNotEmpty() }
-                            }
-                        },
-                        enabled = !busy && notepadText.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-notepad-save"),
-                    ) { Text("Додати до нотаток") }
-                    OutlinedButton(
-                        onClick = onMakeTask,
-                        enabled = !busy && notepadText.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-notepad-make-task"),
-                    ) { Text("Зробити задачею") }
-                    Text(
-                        "«Додати до нотаток» переносить текст у список нижче й відкриває чисте поле.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            shape = MaterialTheme.shapes.medium,
+                            onClick = {
+                                onSaveNotepadAsNote(destination.takeIf { it.isNotEmpty() }) {
+                                    if (filterFolder != null) filterFolder = destination.takeIf { it.isNotEmpty() }
+                                }
+                            },
+                            enabled = !busy && notepadText.isNotBlank(),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-notepad-save"),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        ) { Text("Окрема нотатка", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        OutlinedButton(
+                            shape = MaterialTheme.shapes.medium,
+                            onClick = onMakeTask,
+                            enabled = !busy && notepadText.isNotBlank(),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-notepad-make-task"),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        ) { Text("Чернетку в задачу", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
                 }
             }
         }
         item(key = "collection-heading") {
             Text(
-                "Твої нотатки · ${notes.size}",
+                "Збережені нотатки · ${notes.size}",
                 modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -250,7 +262,7 @@ fun NativeNotesScreen(
             )
         }
         items(visibleNotes, key = { it.key }) { note ->
-            Card(Modifier.fillMaxWidth().testTag("native-note-${note.id ?: note.key}")) {
+            Card(Modifier.fillMaxWidth().testTag("native-note-${note.id ?: note.key}"), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (note.id != null && editingId == note.id) {
                         val editFocus = remember(note.key) { FocusRequester() }
@@ -275,7 +287,7 @@ fun NativeNotesScreen(
                             onSelect = { editFolder = it },
                         )
                         Button(
-                            onClick = {
+                            shape = MaterialTheme.shapes.medium,                            onClick = {
                                 val savedId = note.id
                                 val savedFolder = editFolder
                                 val payload = buildJsonObject {
@@ -298,6 +310,8 @@ fun NativeNotesScreen(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-note-edit-cancel"),
                         ) { Text("Скасувати") }
                     } else {
+                        var noteExpanded by rememberSaveable(note.id ?: note.key) { mutableStateOf(false) }
+                        var noteHasOverflow by remember(note.id ?: note.key) { mutableStateOf(false) }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
                                 folders.firstOrNull { it.id == note.folder }?.name ?: "Без папки",
@@ -307,30 +321,48 @@ fun NativeNotesScreen(
                             )
                             Text(note.dateTime, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                         }
-                        SelectionContainer { Text(note.text) }
+                        SelectionContainer {
+                            Text(
+                                note.text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = if (noteExpanded) Int.MAX_VALUE else 7,
+                                overflow = if (noteExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                                onTextLayout = { noteHasOverflow = it.hasVisualOverflow },
+                            )
+                        }
+                        if (noteHasOverflow || noteExpanded) {
+                            TextButton(
+                                onClick = { noteExpanded = !noteExpanded },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("native-note-expand-${note.id ?: note.key}"),
+                            ) { Text(if (noteExpanded) "Згорнути" else "Читати повністю") }
+                        }
                         if (copiedKey == note.key) Text(
                             "Скопійовано",
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.bodySmall,
                         )
-                        TextButton(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(note.text))
-                                copiedKey = note.key
-                            },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-note-copy-${note.id ?: note.key}"),
-                        ) { Text("Копіювати") }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
+                            TextButton(
                                 onClick = {
+                                    clipboard.setText(AnnotatedString(note.text))
+                                    copiedKey = note.key
+                                },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                    .testTag("native-note-copy-${note.id ?: note.key}"),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                            ) { Text("Копіювати", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            OutlinedButton(
+                                shape = MaterialTheme.shapes.medium,                                onClick = {
                                     editingId = note.id
                                     editText = note.text
                                     editFolder = note.folder
                                 },
                                 enabled = note.id != null && !busy && editingId == null,
                                 modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-note-edit-${note.id ?: note.key}"),
-                            ) { Text("Редагувати") }
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                            ) { Text("Змінити", maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             TextButton(
                                 onClick = {
                                     deleteId = note.id
@@ -338,7 +370,8 @@ fun NativeNotesScreen(
                                 },
                                 enabled = note.id != null && !busy && editingId == null,
                                 modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-note-delete-${note.id ?: note.key}"),
-                            ) { Text("Видалити", color = MaterialTheme.colorScheme.error) }
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                            ) { Text("Видалити", color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         }
                     }
                 }
