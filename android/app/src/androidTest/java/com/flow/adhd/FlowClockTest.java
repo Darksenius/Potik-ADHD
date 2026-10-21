@@ -44,11 +44,11 @@ public class FlowClockTest {
                 .put(zone(2, "Clock shifted zone", (start + 120) % 1440)));
             writeState(dao, state.toString());
             FlowNotifService.start(context);
-            awaitTitle(context, "Clock UTC zone");
+            awaitPanelZone(context, "Clock UTC zone");
             shell("cmd alarm set-timezone Etc/GMT-2");
             awaitZone("Etc/GMT-2");
             // No explicit service update: BootReceiver must handle the system broadcast.
-            awaitTitle(context, "Clock shifted zone");
+            awaitPanelZone(context, "Clock shifted zone");
             JSONObject saved = new JSONObject(bridge.load());
             assertEquals("Timezone refresh must preserve the authored zone definitions", state.getJSONArray("zones").toString(),
                     saved.getJSONArray("zones").toString());
@@ -101,16 +101,16 @@ public class FlowClockTest {
         }
         assertEquals(expected, TimeZone.getDefault().getID());
     }
-    private static void awaitTitle(Context context, String expected) {
+    private static void awaitPanelZone(Context context, String expected) {
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         long until = SystemClock.elapsedRealtime() + 15000;
         while (SystemClock.elapsedRealtime() < until) {
             for (android.service.notification.StatusBarNotification item : manager.getActiveNotifications()) {
                 if (item.getId() == FlowNotifService.NOTIF_ID
-                    && String.valueOf(item.getNotification().extras.getCharSequence(Notification.EXTRA_TITLE)).contains(expected)) return;
+                    && String.valueOf(item.getNotification().extras.getCharSequence(Notification.EXTRA_TEXT)).contains(expected)) return;
             }
             SystemClock.sleep(100);
         }
-        fail("System timezone broadcast did not refresh foreground title to " + expected);
+        fail("System timezone broadcast did not refresh foreground zone details to " + expected);
     }
 }

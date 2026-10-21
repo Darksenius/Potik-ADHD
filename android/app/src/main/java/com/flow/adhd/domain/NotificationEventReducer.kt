@@ -130,7 +130,7 @@ object NotificationEventReducer {
                 if (!QuestPolicy.isValidDeferral(details)) return reject("Deferral payload is invalid")
                 val requested = details.epoch("requestedAt") ?: return reject("Deferral timestamp is invalid")
                 if (kotlin.math.abs(requested - at) > 60_000 || (details.number("startAt") ?: -1.0) < requested) return reject("Deferral timestamp does not match its envelope")
-                val kind = if (details.text("kind") == "next-zone") QuestDeferralKind.NEXT_ZONE else QuestDeferralKind.NOT_TODAY
+                val kind = if (details.text("kind") in setOf("next-zone", "time")) QuestDeferralKind.NEXT_ZONE else QuestDeferralKind.NOT_TODAY
                 apply(state, FlowCommand.DeferTask(taskId, kind, requested, details, "$id:defer", at))
             }
             else -> reject("Unknown notification action")

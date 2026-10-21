@@ -18,8 +18,12 @@ class DayPresetTasks(private val taskTypes: Set<String>) {
     fun sanitize(entry: JsonObject): JsonObject? {
         val entryId = entry.string("id")?.takeIf { it.isNotBlank() } ?: return null
         val source = entry["task"] as? JsonObject ?: return null
-        val type = source.string("type")?.takeIf { it in taskTypes } ?: return null
-        val title = source.string("title")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val sourceType = source.string("type")?.takeIf { it in taskTypes } ?: return null
+        val sourceTitle = source.string("title") ?: return null
+        val parsedTitle = (TaskTitleSchedule.parse(sourceTitle) as? TaskTitleSchedule.Result.Valid)?.value ?: return null
+        val type = if (parsedTitle.time == null) sourceType else "sched"
+        if (type !in taskTypes) return null
+        val title = parsedTitle.title
         val definition = LinkedHashMap<String, JsonElement>()
         definition["title"] = JsonPrimitive(title)
         definition["type"] = JsonPrimitive(type)
@@ -55,7 +59,7 @@ class DayPresetTasks(private val taskTypes: Set<String>) {
             definition["alarmTime"] = JsonPrimitive(time)
         }
         if (type == "sched") {
-            val time = normalizeTime(source.string("schedTime") ?: "") ?: return null
+            val time = parsedTitle.time ?: normalizeTime(source.string("schedTime") ?: "") ?: return null
             definition["schedTime"] = JsonPrimitive(time)
             definition["reminderEnabled"] = JsonPrimitive(source.boolean("reminderEnabled") != false)
             val minutes = source.number("remindBeforeMinutes")?.coerceAtLeast(0.0) ?: 0.0
@@ -106,6 +110,7 @@ class DayPresetTasks(private val taskTypes: Set<String>) {
         if (type == "alarm") task["alarmTime"] = definition["alarmTime"]!!
         if (type == "sched") {
             task["schedDate"] = JsonPrimitive(date); task["schedTime"] = definition.getValue("schedTime")
+            task["planDate"] = JsonPrimitive(date)
             task["reminderEnabled"] = definition.getValue("reminderEnabled"); task["remindBeforeMinutes"] = definition.getValue("remindBeforeMinutes")
         }
         if (type == "timewin") { task["windowStart"] = definition.getValue("windowStart"); task["windowEnd"] = definition.getValue("windowEnd"); task["completedToday"] = JsonPrimitive(false) }

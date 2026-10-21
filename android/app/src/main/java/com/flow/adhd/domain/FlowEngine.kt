@@ -105,19 +105,30 @@ class FlowEngine(private val taskXp: Map<String, Double>) {
     }
 
     private fun capture(snapshot: FlowSnapshot, command: FlowCommand.CaptureTask, zone: ZoneId, now: Long): FlowCommandResult {
-        val title = command.title.trim()
-        if (title.isEmpty()) return FlowCommandResult.Rejected("empty-title", "Task title must not be blank")
         // Notification buttons may already reference this ID before any screen opens.
         if (command.requestedId != null && snapshot.tasks.any { it.id == command.requestedId }) {
             return FlowCommandResult.Applied(snapshot, emptyList())
+        }
+        val parsed = when (val result = TaskTitleSchedule.parse(command.title)) {
+            is TaskTitleSchedule.Result.Valid -> result.value
+            TaskTitleSchedule.Result.EmptyTitle -> return FlowCommandResult.Rejected("empty-title", "Task title must not be blank")
+            TaskTitleSchedule.Result.InvalidTime -> return FlowCommandResult.Rejected("invalid-time", "Task title time marker is invalid")
         }
         val next = maxOf(300L, snapshot.tasks.maxOfOrNull { it.id + 1L } ?: 300L,
             (snapshot.data["nid"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull ?: 300L)
         val id = command.requestedId ?: next
         if (next >= 9_007_199_254_740_991L || id >= 9_007_199_254_740_991L) return FlowCommandResult.Rejected("id-exhausted", "No safe task ID remains")
-        val task = TaskFactory.create(id, title, "simple", command.activityAt)
+        val task = TaskFactory.create(id, parsed.title, if (parsed.time == null) "simple" else "sched", command.activityAt).toMutableMap()
+        parsed.time?.let { time ->
+            val date = TaskTitleSchedule.defaultDate(time, command.activityAt, zone)
+            task["schedDate"] = JsonPrimitive(date)
+            task["schedTime"] = JsonPrimitive(time)
+            task["planDate"] = JsonPrimitive(date)
+            task["reminderEnabled"] = JsonPrimitive(true)
+            task["remindBeforeMinutes"] = JsonPrimitive(0)
+        }
         val data = snapshot.data.toMutableMap().apply {
-            put("tasks", JsonArray(listOf(task) + snapshot.tasks.map { it.raw }))
+            put("tasks", JsonArray(listOf(JsonObject(task)) + snapshot.tasks.map { it.raw }))
             put("nid", JsonPrimitive(maxOf(next + 1L, id + 1L)))
         }
         val activity = Progression.recordActivity(JsonObject(data), command.activityAt, zone, now)

@@ -117,6 +117,27 @@ class TaskEditorReducerTest {
         assertTrue(result.events.isEmpty())
     }
 
+    @Test fun editorMarkerCreatesScheduledTaskAndPreservesExplicitDate() {
+        val at = Instant.parse("2024-03-01T10:00:00Z").toEpochMilli()
+        val initial = snapshot()
+        val created = applied(TaskEditorReducer.reduce(initial,
+            FlowCommand.CreateTask(payload("""{"title":"  Call clinic ///12:40///  ","type":"simple","reminderEnabled":false}"""), "marked", at), zone, types, now = at,
+        )).snapshot.tasks.single()
+        assertEquals("Call clinic", created.title)
+        assertEquals("sched", created.type)
+        assertEquals("2024-03-01", created.raw["schedDate"]?.toString()?.trim('"'))
+        assertEquals("12:40", created.raw["schedTime"]?.toString()?.trim('"'))
+        assertEquals("true", created.raw["reminderEnabled"].toString())
+
+        val explicit = applied(TaskEditorReducer.reduce(initial,
+            FlowCommand.CreateTask(payload("""{"title":"Call ///12:40///","type":"simple","schedDate":"2024-03-04"}"""), "marked-date", at), zone, types, now = at,
+        )).snapshot.tasks.single()
+        assertEquals("2024-03-04", explicit.raw["schedDate"]?.toString()?.trim('"'))
+        assertTrue(TaskEditorReducer.reduce(initial,
+            FlowCommand.CreateTask(payload("""{"title":"Call ///24:60///","type":"simple"}"""), "bad-marked", at), zone, types, now = at,
+        ) is FlowCommandResult.Rejected)
+    }
+
     private fun applied(result: FlowCommandResult): FlowCommandResult.Applied = result as FlowCommandResult.Applied
     private fun payload(raw: String) = Json.parseToJsonElement(raw).jsonObject
     private fun task(raw: String) = Json.parseToJsonElement(raw).jsonObject

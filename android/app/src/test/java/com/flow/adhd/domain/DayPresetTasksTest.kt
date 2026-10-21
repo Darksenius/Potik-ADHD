@@ -63,6 +63,16 @@ class DayPresetTasksTest {
         assertEquals(existing, repeated.tasks.last())
     }
 
+    @Test fun titleMarkerPromotesPresetEntryToScheduledTaskOnMaterializedDate() {
+        val entry = obj("""{"id":"timed","task":{"title":"Pay bill ///12:40///","type":"simple"}}""")
+        val task = presets.materialize(entry, "work", "2026-10-22", 321, emptyList(), 0)!!
+        assertEquals("Pay bill", task.string("title"))
+        assertEquals("sched", task.string("type"))
+        assertEquals("12:40", task.string("schedTime"))
+        assertEquals("2026-10-22", task.string("schedDate"))
+        assertNull(presets.sanitize(obj("""{"id":"bad","task":{"title":"///25:00///","type":"simple"}}""")))
+    }
+
     @Test fun collisionAdvancesSafeIdAndOverflowThrows() {
         val entry = obj("""{"id":"e","task":{"title":"Task","type":"simple"}}""")
         val existing = obj("""{"id":5,"title":"keep","type":"simple"}""")

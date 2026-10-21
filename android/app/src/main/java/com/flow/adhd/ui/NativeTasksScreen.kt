@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
@@ -28,6 +28,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -62,6 +63,7 @@ import com.flow.adhd.domain.ProjectionContext
 import com.flow.adhd.domain.QuestDeferralKind
 import com.flow.adhd.domain.QuestPolicy
 import com.flow.adhd.domain.TaskSchedule
+import com.flow.adhd.domain.TaskOrder
 import com.flow.adhd.domain.ZoneCalendar
 import java.time.ZoneId
 import java.util.Locale
@@ -70,9 +72,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 
 /**
  * Native task presentation. State changes arrive only through the durable command owner.
@@ -87,7 +91,7 @@ fun NativeTasksScreen(
     onCreate: () -> Unit,
     onEdit: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    initialFilter: String = "now",
+    initialFilter: String = "all",
     header: @Composable () -> Unit = {},
 ) {
     var filter by rememberSaveable(initialFilter) { mutableStateOf(initialFilter) }
@@ -105,19 +109,18 @@ fun NativeTasksScreen(
         }
         QuestPolicy.Context(now, ZoneCalendar.timeline(snapshot.data, now, zone), snapshot.zones, priorities, zone)
     }
-    val questTasks = remember(snapshot, questContext) {
-        // Match NotificationProjection's default type handling, then use the shared domain policy.
-        QuestPolicy.select(tasks.map { JsonObject(mapOf("type" to JsonPrimitive(it.type)) + it.raw) }, questContext, 5)
+    val orderedTasks = remember(snapshot, questContext) {
+        val byId = tasks.associateBy { it.id }
+        TaskOrder.rank(tasks.map { JsonObject(mapOf("type" to JsonPrimitive(it.type)) + it.raw) }, questContext)
+            .mapNotNull { ranked -> ranked.numberId("id")?.let(byId::get) }
     }
-    val questIds = questTasks.mapNotNull { it.numberId("id") }.toSet()
-    val currentTasks = questTasks.mapNotNull { selected -> tasks.firstOrNull { it.id == selected.numberId("id") } }
     val candidates = when (filter) {
-        "all" -> tasks.filterNot { it.trashed }
-        "someday" -> tasks.filter { it.someday && !it.trashed }
-        "journal" -> tasks.filter { it.type == "negative" && !it.trashed && !it.someday }
-        "daily" -> tasks.filter { !it.trashed && !it.someday && (it.type == "counter" || it.type == "negative" || it.raw.booleanValue("counterEnabled") == true || it.raw.stringValue("repeat")?.let { value -> value != "none" } == true) }
-        "trash" -> tasks.filter { it.trashed }
-        else -> currentTasks
+        "all" -> orderedTasks.filterNot { it.trashed }
+        "someday" -> orderedTasks.filter { it.someday && !it.trashed }
+        "journal" -> orderedTasks.filter { it.type == "negative" && !it.trashed && !it.someday }
+        "daily" -> orderedTasks.filter { !it.trashed && !it.someday && (it.type == "counter" || it.type == "negative" || it.raw.booleanValue("counterEnabled") == true || it.raw.stringValue("repeat")?.let { value -> value != "none" } == true) }
+        "trash" -> orderedTasks.filter { it.trashed }
+        else -> orderedTasks.filter { QuestPolicy.availability(it.raw, questContext).eligible }
     }
     val query = search.trim().lowercase(Locale.forLanguageTag("uk"))
     val visible = if (filter == "now" || query.isEmpty()) candidates else candidates.filter { task ->
@@ -128,8 +131,14 @@ fun NativeTasksScreen(
             addAll((task.raw["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content })
         }.joinToString(" ").lowercase(Locale.forLanguageTag("uk")).contains(query)
     }
+    val nearest = if (filter == "all") visible.filter {
+        if (it.trashed || it.someday || it.type == "negative") false
+        else QuestPolicy.availability(it.raw, questContext).reason !in setOf("done", "missing-zone", "unassigned-zone", "journal")
+    }.take(5) else emptyList()
+    val nearestIds = nearest.mapTo(mutableSetOf()) { it.id }
+    val displayTasks = if (filter == "all") nearest + visible.filterNot { it.id in nearestIds } else visible
     val zoneNames = snapshot.zones.associate { it.numberId("id") to it.stringValue("nm").orEmpty() }
-    val visibleIds = visible.map { it.id }
+    val visibleIds = displayTasks.map { it.id }
     val scheduleContext = ProjectionContext(questContext.now, questContext.timeline, questContext.zone)
     val showGamification = (snapshot.data["preferences"] as? JsonObject)?.booleanValue("showGamification") != false
     // No app-owned animation runs here; expansion and saved-state changes also respect reduceMotion.
@@ -170,8 +179,7 @@ fun NativeTasksScreen(
                 if (filter == "now") CurrentZoneCard(projection, questContext)
                 else Text(
                     when (filter) {
-                        "now" -> "До п’яти доречних справ · ${projection.stringValue("zone") ?: "Вільний час"}"
-                        "all" -> "Усі задачі, включно з майбутніми, відкладеними й виконаними."
+                        "all" -> "Майбутні, відкладені й виконані задачі теж тут."
                         "someday" -> "Поверни задачу, коли знову захочеш до неї взятися."
                         "journal" -> "Фіксація події збільшує журнал. Завершення задачі тут немає."
                         "daily" -> "Лічильники та повторювані справи. Нове входження з’являється за розкладом."
@@ -210,7 +218,7 @@ fun NativeTasksScreen(
         }
         if (filter == "now") item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Квести · ${visible.size}/5", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.weight(1f))
                 Button(onClick = onCreate, enabled = !busy, shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-create")) { Text("+ Задача") }
             }
@@ -233,7 +241,21 @@ fun NativeTasksScreen(
                 }
             }
         }
-        items(visible, key = { it.id }) { task ->
+        itemsIndexed(displayTasks, key = { _, task -> task.id }) { index, task ->
+            if (filter == "all" && nearest.isNotEmpty() && index == 0) {
+                Text("Найближчі", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (filter == "all" && index == nearest.size && displayTasks.size > nearest.size) {
+                if (nearest.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        HorizontalDivider(Modifier.weight(1f))
+                        Text("Решта задач", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        HorizontalDivider(Modifier.weight(1f))
+                    }
+                } else {
+                    Text("Решта задач", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             val priorityIndex = questContext.priorities.indexOf(task.id)
             NativeTaskCard(
                 task = task,
@@ -244,7 +266,7 @@ fun NativeTasksScreen(
                 visibleIds = visibleIds,
                 allowMove = filter != "now" && filter != "trash",
                 availability = QuestPolicy.availability(task.raw, questContext),
-                canDefer = questIds.contains(task.id) || QuestPolicy.availability(task.raw, questContext).eligible,
+                canDefer = QuestPolicy.availability(task.raw, questContext).eligible,
                 busy = busy,
                 showGamification = showGamification,
                 onCommand = onCommand,
@@ -294,6 +316,9 @@ private fun NativeTaskCard(
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember(task.id) { mutableStateOf(false) }
+    var deferOpen by rememberSaveable(task.id) { mutableStateOf(false) }
+    var deferMinutes by rememberSaveable(task.id) { mutableStateOf("60") }
+    var deferError by rememberSaveable(task.id) { mutableStateOf<String?>(null) }
     var noteExpanded by rememberSaveable(task.id) { mutableStateOf(false) }
     var itemEditor by rememberSaveable(task.id) { mutableStateOf<Int?>(null) }
     var itemText by rememberSaveable(task.id) { mutableStateOf("") }
@@ -315,6 +340,17 @@ private fun NativeTaskCard(
     fun send(factory: (String, Long) -> FlowCommand) {
         val now = System.currentTimeMillis()
         onCommand(factory(UUID.randomUUID().toString(), now)) {}
+    }
+    fun sendTimedDeferral(minutes: Long) {
+        val now = System.currentTimeMillis()
+        val details = buildJsonObject {
+            put("kind", "time")
+            put("requestedAt", now)
+            put("sourceZoneId", availability.currentZoneId)
+            put("targetZoneId", task.zoneId ?: 0L)
+            put("startAt", now + minutes * 60_000L)
+        }
+        onCommand(FlowCommand.DeferTask(task.id, QuestDeferralKind.NEXT_ZONE, now, details, UUID.randomUUID().toString(), now)) {}
     }
 
     val date = TaskSchedule.planDate(task.raw)?.let { raw ->
@@ -412,6 +448,14 @@ private fun NativeTaskCard(
                                         send { id, now -> FlowCommand.SetPriority(priorityIndex, null, id, now) }
                                     },
                                     modifier = Modifier.testTag("native-task-priority-clear-${task.id}"),
+                                )
+                            }
+                            if (task.type == "sched" && canDefer && !task.done && !task.someday) {
+                                DropdownMenuItem(
+                                    text = { Text("Інший час…") },
+                                    enabled = !busy,
+                                    onClick = { menuOpen = false; deferMinutes = "60"; deferError = null; deferOpen = true },
+                                    modifier = Modifier.testTag("native-task-defer-custom-${task.id}"),
                                 )
                             }
                             if (allowMove && visibleIds.size > 1) {
@@ -531,8 +575,13 @@ private fun NativeTaskCard(
                     modifier = Modifier.semantics { contentDescription = if (noteExpanded) "Сховати нотатку" else "Нотатка до задачі" }
                         .testTag("native-task-note-toggle-${task.id}")) { Text("▤", style = MaterialTheme.typography.titleLarge) }
                 if (canPostpone) {
-                    TextButton(onClick = { send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NEXT_ZONE, now, null, id, now) } },
-                        enabled = !busy, modifier = Modifier.weight(1f).testTag("native-task-defer-${task.id}")) { Text("Не зараз") }
+                    TextButton(
+                        onClick = {
+                            if (task.type == "sched") sendTimedDeferral(60L)
+                            else send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NEXT_ZONE, now, null, id, now) }
+                        },
+                        enabled = !busy, modifier = Modifier.weight(1f).testTag("native-task-defer-${task.id}"),
+                    ) { Text(if (task.type == "sched") "На 1 годину" else "Не зараз") }
                     TextButton(onClick = { send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NOT_TODAY, now, null, id, now) } },
                         enabled = !busy, modifier = Modifier.weight(1f).testTag("native-task-tomorrow-${task.id}")) { Text("Не сьогодні") }
                 } else if (note != null) Text("Нотатка", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -562,6 +611,48 @@ private fun NativeTaskCard(
             onCommand(FlowCommand.EditChecklistItem(task.id, index, itemText, UUID.randomUUID().toString(), System.currentTimeMillis())) { itemEditor = null }
         }, enabled = !busy && itemText.isNotBlank()) { Text("Зберегти") } },
         dismissButton = { TextButton(onClick = { itemEditor = null }, enabled = !busy) { Text("Скасувати") } })
+    if (deferOpen) AlertDialog(
+        onDismissRequest = { if (!busy) { deferOpen = false; deferError = null } },
+        title = { Text("Відкласти задачу") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("На скільки хвилин відкласти нагадування?")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(15, 30, 60).forEach { preset ->
+                        OutlinedButton(
+                            onClick = { deferMinutes = preset.toString(); deferError = null },
+                            enabled = !busy,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                        ) { Text("$preset") }
+                    }
+                }
+                OutlinedTextField(
+                    value = deferMinutes,
+                    onValueChange = { deferMinutes = it.filter(Char::isDigit); deferError = null },
+                    label = { Text("Хвилини") },
+                    singleLine = true,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().testTag("native-task-defer-minutes-${task.id}"),
+                )
+                if (deferError != null) Text(deferError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text("Від 1 до 10080 хвилин", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy, onClick = {
+                val minutes = deferMinutes.toLongOrNull()
+                if (minutes == null || minutes !in 1L..10_080L) {
+                    deferError = "Укажи ціле число хвилин від 1 до 10080."
+                } else {
+                    sendTimedDeferral(minutes)
+                    deferOpen = false
+                    deferError = null
+                }
+            }, modifier = Modifier.testTag("native-task-defer-confirm-${task.id}")) { Text("Відкласти") }
+        },
+        dismissButton = { TextButton(onClick = { deferOpen = false; deferError = null }, enabled = !busy) { Text("Скасувати") } },
+    )
 }
 
 @Composable
@@ -598,7 +689,7 @@ private fun taskFilterLabel(filter: String) = when (filter) {
     "someday" -> "Колись"
     "journal" -> "Журнал подій"
     "trash" -> "Кошик"
-    else -> "Зараз"
+    else -> "Доречні зараз"
 }
 
 private fun taskAvailabilityLabel(reason: String?) = when (reason) {

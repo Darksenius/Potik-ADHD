@@ -55,6 +55,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.flow.adhd.domain.FlowSnapshot
+import com.flow.adhd.domain.TaskTitleSchedule
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -106,7 +107,9 @@ fun NativeTaskEditor(
     var type by rememberSaveable(taskId) { mutableStateOf(seed.editorText("type") ?: "simple") }
     var zoneId by rememberSaveable(taskId) { mutableStateOf(seed.editorNumberText("zoneId", "")) }
     var folderId by rememberSaveable(taskId) { mutableStateOf(seed.editorText("folderId").orEmpty()) }
-    var date by rememberSaveable(taskId) { mutableStateOf((if (seed.editorText("type") == "sched") seed.editorText("schedDate") else null) ?: seed.editorText("planDate").orEmpty()) }
+    val seededDate = (if (seed.editorText("type") == "sched") seed.editorText("schedDate") else null) ?: seed.editorText("planDate").orEmpty()
+    var dateExplicit by rememberSaveable(taskId) { mutableStateOf(seed.editorBoolean("dateExplicit", seededDate.isNotBlank())) }
+    var date by rememberSaveable(taskId) { mutableStateOf(seededDate) }
     var time by rememberSaveable(taskId) { mutableStateOf(seed.editorText("schedTime").orEmpty()) }
     var alarmTime by rememberSaveable(taskId) { mutableStateOf(seed.editorText("alarmTime").orEmpty()) }
     var windowStart by rememberSaveable(taskId) { mutableStateOf(seed.editorText("windowStart") ?: "07:00") }
@@ -157,14 +160,14 @@ fun NativeTaskEditor(
         type = id
         error = ""
         if (id == "counter") { counterEnabled = true; if (counterTarget == "0") counterTarget = "10" }
-        if (id == "sched" && date.isEmpty()) date = LocalDate.now(localZone).toString()
+        if (id == "sched" && date.isEmpty()) { date = LocalDate.now(localZone).toString(); dateExplicit = false }
     }
 
     val draftText = buildJsonObject {
         put("version", 2)
         put("values", buildJsonObject {
             put("title", title); put("type", type); put("zoneId", zoneId.toLongOrNull()?.let(::JsonPrimitive) ?: JsonNull); put("folderId", folderId)
-            put("planDate", date); put("schedDate", date); put("schedTime", time); put("alarmTime", alarmTime); put("windowStart", windowStart); put("windowEnd", windowEnd)
+            put("planDate", date); put("schedDate", date); put("schedTime", time); put("dateExplicit", dateExplicit); put("alarmTime", alarmTime); put("windowStart", windowStart); put("windowEnd", windowEnd)
             put("note", note); put("repeat", repeat); put("repeatDays", JsonArray(List(7) { JsonPrimitive(repeatMask and (1 shl it) != 0) }))
             put("repeatInterval", repeatInterval); put("repeatUnit", repeatUnit); put("counterEnabled", counterEnabled); put("counterTarget", counterTarget); put("counterStep", counterStep); put("counterUnit", counterUnit)
             put("negXp", negativeXp); put("reminderEnabled", reminderEnabled); put("remindBeforeMinutes", reminderAdvance); put("checklistDraft", checklist)
@@ -174,6 +177,19 @@ fun NativeTaskEditor(
     LaunchedEffect(taskId, draftText) { if (taskId == null) onDraftChanged(draftText) }
 
     fun save(postponeMinutes: Long? = null, tomorrow: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val titleResult = TaskTitleSchedule.parse(title)
+        val parsedTitle = (titleResult as? TaskTitleSchedule.Result.Valid)?.value
+        val markerTime = parsedTitle?.time
+        val saveType = if (markerTime != null) "sched" else type
+        val saveTime = markerTime ?: time.trim()
+        val explicitDateAvailable = dateExplicit && date.isNotBlank()
+        val saveDate = if (markerTime != null && !explicitDateAvailable) TaskTitleSchedule.defaultDate(markerTime, now, localZone) else date.trim()
+        val saveParsedDate = editorDate(saveDate)
+        val saveParsedTime = editorTime(saveTime)
+        val savePastTime = saveType == "sched" && saveParsedDate != null && saveParsedTime != null &&
+            LocalDateTime.of(saveParsedDate, saveParsedTime).atZone(localZone).toInstant().toEpochMilli() < now
+        val saveHasCounter = saveType != "negative" && (saveType == "counter" || counterEnabled)
         val step = editorWholeNumber(counterStep)
         val target = editorWholeNumber(counterTarget)
         val penalty = editorWholeNumber(negativeXp)
@@ -182,53 +198,60 @@ fun NativeTaskEditor(
         val intervalMs = interval?.times(editorRepeatUnitMillis[repeatUnit] ?: 60_000L)
         val problem = when {
             unavailable -> "Цієї задачі вже немає. Закрий редактор і онови список."
-            title.isBlank() -> "Напиши, що потрібно зробити."
-            catalog?.types?.none { it.id == type } != false -> "Вибери доступний тип задачі."
-            date.isNotBlank() && parsedDate == null -> "Введи дату у форматі РРРР-ММ-ДД, наприклад 2026-10-17."
-            scheduled && parsedDate == null -> "Вкажи дату запланованої задачі."
-            scheduled && parsedTime == null -> "Введи час задачі у форматі ГГ:ХХ, наприклад 15:30."
-            type == "alarm" && editorTime(alarmTime) == null -> "Введи час будильника у форматі ГГ:ХХ."
-            type == "timewin" && (editorTime(windowStart) == null || editorTime(windowEnd) == null) -> "Введи початок і кінець вікна у форматі ГГ:ХХ."
+            titleResult == TaskTitleSchedule.Result.InvalidTime -> "Час у позначці має бути від 00:00 до 23:59. Наприклад: ///12:40///."
+            titleResult == TaskTitleSchedule.Result.EmptyTitle -> "Напиши, що потрібно зробити."
+            catalog?.types?.none { it.id == saveType } != false -> "Вибери доступний тип задачі."
+            saveDate.isNotBlank() && saveParsedDate == null -> "Введи дату у форматі РРРР-ММ-ДД, наприклад 2026-10-17."
+            saveType == "sched" && saveParsedDate == null -> "Вкажи дату запланованої задачі."
+            saveType == "sched" && saveParsedTime == null -> "Введи час задачі у форматі ГГ:ХХ, наприклад 15:30."
+            saveType == "alarm" && editorTime(alarmTime) == null -> "Введи час будильника у форматі ГГ:ХХ."
+            saveType == "timewin" && (editorTime(windowStart) == null || editorTime(windowEnd) == null) -> "Введи початок і кінець вікна у форматі ГГ:ХХ."
             repeat == "custom" && repeatMask == 0 -> "Вибери хоча б один день повторення."
-            parsedDate != null && repeat in setOf("weekdays", "weekend", "custom") && !editorRepeatsOn(repeat, repeatMask, parsedDate) -> "Перша дата не входить у вибрані дні повторення. Зміни дату або повторення."
-            (type == "zonelinked" || repeat == "everyzone") && zoneOptions.none { it.id == zoneId } -> "Вибери наявну зону для цієї задачі."
+            saveParsedDate != null && repeat in setOf("weekdays", "weekend", "custom") && !editorRepeatsOn(repeat, repeatMask, saveParsedDate) -> "Перша дата не входить у вибрані дні повторення. Зміни дату або повторення."
+            (saveType == "zonelinked" || repeat == "everyzone") && zoneOptions.none { it.id == zoneId } -> "Вибери наявну зону для цієї задачі."
             repeat == "interval" && (intervalMs == null || !intervalMs.isFinite() || intervalMs > EDITOR_MAX_INTEGER) -> "Вкажи додатний інтервал у вибраних одиницях."
-            hasCounter && (step == null || step <= 0 || target == null) -> "Крок лічильника має бути цілим і більшим за 0, ціль — цілим числом від 0."
-            type == "negative" && penalty == null -> "Штраф досвіду має бути цілим числом від 0."
-            (scheduled || type == "alarm") && advance == null -> "Час додаткового нагадування має бути цілим числом хвилин від 0."
-            pastTime && !keepPast && postponeMinutes == null && !tomorrow -> "Цей час уже минув. Підтвердь збереження з минулим часом або зміни його."
+            saveHasCounter && (step == null || step <= 0 || target == null) -> "Крок лічильника має бути цілим і більшим за 0, ціль — цілим числом від 0."
+            saveType == "negative" && penalty == null -> "Штраф досвіду має бути цілим числом від 0."
+            (saveType == "sched" || saveType == "alarm") && advance == null -> "Час додаткового нагадування має бути цілим числом хвилин від 0."
+            savePastTime && !keepPast && postponeMinutes == null && !tomorrow -> "Цей час уже минув. Підтвердь збереження з минулим часом або зміни його."
             else -> null
         }
         if (problem != null) {
-            if (hasCounter && (step == null || step <= 0 || target == null)) advancedExpanded = true
+            if (saveHasCounter && (step == null || step <= 0 || target == null)) advancedExpanded = true
+            if (markerTime != null && savePastTime && !keepPast) {
+                type = "sched"
+                time = markerTime
+                if (!explicitDateAvailable) { date = saveDate; dateExplicit = false }
+            }
             error = problem
             return
         }
         val payload = (existing?.raw ?: JsonObject(emptyMap())).toMutableMap().apply {
-            put("title", JsonPrimitive(title.trim())); put("type", JsonPrimitive(type))
+            put("title", JsonPrimitive(parsedTitle?.title ?: title.trim())); put("type", JsonPrimitive(saveType))
             put("zoneId", zoneId.toLongOrNull()?.let(::JsonPrimitive) ?: JsonNull)
             put("folderId", folderId.takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
-            put("planDate", date.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("planDate", saveDate.takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
             put("note", JsonPrimitive(note))
             put("repeat", JsonPrimitive(repeat)); put("repeatDays", JsonArray(List(7) { JsonPrimitive(repeatMask and (1 shl it) != 0) }))
             put("tags", JsonArray(tags.split(',').mapNotNull { it.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) }))
-            if (type == "ctx") put("ctxTags", JsonArray(contextTags.split(',').mapNotNull { it.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) }))
-            put("counterEnabled", JsonPrimitive(hasCounter))
-            if (hasCounter) {
+            if (saveType == "ctx") put("ctxTags", JsonArray(contextTags.split(',').mapNotNull { it.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) }))
+            put("counterEnabled", JsonPrimitive(saveHasCounter))
+            if (saveHasCounter) {
                 put("counterStep", JsonPrimitive(step!!)); put("counterTarget", JsonPrimitive(target!!))
                 put("counterUnit", JsonPrimitive(counterUnit))
             }
             if (repeat == "interval") {
                 put("repeatInterval", JsonPrimitive(interval!!)); put("repeatUnit", JsonPrimitive(repeatUnit))
             }
-            if (scheduled) { put("schedDate", JsonPrimitive(date.trim())); put("schedTime", JsonPrimitive(time.trim())) }
-            if (scheduled || type == "alarm") {
-                put("reminderEnabled", JsonPrimitive(reminderEnabled)); put("remindBeforeMinutes", JsonPrimitive(advance!!))
+            if (saveType == "sched") { put("schedDate", JsonPrimitive(saveDate)); put("schedTime", JsonPrimitive(saveTime)) }
+            if (saveType == "sched" || saveType == "alarm") {
+                put("reminderEnabled", JsonPrimitive(if (markerTime != null) true else reminderEnabled))
+                put("remindBeforeMinutes", JsonPrimitive(if (markerTime != null) 0 else advance!!))
             }
-            if (type == "alarm") put("alarmTime", JsonPrimitive(alarmTime.trim()))
-            if (type == "timewin") { put("windowStart", JsonPrimitive(windowStart.trim())); put("windowEnd", JsonPrimitive(windowEnd.trim())) }
-            if (type == "negative") put("negXp", JsonPrimitive(penalty!!))
-            if (type == "check" && (storedItems.isNullOrEmpty() || checklistDefinition)) put("items", JsonArray(checklist.lineSequence().mapNotNull { line ->
+            if (saveType == "alarm") put("alarmTime", JsonPrimitive(alarmTime.trim()))
+            if (saveType == "timewin") { put("windowStart", JsonPrimitive(windowStart.trim())); put("windowEnd", JsonPrimitive(windowEnd.trim())) }
+            if (saveType == "negative") put("negXp", JsonPrimitive(penalty!!))
+            if (saveType == "check" && (storedItems.isNullOrEmpty() || checklistDefinition)) put("items", JsonArray(checklist.lineSequence().mapNotNull { line ->
                 line.trim().takeIf(String::isNotEmpty)?.let { text -> buildJsonObject {
                     put("text", text); put("done", false); put("credited", false)
                 } }
@@ -255,6 +278,7 @@ fun NativeTaskEditor(
         ) {
             item {
                 EditorInput("Що потрібно зробити?", title, { title = it; error = "" }, "native-task-title", enabled, minLines = 1, maxLines = 2)
+                Text("Час у назві: ///12:40/// — створить заплановану задачу.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             item {
                 Text("Тип задачі", style = MaterialTheme.typography.labelLarge)
@@ -290,12 +314,12 @@ fun NativeTaskEditor(
             item {
                 EditorHeading("Коли?")
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (!scheduled) TextButton(onClick = { date = ""; keepPast = false; error = "" }, enabled = enabled, modifier = Modifier.testTag("native-task-no-date")) { Text("Без дати") }
-                    TextButton(onClick = { date = LocalDate.now(localZone).toString(); keepPast = false; error = "" }, enabled = enabled) { Text("Сьогодні") }
-                    TextButton(onClick = { date = LocalDate.now(localZone).plusDays(1).toString(); keepPast = false; error = "" }, enabled = enabled) { Text("Завтра") }
+                    if (!scheduled) TextButton(onClick = { date = ""; dateExplicit = false; keepPast = false; error = "" }, enabled = enabled, modifier = Modifier.testTag("native-task-no-date")) { Text("Без дати") }
+                    TextButton(onClick = { date = LocalDate.now(localZone).toString(); dateExplicit = true; keepPast = false; error = "" }, enabled = enabled) { Text("Сьогодні") }
+                    TextButton(onClick = { date = LocalDate.now(localZone).plusDays(1).toString(); dateExplicit = true; keepPast = false; error = "" }, enabled = enabled) { Text("Завтра") }
                 }
                 EditorDateInput("Дата${if (scheduled) " — обов’язково" else " — необов’язково"}", date,
-                    { date = it; keepPast = false; error = "" }, enabled, localZone)
+                    { date = it; dateExplicit = true; keepPast = false; error = "" }, enabled, localZone)
             }
             if (scheduled) item { EditorTimeInput("Час задачі", time, "native-task-time", { time = it; keepPast = false; error = "" }, enabled) }
             if (type == "alarm") item { EditorTimeInput("Час будильника", alarmTime, "native-task-alarm-time", { alarmTime = it; error = "" }, enabled) }

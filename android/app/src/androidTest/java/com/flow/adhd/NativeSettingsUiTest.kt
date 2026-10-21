@@ -40,7 +40,7 @@ class NativeSettingsUiTest {
             compose.onNodeWithTag("native-settings-about").performClick()
             compose.onNodeWithTag("native-settings").performScrollToNode(hasText("Довідка"))
             compose.onNodeWithText("Довідка").performClick()
-            compose.onNodeWithText("Панель квестів для реального життя").assertExists()
+            compose.onNodeWithText("Задачі на найближчий час").assertExists()
             assertTrue(com.flow.adhd.data.NativeContent.read(context, "source.txt").contains("class NativeCommandRepository"))
         }
     }

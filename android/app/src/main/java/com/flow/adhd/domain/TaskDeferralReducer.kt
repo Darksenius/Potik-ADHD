@@ -19,7 +19,11 @@ object TaskDeferralReducer {
         }
         val kind = if (command.kind == QuestDeferralKind.NEXT_ZONE) "next-zone" else "not-today"
         val explicit = command.details?.takeIf {
-            QuestPolicy.isValidDeferral(it) && (it["kind"] as? JsonPrimitive)?.content == kind
+            QuestPolicy.isValidDeferral(it) && (
+                (it["kind"] as? JsonPrimitive)?.content == kind ||
+                    (task.type == "sched" && command.kind == QuestDeferralKind.NEXT_ZONE
+                        && (it["kind"] as? JsonPrimitive)?.content == "time")
+                )
         }
         val deferral = explicit ?: QuestPolicy.createDeferral(task.raw, command.kind,
             QuestPolicy.Context(now = command.requestedAt,

@@ -36,9 +36,14 @@ object QuestPolicy {
         if (task.string("type") == "zonelinked" && taskZone == null) return unavailable("unassigned-zone", zoneId)
 
         deferralAllowsTask(task, context, current)?.let { return it }
+        task.obj("questDeferral")?.takeIf { it.string("kind") == "time" }?.let { deferral ->
+            val start = deferral.number("startAt")?.toLong() ?: return unavailable("not-due", zoneId)
+            if (context.now >= start) return Availability(true, currentZoneId = zoneId)
+        }
         val base = baseAvailability(task, context, zoneId)
         if (!base.eligible) return base
-        if (taskZone != null && taskZone != zoneId.toDouble()) return unavailable("wrong-zone", zoneId)
+        if (taskZone != null && taskZone != zoneId.toDouble()
+            && task.obj("questDeferral")?.string("kind") != "time") return unavailable("wrong-zone", zoneId)
         return Availability(true, currentZoneId = zoneId)
     }
 
@@ -52,6 +57,13 @@ object QuestPolicy {
     fun createDeferral(task: JsonObject, kind: QuestDeferralKind, context: Context, requestedAt: Long): JsonObject {
         val sourceZone = segmentAt(context.timeline, requestedAt)?.zoneId ?: 0L
         val requestedDay = localDay(requestedAt, context.zone)
+        if (kind == QuestDeferralKind.NEXT_ZONE && task.string("type") == "sched") {
+            val start = requestedAt + SCHEDULED_DEFERRAL_MS
+            if (start <= MAX_DATE_MILLIS) return buildJsonObject {
+                put("kind", "time"); put("requestedAt", requestedAt); put("sourceZoneId", sourceZone)
+                put("targetZoneId", task.number("zoneId")?.toLong() ?: 0L); put("startAt", start)
+            }
+        }
         if (kind == QuestDeferralKind.NEXT_ZONE) {
             val next = context.timeline.firstOrNull {
                 it.startAt > requestedAt && localDay(it.startAt, context.zone) == requestedDay && it.zoneId > 0L && it.zoneId != sourceZone
@@ -84,6 +96,7 @@ object QuestPolicy {
                 end.isFinite() && end > start
             }
             "not-today" -> item["endAt"] == null
+            "time" -> item["endAt"] == null && start > requested
             else -> false
         }
     }
@@ -96,6 +109,7 @@ object QuestPolicy {
         val kind = d.string("kind")
         val target = d.number("targetZoneId")?.toLong() ?: 0L
         if (now < start) return Availability(false, "deferred-until", currentId, start)
+        if (kind == "time") return Availability(true, currentZoneId = currentId)
         if (kind == "next-zone") {
             val end = d.number("endAt")?.toLong() ?: return unavailable("wrong-zone", currentId)
             val source = d.number("sourceZoneId")?.toLong() ?: 0L
@@ -163,4 +177,7 @@ object QuestPolicy {
     private fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull == true
     private fun JsonObject.number(key: String): Double? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
     private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+
+    private const val SCHEDULED_DEFERRAL_MS = 60L * 60L * 1000L
+    private const val MAX_DATE_MILLIS = 8_640_000_000_000_000L
 }

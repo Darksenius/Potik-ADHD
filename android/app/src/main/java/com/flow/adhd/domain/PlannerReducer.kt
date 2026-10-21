@@ -98,10 +98,16 @@ object PlannerReducer {
             val changed = snapshot.data.toMutableMap(); putItems(changed, command.date, items(snapshot.data, command.date) + item)
             return applied(JsonObject(changed), emptyList())
         }
-        val scheduled = match != null
-        val time = if (scheduled) normalizeTime(match!!.groupValues[1]) ?: return rejected("invalid-time", "Time is invalid") else ""
+        val parsed = when (val result = TaskTitleSchedule.parse(rawTitle)) {
+            is TaskTitleSchedule.Result.Valid -> result.value
+            TaskTitleSchedule.Result.EmptyTitle -> return rejected("empty-title", "Task title must not be blank")
+            TaskTitleSchedule.Result.InvalidTime -> return rejected("invalid-time", "Task title time marker is invalid")
+        }
+        val title = parsed.title
+        val scheduled = match != null || parsed.time != null
+        val time = parsed.time ?: if (match != null) normalizeTime(match.groupValues[1]) ?: return rejected("invalid-time", "Time is invalid") else ""
         val id = nextTaskId(snapshot) ?: return rejected("id-exhausted", "No safe task ID remains")
-        val task = TaskFactory.create(id, rawTitle, if (scheduled) "sched" else "simple", command.activityAt).toMutableMap()
+        val task = TaskFactory.create(id, title, if (scheduled) "sched" else "simple", command.activityAt).toMutableMap()
         task["planDate"] = JsonPrimitive(command.date)
         if (scheduled) { task["schedDate"] = JsonPrimitive(command.date); task["schedTime"] = JsonPrimitive(time); task["firedSched"] = JsonPrimitive(false); task["reminderEnabled"] = JsonPrimitive(true); task["remindBeforeMinutes"] = JsonPrimitive(0) }
         val changed = snapshot.data.toMutableMap(); changed["tasks"] = JsonArray(listOf(JsonObject(task)) + snapshot.tasks.map { it.raw }); changed["nid"] = JsonPrimitive(maxOf(id + 1, nextNid(snapshot)))

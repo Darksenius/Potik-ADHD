@@ -571,7 +571,8 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     static long deferredReminderAt(QuestPolicy.Task task, List<QuestPolicy.Segment> timeline) {
         QuestPolicy.Deferral deferral = task.deferral;
         if (deferral == null) return -1L;
-        if (QuestPolicy.DEFERRAL_NEXT_ZONE.equals(deferral.kind) || !task.hasZone) return deferral.startAt;
+        if (QuestPolicy.DEFERRAL_TIME.equals(deferral.kind)
+                || QuestPolicy.DEFERRAL_NEXT_ZONE.equals(deferral.kind) || !task.hasZone) return deferral.startAt;
         long first = Long.MAX_VALUE;
         for (QuestPolicy.Segment segment : timeline) {
             if (segment.zoneId == deferral.targetZoneId && segment.endAt > deferral.startAt)

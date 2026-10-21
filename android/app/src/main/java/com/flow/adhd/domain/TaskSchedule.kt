@@ -54,6 +54,7 @@ object TaskSchedule {
         val start = d.number("startAt")?.toLong() ?: return null
         val end = d.number("endAt")?.toLong()
         val now = context.now
+        if (d.string("kind") == "time") return maxOf(start, now)
         if (d.string("kind") == "next-zone") {
             if (end == null || now < end) return maxOf(start, minOf(now, end ?: start))
             val sourceId = d.number("sourceZoneId")?.toLong() ?: return null
@@ -175,6 +176,7 @@ object TaskSchedule {
     fun deferralReminderAt(task: JsonObject, timeline: List<TimelineSegment>): Long? {
         val d = task.obj("questDeferral") ?: return null
         val start = d.number("startAt")?.toLong() ?: return null
+        if (d.string("kind") == "time") return start
         if (d.string("kind") == "next-zone" || task.number("zoneId") == null) return start
         val target = d.number("targetZoneId")?.toLong() ?: return null
         return timeline.firstOrNull { it.endAt > start && it.zoneId == target }?.let { maxOf(it.startAt, start) }

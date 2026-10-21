@@ -26,8 +26,9 @@ object NotificationProjection {
         val zoneName = if (currentZone == null) "Вільний час" else currentZone.text("nm") ?: "Зона"
         val priorities = state.array("priorities").map { FlowSnapshot.safeId(it, "priorities") }
         val context = QuestPolicy.Context(now, timeline, zones, priorities, zone)
-        val top = QuestPolicy.select(tasks, context, 5)
-        val undone = QuestPolicy.select(tasks, context, tasks.size)
+        val ordered = TaskOrder.rank(tasks, context)
+        val top = QuestPolicy.select(ordered, context, 5)
+        val undone = QuestPolicy.select(ordered, context, tasks.size)
         val scheduleContext = ProjectionContext(now, timeline, zone)
         val done = tasks.count { it.flag("done") && it.text("doneDate") == day && TaskSchedule.available(it, scheduleContext) &&
             (it["zoneId"] == null || it["zoneId"] == JsonNull || id(it, "zoneId") == currentZoneId) }
@@ -90,7 +91,7 @@ object NotificationProjection {
             put("tlDate", day); put("slots", slots); put("desc", currentZone?.text("desc")?.takeIf { it.isNotEmpty() } ?: focus)
             put("tasks", top.joinToString("|") { it.text("title")!! })
             put("taskList", JsonArray(top.filter { it.text("type") != "negative" }.map { taskListRow(it, today, zone) }))
-            put("questTasks", JsonArray(tasks.map { JsonObject(it + ("priorityIndex" to JsonPrimitive(priorities.indexOf(id(it))))) }))
+            put("questTasks", JsonArray(ordered.map { JsonObject(it + ("priorityIndex" to JsonPrimitive(priorities.indexOf(id(it))))) }))
             put("questTimeline", JsonArray(timeline.map { buildJsonObject { put("zoneId", it.zoneId); put("startAt", it.startAt); put("endAt", it.endAt) } }))
             put("questWallDays", JsonArray(wallDays)); put("questZoneOccurrences", JsonArray(occurrences))
             put("questTimelineUntil", timeline.lastOrNull()?.endAt ?: now)

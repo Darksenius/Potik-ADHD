@@ -25,7 +25,9 @@ final class QuestPolicy {
     static final int MAX_CARDS = 5;
     static final String DEFERRAL_NEXT_ZONE = "next-zone";
     static final String DEFERRAL_NOT_TODAY = "not-today";
+    static final String DEFERRAL_TIME = "time";
     private static final long MINUTE_MS = 60_000L;
+    private static final long SCHEDULED_DEFERRAL_MS = 60L * MINUTE_MS;
     private static volatile WallTimelineCache cachedWallTimeline;
 
     private QuestPolicy() {}
@@ -772,6 +774,7 @@ final class QuestPolicy {
     /** Returns 1 while the one deferred occurrence is active, 0 after it, -1 while waiting. */
     private static int deferralState(Deferral d,Segment current,List<Segment> timeline,long now) {
         if(d==null)return 0;
+        if(DEFERRAL_TIME.equals(d.kind))return now<d.startAt?-1:1;
         if(current==null||now<d.startAt)return -1;
         if(DEFERRAL_NEXT_ZONE.equals(d.kind)) {
             if(d.endAt==null||d.endAt<=d.startAt)return 0;
@@ -882,7 +885,13 @@ final class QuestPolicy {
     private static boolean createdAfter(Task t,long eventAt,TimeZone zone){long created=parseCreatedAt(t.created);return created>0&&eventAt<created;}
 
     static Deferral deferNextZone(Task task,List<Segment> timeline,long now,TimeZone zone) {
-        Segment source=segmentAt(timeline,now);if(source==null)return null;
+        Segment source=segmentAt(timeline,now);
+        if(task!=null&&"sched".equals(task.type)) {
+            if(now<=0||now>Long.MAX_VALUE-SCHEDULED_DEFERRAL_MS)return null;
+            return new Deferral(DEFERRAL_TIME,now,source==null?0:source.zoneId,
+                    task.hasZone?task.zoneId:0,now+SCHEDULED_DEFERRAL_MS,null);
+        }
+        if(source==null)return null;
         List<Segment> ordered=new ArrayList<>(timeline);Collections.sort(ordered,Comparator.comparingLong(s->s.startAt));
         for(Segment s:ordered){if(s.startAt<source.endAt||s.endAt<=now)continue;if(!sameLocalDate(s.startAt,now,zone))break;if(s.zoneId>0&&s.zoneId!=source.zoneId)return new Deferral(DEFERRAL_NEXT_ZONE,now,source.zoneId,s.zoneId,s.startAt,s.endAt);}
         return deferNotToday(task,timeline,now,zone);
@@ -911,5 +920,16 @@ final class QuestPolicy {
     private static boolean inTimeWindow(String start,String end,long now,TimeZone zone){int[] a=parseTime(start),b=parseTime(end);if(a==null||b==null)return true;Calendar c=Calendar.getInstance(zone,Locale.US);c.setTimeInMillis(now);int m=c.get(Calendar.HOUR_OF_DAY)*60+c.get(Calendar.MINUTE),from=a[0]*60+a[1],to=b[0]*60+b[1];return from<=to?m>=from&&m<=to:m>=from||m<=to;}
     private static String occurrenceKey(int zoneId,Segment segment,long now,TimeZone zone){if(segment==null||zoneId<=0||segment.zoneId!=zoneId)return "";Calendar c=Calendar.getInstance(zone,Locale.US);c.setTimeInMillis(segment.startAt);return localDate(now,zone)+":"+zoneId+":"+String.format(Locale.US,"%02d:%02d",c.get(Calendar.HOUR_OF_DAY),c.get(Calendar.MINUTE));}
     private static String isoUtc(long at){SimpleDateFormat f=new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",Locale.US);f.setTimeZone(TimeZone.getTimeZone("UTC"));return f.format(new Date(at));}
-    private static Deferral deferralFromJson(JSONObject row){String kind=row.optString("kind","");if(!DEFERRAL_NEXT_ZONE.equals(kind)&&!DEFERRAL_NOT_TODAY.equals(kind))return null;long start=row.optLong("startAt",0);if(start<=0)return null;Long end=row.has("endAt")&&!row.isNull("endAt")?row.optLong("endAt",0):null;return new Deferral(kind,row.optLong("requestedAt",0),row.optInt("sourceZoneId",0),row.optInt("targetZoneId",0),start,end);}
+    private static Deferral deferralFromJson(JSONObject row){
+        String kind=row.optString("kind","");
+        if(!DEFERRAL_NEXT_ZONE.equals(kind)&&!DEFERRAL_NOT_TODAY.equals(kind)&&!DEFERRAL_TIME.equals(kind))return null;
+        long requested=row.optLong("requestedAt",0),start=row.optLong("startAt",0);
+        Long end=row.has("endAt")&&!row.isNull("endAt")?row.optLong("endAt",0):null;
+        int source=row.optInt("sourceZoneId",-1),target=row.optInt("targetZoneId",-1);
+        if(requested<=0||start<=0||source<0||target<0)return null;
+        if(DEFERRAL_TIME.equals(kind)&&(end!=null||start<=requested))return null;
+        if(DEFERRAL_NEXT_ZONE.equals(kind)&&(end==null||end<=start))return null;
+        if(DEFERRAL_NOT_TODAY.equals(kind)&&end!=null)return null;
+        return new Deferral(kind,requested,source,target,start,end);
+    }
 }

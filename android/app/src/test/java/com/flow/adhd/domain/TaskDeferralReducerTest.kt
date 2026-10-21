@@ -61,6 +61,30 @@ class TaskDeferralReducerTest {
         assertTrue(engine.apply(initial, command().copy(requestedAt = -1), zone, at) is FlowCommandResult.Rejected)
     }
 
+    @Test fun scheduledNextZoneDeferralIsOneHourAcrossZoneAndMidnightWhileOtherTypesKeepZoneRule() {
+        val late = Instant.parse("2026-10-16T20:30:00Z").toEpochMilli() // 23:30 local
+        val scheduled = FlowSnapshot.parse("""{"tasks":[{"id":300,"title":"Call","type":"sched","zoneId":7,"planDate":"2026-10-16","schedDate":"2026-10-16","schedTime":"18:00","reminderEnabled":true,"repeat":"none"}],"zones":[{"id":7,"nm":"Evening","slots":[{"s":"18:00","e":"20:00"}]},{"id":8,"nm":"Late","slots":[{"s":"20:00","e":"23:59"}]}]}""")
+        val result = engine.apply(scheduled, FlowCommand.DeferTask(300, QuestDeferralKind.NEXT_ZONE, late, null, "sched-defer", late), zone, late) as FlowCommandResult.Applied
+        val deferred = result.snapshot.tasks.single().raw
+        val detail = deferred["questDeferral"] as JsonObject
+        assertEquals("time", detail["kind"]?.toString()?.trim('"'))
+        assertEquals(late + 3_600_000L, detail["startAt"]?.toString()?.toLong())
+        assertEquals("2026-10-16", deferred["schedDate"]?.toString()?.trim('"'))
+        assertEquals("7", deferred["zoneId"]?.toString())
+        val timeline = ZoneCalendar.timeline(result.snapshot.data, late, zone)
+        assertEquals(late + 3_600_000L, TaskSchedule.deferralReminderAt(deferred, timeline))
+        assertEquals(late + 3_600_000L, TaskSchedule.nextReminderAt(deferred, ProjectionContext(late, timeline, zone)))
+        val before = late + 3_599_999L
+        val beforeTimeline = ZoneCalendar.timeline(result.snapshot.data, before, zone)
+        assertFalse(QuestPolicy.availability(deferred, QuestPolicy.Context(before, beforeTimeline, result.snapshot.zones, zone = zone)).eligible)
+        val after = late + 3_600_000L // 00:30 next day and outside the task's original zone
+        val afterTimeline = ZoneCalendar.timeline(result.snapshot.data, after, zone)
+        assertTrue(QuestPolicy.availability(deferred, QuestPolicy.Context(after, afterTimeline, result.snapshot.zones, zone = zone)).eligible)
+
+        val regular = engine.apply(initial, command(), zone, at) as FlowCommandResult.Applied
+        assertEquals("next-zone", (regular.snapshot.tasks.single().raw["questDeferral"] as JsonObject)["kind"]?.toString()?.trim('"'))
+    }
+
     private fun command(kind: QuestDeferralKind = QuestDeferralKind.NEXT_ZONE, details: JsonObject? = null) =
         FlowCommand.DeferTask(300, kind, at, details, "defer", at)
 }

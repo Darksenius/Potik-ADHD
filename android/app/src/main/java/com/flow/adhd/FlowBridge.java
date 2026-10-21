@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Environment;
 import android.util.AtomicFile;
 import androidx.core.content.FileProvider;
+import com.flow.adhd.domain.TaskTitleSchedule;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -129,12 +130,11 @@ public class FlowBridge {
         NativeRuntime.requestRefresh(ctx);
     }
 
-    /**
-     * Durably queues a quick task with a stable numeric ID that JS can later
-     * materialize exactly once. The notification snapshot is never edited here.
-     */
+    /** Durably queues a quick-task capture with a stable ID for the native repository to apply once. */
     public String queueCapturedTask(String title) {
-        if (title == null || title.trim().isEmpty()) return null;
+        if (title == null) throw new IllegalArgumentException("Введи назву задачі");
+        String validationError = TaskTitleSchedule.captureValidationError(title);
+        if (validationError != null) throw new IllegalArgumentException(validationError);
         String queuedEvent = callStorage(() -> {
             long createdAt = System.currentTimeMillis();
             try {

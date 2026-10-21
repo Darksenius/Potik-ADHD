@@ -34,7 +34,8 @@ class NativeAppUiTest {
             val saved = runBlocking { (container.commandRepository.read() as SnapshotRead.Ready).snapshot }
             val task = saved.tasks.first { it.title == title }
             assertEquals("A saved note without JavaScript", task.note)
-            compose.onNodeWithTag("native-task-complete-${task.id}").performScrollTo().performClick()
+            compose.onNodeWithTag("native-tasks").performScrollToNode(hasTestTag("native-task-complete-${task.id}"))
+            compose.onNodeWithTag("native-task-complete-${task.id}").performClick()
             compose.waitUntil(10_000) {
                 val state = container.commandRepository.state.value as? SnapshotRead.Ready
                 state?.snapshot?.tasks?.firstOrNull { it.id == task.id }?.done == true
@@ -46,7 +47,8 @@ class NativeAppUiTest {
             }
             val undone = runBlocking { (container.commandRepository.read() as SnapshotRead.Ready).snapshot }
             assertEquals("Undo restores the experience of the saved task", saved.xpTotal, undone.xpTotal, 0.000001)
-            compose.onNodeWithTag("native-task-complete-${task.id}").performScrollTo().performClick()
+            compose.onNodeWithTag("native-tasks").performScrollToNode(hasTestTag("native-task-complete-${task.id}"))
+            compose.onNodeWithTag("native-task-complete-${task.id}").performClick()
             compose.waitUntil(10_000) {
                 val state = container.commandRepository.state.value as? SnapshotRead.Ready
                 state?.snapshot?.tasks?.firstOrNull { it.id == task.id }?.done == true

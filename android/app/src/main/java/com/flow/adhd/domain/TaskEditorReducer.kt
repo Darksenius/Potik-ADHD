@@ -30,18 +30,36 @@ object TaskEditorReducer {
         val create = command as? FlowCommand.CreateTask
         val update = command as? FlowCommand.UpdateTask
         if (create == null && update == null) return rejected("wrong-command", "Expected a task create or update command")
-        val payload = create?.payload ?: update!!.payload
-        val title = payload.string("title")?.trim()
-            ?: return rejected("invalid-title", "Task title must be a string")
-        if (title.isEmpty()) return rejected("empty-title", "Task title must not be blank")
-        val type = payload.string("type")
-            ?: return rejected("invalid-type", "Task type must be a string")
-        if (type !in knownTypes) return rejected("unknown-type", "Task type is not supported")
-        validatePayload(payload)?.let { return rejected("invalid-field", it) }
         if (command.activityAt !in 0..MAX_DATE_MILLIS || now !in 0..MAX_DATE_MILLIS) {
             return rejected("invalid-time", "Activity time is invalid")
         }
-
+        val sourcePayload = create?.payload ?: update!!.payload
+        val rawTitle = sourcePayload.string("title")?.trim()
+            ?: return rejected("invalid-title", "Task title must be a string")
+        val parsedTitle = when (val parsed = TaskTitleSchedule.parse(rawTitle)) {
+            is TaskTitleSchedule.Result.Valid -> parsed.value
+            TaskTitleSchedule.Result.EmptyTitle -> return rejected("empty-title", "Task title must not be blank")
+            TaskTitleSchedule.Result.InvalidTime -> return rejected("invalid-time", "Task title time marker is invalid")
+        }
+        val originalType = sourcePayload.string("type")
+            ?: return rejected("invalid-type", "Task type must be a string")
+        if (originalType !in knownTypes) return rejected("unknown-type", "Task type is not supported")
+        val type = if (parsedTitle.time == null) originalType else "sched"
+        val title = parsedTitle.title
+        val payload = JsonObject(sourcePayload + mapOf(
+            "title" to JsonPrimitive(parsedTitle.title),
+            "type" to JsonPrimitive(type),
+        ) + (parsedTitle.time?.let { time ->
+            mapOf(
+                "schedTime" to JsonPrimitive(time),
+                "reminderEnabled" to JsonPrimitive(true),
+                "remindBeforeMinutes" to JsonPrimitive(0),
+                "schedDate" to JsonPrimitive(sourcePayload.string("schedDate")?.takeIf { it.isNotEmpty() }
+                    ?: sourcePayload.string("planDate")?.takeIf { it.isNotEmpty() }
+                    ?: TaskTitleSchedule.defaultDate(time, now, zone)),
+            )
+        } ?: emptyMap()))
+        validatePayload(payload)?.let { return rejected("invalid-field", it) }
         return try {
             val isNew = create != null
             val oldTask = if (isNew) null else snapshot.tasks.firstOrNull { it.id == update!!.taskId }

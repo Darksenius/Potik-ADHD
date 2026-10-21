@@ -89,7 +89,7 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
             Text(if (allowed) "Сповіщення дозволені" else "Сповіщення вимкнені в Android")
             if (Build.VERSION.SDK_INT >= 33 && !allowed) OutlinedButton(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Дозволити сповіщення") }
             OutlinedButton(onClick = { tools.openSettings(Settings.ACTION_APP_NOTIFICATION_SETTINGS) }) { Text("Налаштування Android") }
-            Text("Постійна панель дає швидко записати задачу чи нотатку та розгорнути п’ять доречних квестів.")
+            Text("У постійній панелі можна швидко записати задачу чи нотатку. Розгорни її, щоб гортати п’ять доречних задач, виконувати й відкладати їх.")
             if (Build.VERSION.SDK_INT >= 31) {
                 val alarm = context.getSystemService(AlarmManager::class.java)
                 Text(if (alarm.canScheduleExactAlarms()) "Точні сигнали дозволені" else "Точні сигнали потребують дозволу Android")

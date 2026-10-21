@@ -128,13 +128,20 @@ object BackupValidator {
     private fun taskDefaults() = mapOf("type" to JsonPrimitive("simple"), "done" to JsonPrimitive(false), "someday" to JsonPrimitive(false), "created" to JsonPrimitive("1970-01-01T00:00:00.000Z"), "repeat" to JsonPrimitive("none"), "repeatDays" to JsonArray(List(7) { JsonPrimitive(false) }), "tags" to JsonArray(emptyList()))
 
     private fun questDeferral(value: JsonElement, path: String): JsonElement {
-        val res = shape(value, path, setOf("kind", "requestedAt", "sourceZoneId", "targetZoneId", "startAt"), mapOf("kind" to { v, p -> oneOf(v, listOf("next-zone", "not-today"), p) }, "requestedAt" to ::number, "sourceZoneId" to ::id, "targetZoneId" to ::id, "startAt" to ::number, "endAt" to ::number)) as JsonObject
+        val res = shape(value, path, setOf("kind", "requestedAt", "sourceZoneId", "targetZoneId", "startAt"), mapOf("kind" to { v, p -> oneOf(v, listOf("next-zone", "not-today", "time"), p) }, "requestedAt" to ::number, "sourceZoneId" to ::id, "targetZoneId" to ::id, "startAt" to ::number, "endAt" to ::number)) as JsonObject
         val kind = (res["kind"] as JsonPrimitive).content
         if (kind == "next-zone") {
             val end = (res["endAt"] as? JsonPrimitive)?.doubleOrNull ?: fail("$path.endAt")
             val start = (res["startAt"] as JsonPrimitive).doubleOrNull!!
             if (end <= start) fail("$path.endAt")
-        } else if (res.containsKey("endAt")) fail("$path.endAt")
+        } else {
+            if (res.containsKey("endAt")) fail("$path.endAt")
+            if (kind == "time") {
+                val start = (res["startAt"] as JsonPrimitive).doubleOrNull!!
+                val requested = (res["requestedAt"] as JsonPrimitive).doubleOrNull!!
+                if (start <= requested) fail("$path.startAt")
+            }
+        }
         return res
     }
 

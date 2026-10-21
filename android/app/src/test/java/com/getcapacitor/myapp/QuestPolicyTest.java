@@ -156,6 +156,54 @@ public class QuestPolicyTest {
         assertEquals(Collections.singletonList("overnight"), ids(result.tasks));
     }
 
+    @Test public void scheduledNextZoneDeferralUsesOneHourAcrossZoneAndMidnight() {
+        long request = QuestPolicy.localDateTime("2026-10-14", "23:30", UTC);
+        long midnight = QuestPolicy.nextLocalMidnight(request, UTC);
+        long deadline = request + 60 * 60_000L;
+        List<QuestPolicy.Segment> timeline = Arrays.asList(
+                new QuestPolicy.Segment(1, request - 60 * 60_000L, request - 30 * 60_000L),
+                new QuestPolicy.Segment(2, request - 30 * 60_000L, midnight),
+                new QuestPolicy.Segment(3, midnight, deadline + 60 * 60_000L));
+        QuestPolicy.Task task = QuestPolicy.Task.builder("scheduled")
+                .created("2026-10-14T08:00:00.000Z").zone(1)
+                .sched("2026-10-14", "08:00").build();
+
+        QuestPolicy.Deferral deferral = QuestPolicy.deferNextZone(task, timeline, request, UTC);
+        assertEquals(QuestPolicy.DEFERRAL_TIME, deferral.kind);
+        assertEquals(request, deferral.requestedAt);
+        assertEquals(2, deferral.sourceZoneId);
+        assertEquals(1, deferral.targetZoneId);
+        assertEquals(deadline, deferral.startAt);
+        assertNull(deferral.endAt);
+        QuestPolicy.Task beforeDeadline = QuestPolicy.Task.builder("scheduled")
+                .created("2026-10-14T08:00:00.000Z").zone(1)
+                .sched("2026-10-14", "08:00").deferral(deferral).build();
+        assertEquals(deadline, FlowAlarmReceiver.deferredReminderAt(beforeDeadline, timeline));
+        assertEquals("2026-10-14", QuestPolicy.taskPlanDate(beforeDeadline));
+        assertEquals("08:00", beforeDeadline.schedTime);
+        assertEquals(Long.MIN_VALUE,
+                FlowAlarmReceiver.oneOffWallDue(beforeDeadline, false, request, UTC));
+        assertTrue(QuestPolicy.select(Collections.singletonList(beforeDeadline), timeline,
+                deadline + 60 * 60_000L, deadline - 1, UTC, 5).tasks.isEmpty());
+        QuestPolicy.Selection afterDeadline = QuestPolicy.select(Collections.singletonList(beforeDeadline), timeline,
+                deadline + 60 * 60_000L, deadline, UTC, 5);
+        assertEquals(Collections.singletonList("scheduled"), ids(afterDeadline.tasks));
+
+        QuestPolicy.Task projected = QuestPolicy.projectPendingEvents(Collections.singletonList(task),
+                Collections.singletonList(QuestPolicy.Event.skip(task.id, request)), deadline,
+                timeline, UTC).get(0);
+        assertEquals(QuestPolicy.DEFERRAL_TIME, projected.deferral.kind);
+        assertEquals(deadline, projected.deferral.startAt);
+        QuestPolicy.Task withoutSourceSegment = QuestPolicy.Task.builder("without-zone").sched("2026-10-14", "08:00").build();
+        QuestPolicy.Deferral noSource = QuestPolicy.deferNextZone(withoutSourceSegment,
+                Collections.<QuestPolicy.Segment>emptyList(), request, UTC);
+        assertNotNull(noSource);
+        assertEquals(QuestPolicy.DEFERRAL_TIME, noSource.kind);
+        assertEquals(0, noSource.sourceZoneId);
+        assertEquals(deadline, noSource.startAt);
+
+    }
+
     @Test public void notTodayUsesTomorrowMidnightForBoundTasksAndTwentyThreeHoursForFreeTasks() {
         QuestPolicy.Task bound = QuestPolicy.Task.builder("bound").zone(1).build();
         QuestPolicy.Task free = QuestPolicy.Task.builder("free").build();
