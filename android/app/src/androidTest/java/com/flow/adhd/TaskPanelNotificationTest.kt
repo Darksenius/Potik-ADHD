@@ -127,11 +127,16 @@ class TaskPanelNotificationTest {
             panel = awaitPanel(manager, "Light notification theme must update without task changes") {
                 it.status.notification.color == 0xFFFFF9F2.toInt() && it.ids.take(3) == pinned
             }
-            repeat(panel.ids.size) {
+            val maxPagingSteps = panel.ids.size
+            repeat(maxPagingSteps) {
                 if (panel.selectedId != pinned.first()) {
-                    val previous = panel.selectedId
+                    val before = panel
+                    assertTrue("Cannot compute the next page from an invalid panel state: ${panelSummary(before)}",
+                        before.index in before.ids.indices && before.selectedId == before.ids[before.index])
+                    val expectedIndex = (before.index + 1) % before.ids.size
+                    val expectedId = before.ids[expectedIndex]
                     clickPanelAction(context, panel.status.notification.bigContentView, R.id.panel_next, "Select test fixture")
-                    panel = awaitPanel(manager, "Paging must reach the pinned fixture") { it.selectedId != previous }
+                    panel = awaitPanelStep(manager, before, expectedIndex, expectedId)
                 }
             }
             assertEquals(pinned.first(), panel.selectedId)
@@ -256,6 +261,30 @@ class TaskPanelNotificationTest {
         }
         return requireNotNull(found)
     }
+
+    private fun awaitPanelStep(
+        manager: NotificationManager,
+        before: PanelState,
+        expectedIndex: Int,
+        expectedId: String,
+    ): PanelState {
+        val deadline = SystemClock.elapsedRealtime() + TIMEOUT_MS
+        var observed: PanelState? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val current = manager.activeNotifications.firstOrNull { it.id == FlowNotifService.NOTIF_ID }
+                ?.let(::panelState)
+            observed = current
+            if (current != null && current.index == expectedIndex && current.selectedId == expectedId) return current
+            SystemClock.sleep(100L)
+        }
+        throw AssertionError("Next page did not reach expected selected ID/index; " +
+            "before={${panelSummary(before)}} expected={id=$expectedId,index=$expectedIndex," +
+            "ids=${before.ids},generation=${before.generation}} " +
+            "observed={${observed?.let(::panelSummary) ?: "no active panel"}}")
+    }
+
+    private fun panelSummary(panel: PanelState): String =
+        "id=${panel.selectedId},index=${panel.index},ids=${panel.ids},generation=${panel.generation}"
 
     private fun panelState(status: android.service.notification.StatusBarNotification): PanelState? {
         val extras = status.notification.extras ?: return null

@@ -107,7 +107,14 @@ public class FlowClockTest {
         while (SystemClock.elapsedRealtime() < until) {
             for (android.service.notification.StatusBarNotification item : manager.getActiveNotifications()) {
                 if (item.getId() == FlowNotifService.NOTIF_ID
-                    && String.valueOf(item.getNotification().extras.getCharSequence(Notification.EXTRA_TEXT)).contains(expected)) return;
+                    && expected.equals(String.valueOf(item.getNotification().extras.getCharSequence(Notification.EXTRA_TITLE)))) {
+                    String[] renderedZone = {""};
+                    InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                        android.view.View panel = item.getNotification().contentView.apply(context, null);
+                        renderedZone[0] = ((android.widget.TextView) panel.findViewById(R.id.panel_title)).getText().toString();
+                    });
+                    if (expected.equals(renderedZone[0])) return;
+                }
             }
             SystemClock.sleep(100);
         }
