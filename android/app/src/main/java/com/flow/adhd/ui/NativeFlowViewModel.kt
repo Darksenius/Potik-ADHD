@@ -27,8 +27,16 @@ class NativeFlowViewModel(private val runtime: NativeRuntime, private val conten
     val saveStatus = mutableStatus.asStateFlow()
     private val mutableBusy = MutableStateFlow(false)
     val busy = mutableBusy.asStateFlow()
-    private val mutableProjection = MutableStateFlow(JsonObject(emptyMap()))
-    val projection = mutableProjection.asStateFlow()
+    // Rendering time must advance even when no task command changes Room. Stop ticking offscreen.
+    val projection = combine(snapshots, flow {
+        while (currentCoroutineContext().isActive) {
+            emit(System.currentTimeMillis())
+            delay(60_000L - System.currentTimeMillis() % 60_000L)
+        }
+    }) { read, now ->
+        if (read is SnapshotRead.Ready) NotificationProjection.build(read.snapshot, now, ZoneId.systemDefault(), content.insights)
+        else JsonObject(emptyMap())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), JsonObject(emptyMap()))
     private val mutableFeedback = MutableStateFlow<NativeFeedback?>(null)
     val feedback = mutableFeedback.asStateFlow()
     private val mutableUndo = MutableStateFlow<NativeUndoAction?>(null)
@@ -42,9 +50,6 @@ class NativeFlowViewModel(private val runtime: NativeRuntime, private val conten
             snapshots.collectLatest { read ->
                 if (read is SnapshotRead.Ready) {
                     if (!draftDirty) { mutableDraft.value = read.snapshot.notepad; mutableStatus.value = "Збережено" }
-                    mutableProjection.value = withContext(Dispatchers.Default) {
-                        NotificationProjection.build(read.snapshot, System.currentTimeMillis(), ZoneId.systemDefault(), content.insights)
-                    }
                 }
             }
         }

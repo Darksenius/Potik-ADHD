@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -36,7 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,6 +64,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -187,10 +188,12 @@ fun NativeTasksScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
                     )
-                    if (filter != "trash" && filter != "now") {
+                    if (filter != "trash") {
                         Button(onClick = onCreate, enabled = !busy, shape = MaterialTheme.shapes.small,
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-create")) { Text("+ Нова") }
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.size(48.dp).semantics { contentDescription = "Нова задача" }.testTag("native-task-create")) {
+                            Text("+", style = MaterialTheme.typography.headlineSmall)
+                        }
                     }
                     if (filter != "now") IconButton(onClick = {
                         if (searchOpen) closeSearch()
@@ -274,13 +277,6 @@ fun NativeTasksScreen(
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
-            }
-        }
-        if (filter == "now") item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.weight(1f))
-                Button(onClick = onCreate, enabled = !busy, shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-create")) { Text("+ Задача") }
             }
         }
         if (visible.isEmpty()) {
@@ -376,10 +372,12 @@ private fun NativeTaskCard(
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember(task.id) { mutableStateOf(false) }
+    var menuSection by remember(task.id) { mutableStateOf<String?>(null) }
     var deferOpen by rememberSaveable(task.id) { mutableStateOf(false) }
     var deferMinutes by rememberSaveable(task.id) { mutableStateOf("60") }
     var deferError by rememberSaveable(task.id) { mutableStateOf<String?>(null) }
     var noteExpanded by rememberSaveable(task.id) { mutableStateOf(false) }
+    var detailsExpanded by rememberSaveable(task.id) { mutableStateOf(false) }
     var itemEditor by rememberSaveable(task.id) { mutableStateOf<Int?>(null) }
     var itemText by rememberSaveable(task.id) { mutableStateOf("") }
     val isJournal = task.type == "negative"
@@ -397,6 +395,8 @@ private fun NativeTaskCard(
     val checklist = (task.raw["items"] as? JsonArray).orEmpty().mapIndexedNotNull { index, value ->
         (value as? JsonObject)?.let { index to it }
     }
+    val currentContextTags = (task.raw["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
+    val hasExpandableDetails = !task.trashed && (task.type == "check" || task.type == "ctx")
     fun send(factory: (String, Long) -> FlowCommand) {
         val now = System.currentTimeMillis()
         onCommand(factory(UUID.randomUUID().toString(), now)) {}
@@ -445,11 +445,12 @@ private fun NativeTaskCard(
 
     Card(
         modifier = Modifier.fillMaxWidth().testTag("native-task-${task.id}"),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, if (priorityIndex >= 0) MaterialTheme.colorScheme.primary.copy(alpha = .6f) else MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (!task.trashed && !task.someday && !isJournal) {
                     TaskCompletionTarget(
                         task = task,
@@ -459,175 +460,161 @@ private fun NativeTaskCard(
                         },
                     )
                 }
-                Column(Modifier.weight(1f).padding(start = if (!task.trashed && !task.someday && !isJournal) 8.dp else 0.dp)
+                Column(Modifier.weight(1f).padding(start = if (!task.trashed && !task.someday && !isJournal) 4.dp else 0.dp)
                     .clickable(enabled = !busy && !task.trashed, role = Role.Button, onClick = onEdit)) {
                     Text(
                         task.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
                         fontWeight = FontWeight.SemiBold,
                         textDecoration = if (task.done && !isJournal) TextDecoration.LineThrough else TextDecoration.None,
                     )
-                    Row(
-                        modifier = Modifier.padding(top = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Surface(modifier = Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
-                            Text(typeLabel, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
-                        }
-                        if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false))
-                        if (priorityIndex >= 0 && !task.trashed) {
-                            Text("Пріоритет ${priorityIndex + 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        }
+                    val rowMetadata = buildList {
+                        if (task.type !in setOf("simple", "counter") && typeLabel.isNotBlank()) add(typeLabel)
+                        addAll(metadata)
+                        if (priorityIndex >= 0 && !task.trashed) add("Пріоритет ${priorityIndex + 1}")
                     }
+                    if (rowMetadata.isNotEmpty()) Text(
+                        rowMetadata.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
                 if (!task.trashed) {
                     Box {
                         IconButton(
-                            onClick = { menuOpen = true }, enabled = !busy,
+                            onClick = { menuSection = null; menuOpen = true }, enabled = !busy,
                             modifier = Modifier.semantics { contentDescription = "Дії: ${task.title}" }.testTag("native-task-actions-${task.id}"),
                         ) { Text("⋯", style = MaterialTheme.typography.headlineSmall) }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Редагувати") },
-                                onClick = { menuOpen = false; onEdit() },
-                                enabled = !busy,
-                                modifier = Modifier.testTag("native-task-edit-${task.id}"),
-                            )
-                            DropdownMenuItem(text = { Text("Створити копію") }, enabled = !busy,
-                                onClick = { menuOpen = false; send { id, now -> FlowCommand.DuplicateTask(task.id, id, now) } })
-                            if (canPrioritize) {
-                                for (slot in 0..2) {
-                                    DropdownMenuItem(
+                            if (menuSection != null) DropdownMenuItem(text = { Text("‹  Назад") },
+                                onClick = { menuSection = if (menuSection in setOf("priority", "reorder")) "more" else null })
+                            when (menuSection) {
+                                "priority" -> {
+                                    if (canPrioritize) for (slot in 0..2) DropdownMenuItem(
                                         text = { Text("Пріоритет ${slot + 1}" + if (priorityIndex == slot) " · обрано" else "") },
                                         enabled = !busy && priorityIndex != slot,
-                                        onClick = {
-                                            menuOpen = false
-                                            send { id, now -> FlowCommand.SetPriority(slot, task.id, id, now) }
-                                        },
-                                        modifier = Modifier.testTag("native-task-priority-${task.id}-$slot"),
-                                    )
+                                        onClick = { menuOpen = false; send { id, now -> FlowCommand.SetPriority(slot, task.id, id, now) } },
+                                        modifier = Modifier.testTag("native-task-priority-${task.id}-$slot"))
+                                    if (priorityIndex in 0..2) DropdownMenuItem(text = { Text("Прибрати пріоритет") }, enabled = !busy,
+                                        onClick = { menuOpen = false; send { id, now -> FlowCommand.SetPriority(priorityIndex, null, id, now) } },
+                                        modifier = Modifier.testTag("native-task-priority-clear-${task.id}"))
+                                }
+                                "reorder" -> {
+                                    val position = visibleIds.indexOf(task.id)
+                                    DropdownMenuItem(text = { Text("Вище у списку") }, enabled = !busy && position > 0,
+                                        onClick = { menuOpen = false; send { id, now -> FlowCommand.MoveTask(task.id, -1, visibleIds, id, now) } },
+                                        modifier = Modifier.testTag("native-task-up-${task.id}"))
+                                    DropdownMenuItem(text = { Text("Нижче у списку") }, enabled = !busy && position >= 0 && position < visibleIds.lastIndex,
+                                        onClick = { menuOpen = false; send { id, now -> FlowCommand.MoveTask(task.id, 1, visibleIds, id, now) } },
+                                        modifier = Modifier.testTag("native-task-down-${task.id}"))
+                                }
+                                "more" -> {
+                                    if (canPrioritize || priorityIndex in 0..2) DropdownMenuItem(text = { Text("Пріоритет  ›") }, enabled = !busy,
+                                        onClick = { menuSection = "priority" }, modifier = Modifier.testTag("native-task-priority-menu-${task.id}"))
+                                    if (allowMove && visibleIds.size > 1) DropdownMenuItem(text = { Text("Порядок  ›") }, enabled = !busy,
+                                        onClick = { menuSection = "reorder" }, modifier = Modifier.testTag("native-task-reorder-menu-${task.id}"))
+                                    DropdownMenuItem(text = { Text("Створити копію") }, enabled = !busy,
+                                        onClick = { menuOpen = false; send { id, now -> FlowCommand.DuplicateTask(task.id, id, now) } })
+                                    DropdownMenuItem(text = { Text(if (task.someday) "Повернути з «Колись»" else "Відкласти на колись") }, enabled = !busy,
+                                        onClick = { menuOpen = false; send { id, now -> if (task.someday) FlowCommand.RestoreTaskFromSomeday(task.id, id, now) else FlowCommand.MoveTaskToSomeday(task.id, id, now) } })
+                                    DropdownMenuItem(text = { Text("У кошик", color = MaterialTheme.colorScheme.error) }, enabled = !busy,
+                                        onClick = { menuOpen = false; send { id, now -> FlowCommand.TrashTask(task.id, id, now) } },
+                                        modifier = Modifier.testTag("native-task-trash-${task.id}"))
+                                }
+                                else -> {
+                                    DropdownMenuItem(text = { Text("Редагувати") }, enabled = !busy,
+                                        onClick = { menuOpen = false; onEdit() }, modifier = Modifier.testTag("native-task-edit-${task.id}"))
+                                    if (!task.note.isNullOrBlank()) DropdownMenuItem(text = { Text(if (noteExpanded) "Сховати нотатку" else "Переглянути нотатку") },
+                                        onClick = { menuOpen = false; noteExpanded = !noteExpanded }, modifier = Modifier.testTag("native-task-note-toggle-${task.id}"))
+                                    if (canDefer && !task.done && !task.someday && !isJournal) {
+                                        DropdownMenuItem(text = { Text(if (task.type == "sched") "На 1 годину" else "Не зараз") }, enabled = !busy,
+                                            onClick = { menuOpen = false; if (task.type == "sched") sendTimedDeferral(60L) else send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NEXT_ZONE, now, null, id, now) } },
+                                            modifier = Modifier.testTag("native-task-defer-${task.id}"))
+                                        DropdownMenuItem(text = { Text("Не сьогодні") }, enabled = !busy,
+                                            onClick = { menuOpen = false; send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NOT_TODAY, now, null, id, now) } },
+                                            modifier = Modifier.testTag("native-task-tomorrow-${task.id}"))
+                                        if (task.type == "sched") DropdownMenuItem(text = { Text("Інший час…") }, enabled = !busy,
+                                            onClick = { menuOpen = false; deferMinutes = "60"; deferError = null; deferOpen = true },
+                                            modifier = Modifier.testTag("native-task-defer-custom-${task.id}"))
+                                    }
+                                    DropdownMenuItem(text = { Text("Інші дії  ›") }, onClick = { menuSection = "more" }, modifier = Modifier.testTag("native-task-more-${task.id}"))
                                 }
                             }
-                            if (priorityIndex in 0..2) {
-                                DropdownMenuItem(
-                                    text = { Text("Прибрати пріоритет") },
-                                    enabled = !busy,
-                                    onClick = {
-                                        menuOpen = false
-                                        send { id, now -> FlowCommand.SetPriority(priorityIndex, null, id, now) }
-                                    },
-                                    modifier = Modifier.testTag("native-task-priority-clear-${task.id}"),
-                                )
-                            }
-                            if (task.type == "sched" && canDefer && !task.done && !task.someday) {
-                                DropdownMenuItem(
-                                    text = { Text("Інший час…") },
-                                    enabled = !busy,
-                                    onClick = { menuOpen = false; deferMinutes = "60"; deferError = null; deferOpen = true },
-                                    modifier = Modifier.testTag("native-task-defer-custom-${task.id}"),
-                                )
-                            }
-                            if (allowMove && visibleIds.size > 1) {
-                                val position = visibleIds.indexOf(task.id)
-                                DropdownMenuItem(
-                                    text = { Text("Вище у списку") },
-                                    enabled = !busy && position > 0,
-                                    onClick = {
-                                        menuOpen = false
-                                        send { id, now -> FlowCommand.MoveTask(task.id, -1, visibleIds, id, now) }
-                                    },
-                                    modifier = Modifier.testTag("native-task-up-${task.id}"),
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Нижче у списку") },
-                                    enabled = !busy && position >= 0 && position < visibleIds.lastIndex,
-                                    onClick = {
-                                        menuOpen = false
-                                        send { id, now -> FlowCommand.MoveTask(task.id, 1, visibleIds, id, now) }
-                                    },
-                                    modifier = Modifier.testTag("native-task-down-${task.id}"),
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text(if (task.someday) "Повернути з «Колись»" else "Відкласти на колись") },
-                                enabled = !busy,
-                                onClick = {
-                                    menuOpen = false
-                                    send { id, now ->
-                                        if (task.someday) FlowCommand.RestoreTaskFromSomeday(task.id, id, now)
-                                        else FlowCommand.MoveTaskToSomeday(task.id, id, now)
-                                    }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("У кошик") },
-                                enabled = !busy,
-                                onClick = { menuOpen = false; send { id, now -> FlowCommand.TrashTask(task.id, id, now) } },
-                                modifier = Modifier.testTag("native-task-trash-${task.id}"),
-                            )
                         }
                     }
                 }
             }
-            if (!task.trashed && !task.someday && !isJournal) {
+            if (!task.trashed && !task.someday && !isJournal && availability.reason !in setOf("wrong-zone", "future-date", "not-due", "outside-time-window", "done", "timewin-completed")) {
                 taskAvailabilityLabel(availability.reason)?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (task.type == "check" && checklist.isNotEmpty() && !task.trashed) {
-                Column {
-                    checklist.forEach { (index, item) ->
-                        val checked = item.booleanValue("done") == true
-                        val label = item.stringValue("text").orEmpty()
-                        Row(
-                            modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
-                                .toggleable(value = checked, enabled = progressEnabled, role = Role.Checkbox) { value ->
-                                    send { id, now -> FlowCommand.SetChecklistItem(task.id, index, value, id, now) }
-                                }
-                                .testTag("native-task-check-${task.id}-$index"),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(checked = checked, onCheckedChange = null, enabled = progressEnabled, modifier = Modifier.size(48.dp))
-                            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
-                            TextButton(onClick = { itemEditor = index; itemText = label }, enabled = !busy) { Text("Змінити") }
-                            TextButton(onClick = { send { id, now -> FlowCommand.DeleteChecklistItem(task.id, index, id, now) } }, enabled = !busy) { Text("×") }
+            if (hasExpandableDetails) {
+                TextButton(
+                    onClick = { detailsExpanded = !detailsExpanded },
+                    enabled = !busy,
+                    modifier = Modifier.heightIn(min = 48.dp).semantics { stateDescription = if (detailsExpanded) "Розгорнуто" else "Згорнуто" }
+                        .testTag("native-task-details-toggle-${task.id}"),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                ) {
+                    val label = when {
+                        task.type == "check" -> "Пункти · ${checklist.count { it.second.booleanValue("done") == true }}/${checklist.size}"
+                        currentContextTags.isEmpty() -> "Контекст"
+                        else -> "Контекст · ${currentContextTags.joinToString(", ")}"
+                    }
+                    Text((if (detailsExpanded) "⌃  " else "⌄  ") + label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (detailsExpanded && task.type == "check") {
+                    Column {
+                        checklist.forEach { (index, item) ->
+                            val checked = item.booleanValue("done") == true
+                            val label = item.stringValue("text").orEmpty()
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
+                                    .toggleable(value = checked, enabled = progressEnabled, role = Role.Checkbox) { value ->
+                                        send { id, now -> FlowCommand.SetChecklistItem(task.id, index, value, id, now) }
+                                    }
+                                    .testTag("native-task-check-${task.id}-$index"),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = checked, onCheckedChange = null, enabled = progressEnabled, modifier = Modifier.size(48.dp))
+                                Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
+                                TextButton(onClick = { itemEditor = index; itemText = label }, enabled = !busy) { Text("Змінити") }
+                                TextButton(onClick = { send { id, now -> FlowCommand.DeleteChecklistItem(task.id, index, id, now) } }, enabled = !busy) { Text("×") }
+                            }
                         }
+                        Text("Пункти зберігають поступ. Завершення всієї справи — окрема дія.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Text("Пункти зберігають поступ. Завершення всієї справи — окрема дія.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (task.type == "check" && !task.trashed) OutlinedButton(onClick = { itemEditor = -1; itemText = "" }, enabled = !busy) { Text("+ Пункт") }
-            if (task.type == "ctx" && !task.trashed) {
-                val current = (task.raw["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
-                for (row in (listOf("Вдома", "Телефон", "Робота", "Тихо", "З дитиною") + current).distinct().chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { tag -> androidx.compose.material3.FilterChip(tag in current, onClick = {
-                        send { id, now -> FlowCommand.SetContextTags(task.id, if (tag in current) current - tag else current + tag, id, now) }
-                    }, label = { Text(tag) }, enabled = !busy) }
+                if (detailsExpanded && task.type == "ctx") {
+                    for (row in (listOf("Вдома", "Телефон", "Робота", "Тихо", "З дитиною") + currentContextTags).distinct().chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { tag -> androidx.compose.material3.FilterChip(tag in currentContextTags, onClick = {
+                            send { id, now -> FlowCommand.SetContextTags(task.id, if (tag in currentContextTags) currentContextTags - tag else currentContextTags + tag, id, now) }
+                        }, label = { Text(tag) }, enabled = !busy) }
+                    }
+                }
+                if (detailsExpanded && task.type == "check") {
+                    OutlinedButton(onClick = { itemEditor = -1; itemText = "" }, enabled = !busy) { Text("+ Пункт") }
                 }
             }
             if (hasCounter && !task.trashed) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        enabled = progressEnabled && counter > 0,
-                        onClick = { send { id, now -> FlowCommand.ChangeCounter(task.id, -step, id, now) } },
-                        modifier = Modifier.testTag("native-task-counter-minus-${task.id}").semantics { contentDescription = "Зменшити: ${task.title}" },
-                    ) { Text("−${taskNumber(step)}") }
-                    Text(
-                        "${taskNumber(counter)} $unit",
-                        modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    OutlinedButton(
-                        enabled = progressEnabled,
-                        onClick = { send { id, now -> FlowCommand.ChangeCounter(task.id, step, id, now) } },
-                        modifier = Modifier.testTag("native-task-counter-plus-${task.id}").semantics { contentDescription = "Збільшити: ${task.title}" },
-                    ) { Text("+${taskNumber(step)}") }
+                val currentText = taskNumber(counter)
+                val targetText = taskNumber(target)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CounterStepButton("−", progressEnabled && counter > 0, "Зменшити: ${task.title}",
+                        "native-task-counter-minus-${task.id}") { send { id, now -> FlowCommand.ChangeCounter(task.id, -step, id, now) } }
+                    Column(Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(if (target > 0) "$currentText / $targetText" else currentText,
+                            style = MaterialTheme.typography.bodyLarge, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                        Text(unit, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    CounterStepButton("+", progressEnabled, "Збільшити: ${task.title}",
+                        "native-task-counter-plus-${task.id}") { send { id, now -> FlowCommand.ChangeCounter(task.id, step, id, now) } }
                 }
-                if (target > 0) Text("Ціль: ${taskNumber(target)} $unit · завершення вручну", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (isJournal && !task.trashed) {
                 Text("Зафіксовано сьогодні: ${taskNumber(counter)} $unit", style = MaterialTheme.typography.bodyMedium)
@@ -641,24 +628,7 @@ private fun NativeTaskCard(
                     Text("−${taskNumber(cost)} од за подію", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            val canPostpone = canDefer && !isJournal && !task.done && !task.someday && !task.trashed
             val note = task.note?.takeIf { it.isNotBlank() }
-            if (canPostpone || note != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (note != null) IconButton(onClick = { noteExpanded = !noteExpanded },
-                    modifier = Modifier.semantics { contentDescription = if (noteExpanded) "Сховати нотатку" else "Нотатка до задачі" }
-                        .testTag("native-task-note-toggle-${task.id}")) { Text("▤", style = MaterialTheme.typography.titleLarge) }
-                if (canPostpone) {
-                    TextButton(
-                        onClick = {
-                            if (task.type == "sched") sendTimedDeferral(60L)
-                            else send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NEXT_ZONE, now, null, id, now) }
-                        },
-                        enabled = !busy, modifier = Modifier.weight(1f).testTag("native-task-defer-${task.id}"),
-                    ) { Text(if (task.type == "sched") "На 1 годину" else "Не зараз") }
-                    TextButton(onClick = { send { id, now -> FlowCommand.DeferTask(task.id, QuestDeferralKind.NOT_TODAY, now, null, id, now) } },
-                        enabled = !busy, modifier = Modifier.weight(1f).testTag("native-task-tomorrow-${task.id}")) { Text("Не сьогодні") }
-                } else if (note != null) Text("Нотатка", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
             if (note != null && noteExpanded) Text(note, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("native-task-note-${task.id}"))
             if (task.trashed) {
@@ -730,22 +700,30 @@ private fun NativeTaskCard(
 
 @Composable
 private fun TaskCompletionTarget(task: FlowTask, enabled: Boolean, onClick: () -> Unit) {
-    // The touch target and inner mark both have fixed square bounds before CircleShape.
-    Box(
-        modifier = Modifier.size(48.dp).clip(CircleShape)
-            .toggleable(value = task.done, enabled = enabled, role = Role.Checkbox, onValueChange = { onClick() })
-            .semantics {
-                contentDescription = if (task.done) "Повернути у невиконані: ${task.title}" else "Виконати: ${task.title}"
-                stateDescription = if (task.done) "Виконано" else "Не виконано"
-            }
-            .testTag("native-task-complete-${task.id}"),
-        contentAlignment = Alignment.Center,
+    PotikCompletionTarget(task.done, enabled,
+        if (task.done) "Повернути у невиконані: ${task.title}" else "Виконати: ${task.title}",
+        Modifier.testTag("native-task-complete-${task.id}")) { onClick() }
+}
+
+@Composable
+private fun CounterStepButton(
+    symbol: String,
+    enabled: Boolean,
+    contentDescription: String,
+    testTag: String,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(48.dp).semantics { this.contentDescription = contentDescription }.testTag(testTag),
     ) {
         Box(
-            Modifier.size(28.dp).border(2.dp, if (task.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape),
+            Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            if (task.done) Text("✓", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            Text(symbol, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else .35f))
         }
     }
 }

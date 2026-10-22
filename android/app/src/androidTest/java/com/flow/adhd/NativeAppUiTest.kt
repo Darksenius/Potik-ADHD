@@ -106,13 +106,13 @@ class NativeAppUiTest {
         ActivityScenario.launch(NativeFlowActivity::class.java).use {
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-nav-plan").performClick()
-            compose.onNodeWithTag("native-planner").performScrollToNode(hasTestTag("native-planner-entry"))
+            compose.onNodeWithTag("native-planner-add").performClick()
             compose.onNodeWithTag("native-planner-entry").performTextInput("10:15 $title")
             compose.onNodeWithTag("native-planner-entry").assertTextContains("10:15 $title")
             // Complete the IME resize before locating the real touch target on short API28 screens.
             androidx.test.espresso.Espresso.closeSoftKeyboard()
             compose.waitForIdle()
-            compose.onNodeWithText("Додати на цей день").performScrollTo().assertIsEnabled().performClick()
+            compose.onNodeWithTag("native-planner-submit").assertIsEnabled().performClick()
             compose.waitUntil(10_000) {
                 (container.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.tasks?.any { task -> task.title == title } == true
             }

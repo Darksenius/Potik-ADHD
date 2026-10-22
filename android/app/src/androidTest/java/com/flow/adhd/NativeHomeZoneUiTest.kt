@@ -27,10 +27,13 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.flow.adhd.domain.FlowCommand
+import com.flow.adhd.domain.QuestDeferralKind
 import com.flow.adhd.domain.FlowSnapshot
 import com.flow.adhd.domain.QuestPolicy
 import com.flow.adhd.domain.ZoneCalendar
 import com.flow.adhd.ui.FlowTheme
+import com.flow.adhd.ui.NativePlannerScreen
 import com.flow.adhd.ui.NativeDayZoneCard
 import com.flow.adhd.ui.NativeTasksScreen
 import java.time.Instant
@@ -102,7 +105,7 @@ class NativeHomeZoneUiTest {
         compose.onNodeWithTag("native-task-search").assertIsFocused()
     }
 
-    @Test fun freeTimeExplainsTomorrowsNextZoneAndTheUnconfiguredDay() {
+    @Test fun freeTimeKeepsOnlyCurrentContextWithoutTimelineNoise() {
         val now = Instant.parse("2026-10-22T23:30:00Z").toEpochMilli()
         val snapshot = mutableStateOf(fixture(zoneName = "Ранок", start = "08:00", end = "10:00", taskCount = 0))
         compose.setContent {
@@ -117,12 +120,40 @@ class NativeHomeZoneUiTest {
         }
         compose.onNodeWithTag("native-current-zone-name").assertTextContains("Вільний час")
         compose.onNodeWithTag("native-zone-clock").assertTextContains("23:30")
-        compose.onNodeWithTag("native-day-time-track").assertExists()
-        compose.onNodeWithTag("native-next-zone").assertTextContains("Далі: Ранок · завтра о 08:00")
+        compose.onNodeWithTag("native-day-time-track").assertDoesNotExist()
+        compose.onNodeWithTag("native-next-zone").assertDoesNotExist()
 
         snapshot.value = FlowSnapshot.parse("""{"formatVersion":2,"tasks":[],"zones":[]}""")
         compose.onNodeWithTag("native-current-zone-name").assertTextContains("Вільний час")
-        compose.onNodeWithTag("native-next-zone").assertTextContains("Зони ще не налаштовані.")
+        compose.onNodeWithText("Без активної зони").assertExists()
+    }
+
+    @Test fun compactCounterAndItsMenuKeepProgressAndDeferralActions() {
+        val commands = mutableListOf<FlowCommand>()
+        val state = FlowSnapshot.parse("""{"formatVersion":2,"zones":[],"tasks":[{"id":99,"title":"Прогулянки","type":"counter","counter":2,"counterTarget":8,"counterStep":1}]}""")
+        compose.setContent {
+            NarrowHome { NativeTasksScreen(state, JsonObject(emptyMap()), false, { command, done -> commands += command; done() }, {}, {}) }
+        }
+        scrollTo("native-task-counter-plus-99")
+        compose.onNodeWithTag("native-task-counter-plus-99").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("native-task-counter-minus-99").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(1.0, -1.0), commands.filterIsInstance<FlowCommand.ChangeCounter>().map { it.delta })
+        }
+        compose.onNodeWithTag("native-task-defer-99").assertDoesNotExist()
+        compose.onNodeWithTag("native-task-actions-99").performClick()
+        compose.onNodeWithTag("native-task-defer-99").performClick()
+        compose.runOnIdle { assertEquals(QuestDeferralKind.NEXT_ZONE, commands.filterIsInstance<FlowCommand.DeferTask>().single().kind) }
+    }
+
+    @Test fun plannerNoteActionBringsTheEditorIntoViewPastALongTaskList() {
+        val base = fixture()
+        val tasks = base.tasks.map { task -> JsonObject(task.raw + ("planDate" to kotlinx.serialization.json.JsonPrimitive(java.time.LocalDate.now().toString()))) }
+        val state = FlowSnapshot.parse(JsonObject(base.data + ("tasks" to JsonArray(tasks))).toString())
+        compose.setContent { NarrowHome { NativePlannerScreen(state, false, { _, _ -> }, {}) } }
+        compose.onNodeWithTag("native-planner-day-actions").performClick()
+        compose.onNodeWithTag("native-planner-note-action").performClick()
+        compose.onNodeWithTag("native-planner-note").assertIsDisplayed()
     }
 
     private fun scrollTo(tag: String) = compose.onNodeWithTag("native-tasks").performScrollToNode(hasTestTag(tag))
