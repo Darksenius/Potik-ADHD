@@ -23,6 +23,7 @@ class QuickReminderTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assumeTrue("Requires the isolated native runtime", BuildConfig.NATIVE_RUNTIME && context.packageName.endsWith(".native"))
         val container = AppContainer.get(context)
+        container.nativeRuntime.refresh().await()
         val before = (container.commandRepository.read() as SnapshotRead.Ready).snapshot
         val id = UUID.randomUUID().toString()
         val title = "Quick reminder $id"

@@ -687,7 +687,10 @@ final class QuestPolicy {
                 // Interpret them as the current "Не зараз" contract instead.
                 case Event.SKIP: {
                     Deferral moved=deferNextZone(t,timeline,e.createdAt,zone);
-                    if(moved!=null)t.deferral=moved;
+                    if(moved!=null) {
+                        t.deferral=moved;
+                        cancelQuickReminderForDeferral(t);
+                    }
                     break;
                 }
                 case Event.INCREMENT: case Event.DECREMENT:
@@ -695,11 +698,19 @@ final class QuestPolicy {
                 case Event.DEFER: if(e.deferral!=null){
                     t.occurrenceId=taskOccurrenceId(t,e.deferral.requestedAt,timeline,zone,occurrences);
                     t.deferral=e.deferral;t.completionDeferral=null;t.snoozeUntil=0L;t.firedSched=false;t.firedPre=false;t.alarmFired=false;
+                    cancelQuickReminderForDeferral(t);
                 }break;
                 default: break;
             }
         }
         return result;
+    }
+
+    private static void cancelQuickReminderForDeferral(Task task) {
+        if (task != null && "simple".equals(task.type)) {
+            task.quickReminderAt = 0L;
+            task.quickReminderFiredAt = 0L;
+        }
     }
 
     private static boolean canApplyUndo(Task task, Undo undo, TimeZone zone) {

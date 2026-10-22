@@ -2,6 +2,7 @@ package com.flow.adhd.domain
 
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.*
@@ -59,6 +60,31 @@ class TaskDeferralReducerTest {
             assertSame(blocked, result.snapshot)
         }
         assertTrue(engine.apply(initial, command().copy(requestedAt = -1), zone, at) is FlowCommandResult.Rejected)
+    }
+
+    @Test fun explicitDeferralCancelsSimpleQuickReminderAndUndoRestoresBothFields() {
+        val due = at + 60 * 60_000L
+        val taskWithReminder = JsonObject(initial.tasks.single().raw + mapOf(
+            "quickReminderAt" to kotlinx.serialization.json.JsonPrimitive(due),
+            "quickReminderFiredAt" to kotlinx.serialization.json.JsonPrimitive(due - 120_000L),
+        ))
+        val source = FlowSnapshot.fromData(JsonObject(initial.data + ("tasks" to JsonArray(listOf(taskWithReminder)))) )
+
+        for (kind in listOf(QuestDeferralKind.NEXT_ZONE, QuestDeferralKind.NOT_TODAY)) {
+            val deferred = engine.apply(source, command(kind).copy(commandId = "quick-${kind.name}"), zone, at) as FlowCommandResult.Applied
+            val task = deferred.snapshot.tasks.single().raw
+            assertFalse(task.containsKey("quickReminderAt"))
+            assertFalse(task.containsKey("quickReminderFiredAt"))
+            assertEquals(taskWithReminder["zoneId"], task["zoneId"])
+            assertEquals(taskWithReminder["planDate"], task["planDate"])
+
+            val offered = TaskUndo.offer(source, deferred, "defer", 300, at)
+            val restored = TaskUndo.reduce(deferred.snapshot,
+                FlowCommand.UndoTask(300, "undo-${kind.name}", at + 1, receipt = offered.undoReceipt), zone, at + 1
+            ) as FlowCommandResult.Applied
+            assertEquals(due, restored.snapshot.tasks.single().raw["quickReminderAt"]?.toString()?.toLong())
+            assertEquals(due - 120_000L, restored.snapshot.tasks.single().raw["quickReminderFiredAt"]?.toString()?.toLong())
+        }
     }
 
     @Test fun scheduledNextZoneDeferralIsOneHourAcrossZoneAndMidnightWhileOtherTypesKeepZoneRule() {

@@ -508,6 +508,30 @@ public class QuestPolicyTest {
         assertNull(deferred.deferral);
     }
 
+    @Test public void pendingExplicitDeferralAndSkipCancelSimpleQuickReminderOnCopies() {
+        long due = NOW + 60 * 60_000L;
+        QuestPolicy.Task saved = QuestPolicy.Task.builder("quick")
+                .created("2026-10-14T00:00:00.000Z").zone(1).build();
+        saved.quickReminderAt = due;
+        saved.quickReminderFiredAt = due - 120_000L;
+        QuestPolicy.Deferral move = new QuestPolicy.Deferral(QuestPolicy.DEFERRAL_NEXT_ZONE,
+                NOW, 1, 2, NOW + 30 * 60_000L, NOW + 90 * 60_000L);
+
+        List<QuestPolicy.Task> deferred = QuestPolicy.projectPendingEvents(Collections.singletonList(saved),
+                Collections.singletonList(QuestPolicy.Event.defer("quick", NOW, move)), NOW,
+                ordinaryTimeline(), UTC);
+        assertEquals(0L, deferred.get(0).quickReminderAt);
+        assertEquals(0L, deferred.get(0).quickReminderFiredAt);
+        assertEquals(due, saved.quickReminderAt); // pending projection never mutates persisted task
+        assertEquals(due - 120_000L, saved.quickReminderFiredAt);
+
+        List<QuestPolicy.Task> skipped = QuestPolicy.projectPendingEvents(Collections.singletonList(saved),
+                Collections.singletonList(QuestPolicy.Event.skip("quick", NOW)), NOW, ordinaryTimeline(), UTC);
+        assertEquals(0L, skipped.get(0).quickReminderAt);
+        assertEquals(0L, skipped.get(0).quickReminderFiredAt);
+
+    }
+
     @Test public void stableQuickCaptureProjectsBeforeAppOpenAndAcceptsDoneAndDeferralCommands() {
         String id = "1792000000001024";
         String title = "Shade task: literal title";

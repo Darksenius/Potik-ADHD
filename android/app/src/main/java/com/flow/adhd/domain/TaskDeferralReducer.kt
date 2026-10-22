@@ -38,6 +38,10 @@ object TaskDeferralReducer {
             put("firedSched", JsonPrimitive(false))
             put("firedPre", JsonPrimitive(false))
             put("alarmFired", JsonPrimitive(false))
+            if (task.type == "simple") {
+                remove("quickReminderAt")
+                remove("quickReminderFiredAt")
+            }
         })
         if (updated == task.raw) return FlowCommandResult.Applied(snapshot, emptyList())
         val state = FlowSnapshot.fromData(JsonObject(snapshot.data + ("tasks" to JsonArray(
