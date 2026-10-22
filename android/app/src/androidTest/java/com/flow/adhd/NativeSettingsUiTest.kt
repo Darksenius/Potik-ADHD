@@ -24,7 +24,9 @@ class NativeSettingsUiTest {
         ActivityScenario.launch(NativeFlowActivity::class.java).use { scenario ->
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-nav-more").performClick()
-            compose.onNodeWithTag("native-open-settings").performScrollTo().performClick()
+            compose.onNodeWithTag("native-more").performScrollToNode(hasTestTag("native-open-settings"))
+            compose.onNodeWithTag("native-open-settings").performClick()
+            compose.onNodeWithTag("native-settings").performScrollToNode(hasTestTag("native-settings-appearance"))
             compose.onNodeWithTag("native-settings-appearance").performClick()
             compose.onNodeWithText("Як у системі").performClick()
             compose.onNodeWithText("Світла").performClick()
@@ -32,7 +34,8 @@ class NativeSettingsUiTest {
             scenario.recreate()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-settings").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Світла").assertExists()
-            compose.onNodeWithText("Що нового · ${BuildConfig.VERSION_NAME}").performScrollTo().performClick()
+            compose.onNodeWithTag("native-settings").performScrollToNode(hasText("Що нового · ${BuildConfig.VERSION_NAME}"))
+            compose.onNodeWithText("Що нового · ${BuildConfig.VERSION_NAME}").performClick()
             val latest = Json.parseToJsonElement(com.flow.adhd.data.NativeContent.read(context, "release-notes.json")).jsonArray.first().jsonObject
             compose.onNodeWithText("${latest.getValue("version").jsonPrimitive.content} · ${latest.getValue("title").jsonPrimitive.content}").assertExists()
             compose.onNodeWithText("← Назад").performClick()
@@ -73,7 +76,9 @@ class NativeSettingsUiTest {
         ActivityScenario.launch(NativeFlowActivity::class.java).use {
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-nav-more").performClick()
-            compose.onNodeWithTag("native-open-settings").performScrollTo().performClick()
+            compose.onNodeWithTag("native-more").performScrollToNode(hasTestTag("native-open-settings"))
+            compose.onNodeWithTag("native-open-settings").performClick()
+            compose.onNodeWithTag("native-settings").performScrollToNode(hasTestTag("native-settings-demo"))
             compose.onNodeWithTag("native-settings-demo").performClick()
             compose.onNodeWithTag("native-settings").performScrollToNode(hasTestTag("native-demo-install"))
             compose.onNodeWithTag("native-demo-install").performClick()

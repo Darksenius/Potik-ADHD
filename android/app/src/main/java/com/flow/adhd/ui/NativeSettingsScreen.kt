@@ -77,22 +77,9 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
     LazyColumn(modifier.fillMaxSize().testTag("native-settings"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Налаштування", style = MaterialTheme.typography.headlineSmall) }
         item { FilledTonalButton(onClick = { document = "whatsnew" }, modifier = Modifier.fillMaxWidth()) { Text("Що нового · ${BuildConfig.VERSION_NAME}") } }
-        item { SettingsGroup("updates", "Оновлення", "Перевірити версію та завантажити APK", group, { group = it }) {
-            NativeUpdateSection(updateState, { appUpdates.check() }, tools::openUrl)
-        } }
         state.message?.let { message -> item { Card { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(message, Modifier.weight(1f)); TextButton(onClick = tools::clearMessage) { Text("Гаразд") }
         } } } }
-        item { SettingsGroup("demo", "Ознайомчий пресет завдань", "Приклади всіх типів на два дні", group, { group = it }) {
-            Text("18 прикладів на сьогодні й завтра: 10 типів задач, 8 варіантів повторення, нотатки й дві зони. Сигнали вимкнені, додавання не дає досвіду. Повтори тривають до видалення задач.")
-            Button(enabled = enabled, modifier = Modifier.testTag("native-demo-install"), onClick = {
-                val payload = Json.parseToJsonElement(NativeContent.read(context, "demo-preset.json")).jsonObject
-                onCommand(FlowCommand.InstallDemoPreset(payload, newCommandId(), commandTime())) { demoMessage = "Приклади додано на сьогодні й завтра. Повторне додавання не скидає виконання й не створює дублів." }
-            }) { Text("Додати ознайомчі приклади") }
-            val count = snapshot.tasks.count { it.raw.text("dayPresetKey").startsWith("potik-intro-v1:") }
-            if (count > 0) TextButton(enabled = enabled, onClick = { confirmClearDemo = true }) { Text("Прибрати ознайомчі задачі ($count)") }
-            if (demoMessage.isNotEmpty()) Text(demoMessage)
-        } }
         item { SettingsGroup("appearance", "Вигляд", "Тема, анімації та досвід", group, { group = it }) {
             NativeChoice("Тема", prefs.text("themeMode").ifBlank { "system" }, listOf("system" to "Як у системі", "dark" to "Темна", "light" to "Світла"), enabled) { preference("themeMode", JsonPrimitive(it)) }
             SettingsToggle("Зменшити анімації", prefs.flag("reduceMotion"), enabled) { preference("reduceMotion", JsonPrimitive(it)) }
@@ -165,6 +152,19 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
             OutlinedButton(onClick = { document = "help" }) { Text("Довідка") }
             OutlinedButton(onClick = { document = "license" }) { Text("Ліцензія") }
             OutlinedButton(onClick = { document = "source" }) { Text("Огляд вихідного коду офлайн") }
+        } }
+        item { SettingsGroup("updates", "Оновлення", "Перевірити версію та завантажити APK", group, { group = it }) {
+            NativeUpdateSection(updateState, { appUpdates.check() }, tools::openUrl)
+        } }
+        item { SettingsGroup("demo", "Ознайомчий пресет завдань", "Приклади всіх типів на два дні", group, { group = it }) {
+            Text("18 прикладів на сьогодні й завтра: 10 типів задач, 8 варіантів повторення, нотатки й дві зони. Сигнали вимкнені, додавання не дає досвіду. Повтори тривають до видалення задач.")
+            Button(enabled = enabled, modifier = Modifier.testTag("native-demo-install"), onClick = {
+                val payload = Json.parseToJsonElement(NativeContent.read(context, "demo-preset.json")).jsonObject
+                onCommand(FlowCommand.InstallDemoPreset(payload, newCommandId(), commandTime())) { demoMessage = "Приклади додано на сьогодні й завтра. Повторне додавання не скидає виконання й не створює дублів." }
+            }) { Text("Додати ознайомчі приклади") }
+            val count = snapshot.tasks.count { it.raw.text("dayPresetKey").startsWith("potik-intro-v1:") }
+            if (count > 0) TextButton(enabled = enabled, onClick = { confirmClearDemo = true }) { Text("Прибрати ознайомчі задачі ($count)") }
+            if (demoMessage.isNotEmpty()) Text(demoMessage)
         } }
     }
     if (showEgg) AlertDialog(onDismissRequest = { showEgg = false }, title = { Text("r35") },

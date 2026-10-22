@@ -17,6 +17,14 @@
         android:orientation="horizontal">
 
         <TextView
+            android:id="@+id/panel_zone_indicator"
+        android:importantForAccessibility="no"
+            android:layout_width="4dp"
+            android:layout_height="28dp"
+            android:layout_marginEnd="9dp"
+            android:background="#FF888888" />
+
+        <TextView
             android:id="@+id/panel_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -47,6 +55,7 @@
         android:id="@+id/panel_details"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="13dp"
         android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="1"

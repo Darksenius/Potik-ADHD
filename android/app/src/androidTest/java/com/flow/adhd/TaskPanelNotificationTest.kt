@@ -59,7 +59,7 @@ class TaskPanelNotificationTest {
         val bridge = FlowBridge(context)
         val app = AppContainer.get(context)
         val suffix = UUID.randomUUID().toString()
-        val titles = (1..6).map { "Panel task $suffix $it" }
+        val titles = (1..10).map { "Panel task $suffix $it" }
         runBlocking { withTimeout(TIMEOUT_MS) { app.nativeRuntime.refresh().await() } }
         val priorPriorities = readStore(database).state.optJSONArray("priorities") ?: JSONArray()
         val priorTheme = readStore(database).state.optJSONObject("preferences")?.optString("notificationTheme", "system") ?: "system"
@@ -86,12 +86,12 @@ class TaskPanelNotificationTest {
 
             val seeded = readStore(database)
             val seededTasks = seeded.state.objects("tasks").filter { it.optString("title").startsWith("Panel task $suffix ") }
-            assertEquals("Six unique tasks must be seeded through the real quick-capture path", 6, seededTasks.size)
+            assertEquals("Ten unique tasks must be seeded through the real quick-capture path", 10, seededTasks.size)
             assertTrue("All seeded tasks must be incomplete and immediately eligible simple tasks", seededTasks.all {
                 it.optString("type", "simple") == "simple" && !it.optBoolean("done") && !it.optBoolean("trashed") &&
                     !it.optBoolean("someday") && !it.has("questDeferral")
             })
-            assertEquals(6, capturedIds.toSet().size)
+            assertEquals(10, capturedIds.toSet().size)
 
             // Existing due/current-zone tasks correctly outrank unbound captures. Pin only our
             // fixtures so actions never modify a pre-existing record; restore pins in finally.
@@ -110,6 +110,13 @@ class TaskPanelNotificationTest {
                 it.status.notification.color == 0xFF202124.toInt()
             }
             instrumentation.runOnMainSync {
+                val compact = requireNotNull(panel.status.notification.contentView).apply(context, null)
+                val compactZone = compact.findViewById<android.widget.TextView>(R.id.panel_title)
+                val compactCount = compact.findViewById<android.widget.TextView>(R.id.panel_position)
+                val indicator = compact.findViewById<View>(R.id.panel_zone_indicator)
+                assertTrue("Collapsed notification must name the current zone", compactZone.text.isNotBlank() && compactZone.text != "Потік")
+                assertEquals("All ten eligible fixtures must be counted beyond the five-card panel cap", "9+", compactCount.text.toString())
+                assertTrue("The zone indicator must render a colored stripe", indicator.background is android.graphics.drawable.ColorDrawable)
                 val view = requireNotNull(panel.status.notification.bigContentView).apply(context, null)
                 assertEquals(0xFFF1F3F4.toInt(), view.findViewById<android.widget.TextView>(R.id.panel_title).currentTextColor)
             }

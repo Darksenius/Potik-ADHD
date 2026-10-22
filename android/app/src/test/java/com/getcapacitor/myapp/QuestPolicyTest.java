@@ -49,6 +49,44 @@ public class QuestPolicyTest {
         assertFalse(result.tasks.contains(wrongPinned));
     }
 
+    @Test public void eligibleCountUsesFullPolicySetRatherThanTheFiveCardSelection() {
+        List<QuestPolicy.Segment> timeline = ordinaryTimeline();
+        QuestPolicy.Task futureSimple = QuestPolicy.Task.builder("future-simple").type("simple").build();
+        futureSimple.quickReminderAt = NOW + 1;
+        List<QuestPolicy.Task> candidates = Arrays.asList(
+                QuestPolicy.Task.builder("one").zone(1).build(),
+                QuestPolicy.Task.builder("two").zone(1).build(),
+                QuestPolicy.Task.builder("three").zone(1).build(),
+                QuestPolicy.Task.builder("four").zone(1).build(),
+                QuestPolicy.Task.builder("five").zone(1).build(),
+                QuestPolicy.Task.builder("six").zone(1).build(),
+                QuestPolicy.Task.builder("seven").zone(1).build(),
+                QuestPolicy.Task.builder("eight").zone(1).build(),
+                QuestPolicy.Task.builder("nine").zone(1).build(),
+                QuestPolicy.Task.builder("ten").zone(1).build(),
+                QuestPolicy.Task.builder("wrong-zone").zone(2).build(),
+                QuestPolicy.Task.builder("done").done(true).build(),
+                QuestPolicy.Task.builder("trashed").trashed(true).build(),
+                QuestPolicy.Task.builder("someday").someday(true).build(),
+                futureSimple,
+                QuestPolicy.Task.builder("future-deferred").deferral(new QuestPolicy.Deferral(
+                        QuestPolicy.DEFERRAL_TIME, NOW, 1, 1, NOW + 1, null)).build(),
+                QuestPolicy.Task.builder("future-sched").sched("2026-10-20", "19:00").build()
+        );
+
+        assertEquals(10, QuestPolicy.countEligible(candidates, timeline, NOW + DAY, NOW, UTC, null));
+        QuestPolicy.Selection selected = QuestPolicy.select(candidates, timeline, NOW + DAY, NOW, UTC, 99);
+        assertEquals("The display selection remains capped at five", 5, selected.tasks.size());
+        assertEquals("The selection reports the complete eligible set", 10, selected.eligibleCount);
+        assertEquals("Zero is a valid count for a current zone with no due tasks", 0,
+                QuestPolicy.countEligible(Collections.<QuestPolicy.Task>emptyList(), timeline, NOW + DAY, NOW, UTC, null));
+        assertEquals(1, QuestPolicy.countEligible(Collections.singletonList(candidates.get(0)), timeline,
+                NOW + DAY, NOW, UTC, null));
+        assertEquals(9, QuestPolicy.countEligible(candidates.subList(0, 9), timeline, NOW + DAY, NOW, UTC, null));
+        assertEquals("A missing current timeline is unavailable, not a zero-task zone", -1,
+                QuestPolicy.countEligible(candidates, timeline, NOW, NOW, UTC, null));
+    }
+
     @Test public void freeUnplannedCompletableTypesAreUniversalButJournalAndTerminalRowsAreExcluded() {
         List<QuestPolicy.Task> source = Arrays.asList(
                 QuestPolicy.Task.builder("simple").type("simple").build(),

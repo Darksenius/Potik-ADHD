@@ -224,10 +224,14 @@ final class QuestPolicy {
     }
 
     static final class Selection {
-        final boolean valid; final String hint; final int currentZoneId;
+        final boolean valid; final String hint; final int currentZoneId; final int eligibleCount;
         final Segment currentSegment; final List<Task> tasks;
         private Selection(boolean valid,String hint,int zone,Segment current,List<Task> tasks) {
+            this(valid,hint,zone,current,tasks,valid?tasks.size():-1);
+        }
+        private Selection(boolean valid,String hint,int zone,Segment current,List<Task> tasks,int eligibleCount) {
             this.valid=valid; this.hint=hint; this.currentZoneId=zone; this.currentSegment=current; this.tasks=tasks;
+            this.eligibleCount=eligibleCount;
         }
         static Selection invalid(String hint) { return new Selection(false,hint,-1,null,Collections.<Task>emptyList()); }
     }
@@ -778,11 +782,25 @@ final class QuestPolicy {
                             int limit,OccurrenceIndex occurrences) {
         if(timeline==null||timeline.isEmpty()||timelineUntil<=now)return Selection.invalid("Відкрий Потік, щоб оновити квести");
         Segment current=segmentAt(timeline,now); if(current==null)return Selection.invalid("Відкрий Потік, щоб оновити зони");
+        List<Ranked> candidates=eligibleCandidates(source,current,timeline,now,zone,occurrences);
+        List<Task> selected=new ArrayList<>();int max=Math.max(0,Math.min(MAX_CARDS,limit));for(Ranked r:candidates){if(selected.size()>=max)break;selected.add(r.task);}
+        return new Selection(true,"",current.zoneId,current,selected,candidates.size());
+    }
+
+    /** Full eligible total for summaries; applies the exact same gates and ranking source as select(). */
+    static int countEligible(List<Task> source,List<Segment> timeline,long timelineUntil,long now,TimeZone zone,
+                             OccurrenceIndex occurrences) {
+        if(timeline==null||timeline.isEmpty()||timelineUntil<=now)return -1;
+        Segment current=segmentAt(timeline,now); if(current==null)return -1;
+        return eligibleCandidates(source,current,timeline,now,zone,occurrences).size();
+    }
+
+    private static List<Ranked> eligibleCandidates(List<Task> source,Segment current,List<Segment> timeline,long now,
+                                                    TimeZone zone,OccurrenceIndex occurrences) {
         List<Ranked> candidates=new ArrayList<>();
         if(source!=null)for(int i=0;i<source.size();i++){Task t=source.get(i);if(t!=null&&eligible(t,current,timeline,now,zone,occurrences))candidates.add(new Ranked(t,i));}
         Collections.sort(candidates,(a,b)->{int ap=a.task.priorityIndex<0?Integer.MAX_VALUE:a.task.priorityIndex;int bp=b.task.priorityIndex<0?Integer.MAX_VALUE:b.task.priorityIndex;int p=Integer.compare(ap,bp);return p!=0?p:Integer.compare(a.index,b.index);});
-        List<Task> selected=new ArrayList<>();int max=Math.max(0,Math.min(MAX_CARDS,limit));for(Ranked r:candidates){if(selected.size()>=max)break;selected.add(r.task);}
-        return new Selection(true,"",current.zoneId,current,selected);
+        return candidates;
     }
     private static final class Ranked {final Task task;final int index;Ranked(Task t,int i){task=t;index=i;}}
 

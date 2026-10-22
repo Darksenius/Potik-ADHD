@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -40,7 +41,8 @@ import androidx.compose.ui.unit.dp
         .copy(alpha = if (enabled) 1f else .4f)
     Box(modifier.size(48.dp).clip(CircleShape).toggleable(checked, enabled = enabled, role = Role.Checkbox, onValueChange = onChange)
         .semantics { contentDescription = label; stateDescription = if (checked) "Виконано" else "Не виконано" }, contentAlignment = Alignment.Center) {
-        Box(Modifier.size(24.dp).border(2.dp, ink, CircleShape), contentAlignment = Alignment.Center) {
+        // Scale only the visible mark by 6%; retain the full 48dp touch target.
+        Box(Modifier.size(24.dp).graphicsLayer(scaleX = .94f, scaleY = .94f).border(2.dp, ink, CircleShape), contentAlignment = Alignment.Center) {
             if (checked) Text("✓", color = ink, style = MaterialTheme.typography.labelMedium)
         }
     }

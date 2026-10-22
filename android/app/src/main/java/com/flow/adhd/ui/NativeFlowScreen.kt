@@ -250,11 +250,12 @@ private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: 
     }
     LazyColumn(modifier.testTag("native-more"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { PotikMenuRow("Налаштування", "Вигляд, сповіщення, дані та допомога", { destination = "settings" }, Modifier.padding(top = 8.dp).testTag("native-open-settings")) }
-        item { Text("Організувати", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("Планування", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { PotikMenuRow("Зони", "Напрямки дня та їхній розклад", { destination = "zones" }) }
         item { PotikMenuRow("Пресети дня", "Типові дні, справи й тижневі правила", { destination = "presets" }) }
-        item { PotikMenuRow("Папки нотаток", "Назви й порядок твоїх папок", { destination = "folders" }) }
-        item { Text("Твій поступ", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("Нотатки", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { PotikMenuRow("Папки нотаток", "Назви й порядок папок", { destination = "folders" }) }
+        item { Text("Самопочуття й поступ", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { PotikMenuRow("Стан", "Енергія, фокус і пріоритети дня", { destination = "state" }) }
         item { PotikMenuRow("Статистика", "Активні дні, думки та відзнаки", { destination = "stats" }) }
         val insight = projection["dailyInsight"] as? JsonObject

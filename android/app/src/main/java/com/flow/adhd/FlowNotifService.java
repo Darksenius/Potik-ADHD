@@ -668,27 +668,41 @@ public class FlowNotifService extends Service {
             String routine, String body, String time, int done, int total, int energy, String notificationTheme) {
         if (destroyed) return;
         long now = System.currentTimeMillis();
-        QuestPolicy.Selection selection = currentQuestSelection(now);
+        JSONObject currentNotif = readNotifObject();
+        QuestPolicy.Selection selection = currentQuestSelection(now, currentNotif);
         List<QuestPolicy.Task> rows = selection.valid ? selection.tasks : java.util.Collections.emptyList();
+        int eligibleCount = selection.eligibleCount;
+        JSONObject currentZone = selection.valid && currentNotif != null
+                ? findQuestZone(currentNotif.optJSONArray("questZones"), selection.currentZoneId) : null;
+        if (selection.valid) {
+            lastZoneColor = parseZoneColor(selection.currentZoneId == 0 ? "#888888"
+                    : currentZone == null ? "" : currentZone.optString("color", ""));
+        } else lastZoneColor = COLOR_FLOW;
         int index = resolvePanelIndex(rows);
         QuestPolicy.Task task = rows.isEmpty() ? null : rows.get(index);
         String generation = task == null ? "" : actionGenerationForTask(task, now);
         String title = task == null ? "Зараз немає доречних задач" : task.title;
         String position = task == null ? "" : (index + 1) + " із " + rows.size();
         String receipt = activeCaptureReceipt();
-        String details = !selection.valid ? selection.hint : zone + (slots.isEmpty() ? "" : " · " + slots);
+        String currentZoneLabel = selection.currentZoneId == 0 ? "Вільний час"
+                : currentZone == null ? meaningfulZoneLabel(zone) : currentZone.optString("nm", "");
+        String zoneLabel = selection.valid ? meaningfulZoneLabel(currentZoneLabel) : "Зона оновлюється";
+        String zoneSlots = selection.currentSegment == null ? ""
+                : localTime(selection.currentSegment.startAt) + "–" + localTime(selection.currentSegment.endAt);
+        String details = !selection.valid ? selection.hint : zoneLabel + (zoneSlots.isEmpty() ? "" : " · " + zoneSlots);
         String counterText = task != null && task.counterEnabled
                 ? task.counter + (task.counterTarget > 0 ? "/" + task.counterTarget : "")
                     + " " + counterUnitLabel(task.counterUnit)
                 : "";
         if (!receipt.isEmpty()) details = receipt;
+        boolean darkPanel = isDarkNotificationPanel(notificationTheme);
+        int zoneIndicatorColor = accessibleZoneIndicatorColor(lastZoneColor, darkPanel);
         UndoCapture undo = activeUndo();
         String[] ids = new String[rows.size()];
         for (int i = 0; i < rows.size(); i++) ids[i] = rows.get(i).id;
-        boolean darkPanel = isDarkNotificationPanel(notificationTheme);
         // Skip identical projections: no cancel/repost, no minute-by-minute refresh of unchanged content.
         String fingerprint = java.util.Arrays.toString(ids) + "|" + index + "|" + generation
-                + "|" + title + "|" + details + "|" + counterText + "|" + lastZoneColor
+                + "|" + title + "|" + details + "|" + zoneLabel + "|" + eligibleCount + "|" + counterText + "|" + lastZoneColor
                 + "|" + notificationTheme + "|" + darkPanel
                 + "|" + (undo == null ? "" : undo.token);
         if (fingerprint.equals(lastPanelFingerprint)) return;
@@ -701,8 +715,13 @@ public class FlowNotifService extends Service {
             view.setTextViewText(R.id.panel_title, title);
             view.setTextViewText(R.id.panel_details, details);
             view.setTextViewText(R.id.panel_position, position);
+            view.setInt(R.id.panel_zone_indicator, "setBackgroundColor", zoneIndicatorColor);
         }
-        if (!receipt.isEmpty()) compact.setTextViewText(R.id.panel_title, receipt);
+        compact.setTextViewText(R.id.panel_title, zoneLabel);
+        compact.setTextViewText(R.id.panel_details, !receipt.isEmpty() ? receipt : title);
+        String compactCount = compactEligibleCountLabel(eligibleCount);
+        compact.setTextViewText(R.id.panel_position, compactCount);
+        compact.setViewVisibility(R.id.panel_position, compactCount.isEmpty() ? View.GONE : View.VISIBLE);
         expanded.setViewVisibility(R.id.panel_navigation_row, task == null ? View.GONE : View.VISIBLE);
         expanded.setViewVisibility(R.id.panel_defer_row, task == null ? View.GONE : View.VISIBLE);
         expanded.setViewVisibility(R.id.panel_counter_row,
@@ -740,7 +759,7 @@ public class FlowNotifService extends Service {
         extras.putString("flow_panel_generation", generation);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification).setColor(lastZoneColor)
-                .setContentTitle(title).setContentText(details).setSubText("Потік")
+                .setContentTitle(zoneLabel).setContentText(compactCount.isEmpty() ? title : compactCount + " · " + title).setSubText("Потік")
                 .setContentIntent(openPI).setOngoing(true).setSilent(true).setOnlyAlertOnce(true)
                 .setShowWhen(false).setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -992,7 +1011,10 @@ public class FlowNotifService extends Service {
     }
 
     private QuestPolicy.Selection currentQuestSelection(long now) {
-        JSONObject notif = readNotifObject();
+        return currentQuestSelection(now, readNotifObject());
+    }
+
+    private QuestPolicy.Selection currentQuestSelection(long now, JSONObject notif) {
         if (notif == null) return QuestPolicy.Selection.invalid("Відкрий Потік, щоб оновити задачі");
         JSONArray rows = notif.optJSONArray("questTasks");
         JSONArray timelineRows = notif.optJSONArray("questWallDays");
@@ -1008,6 +1030,51 @@ public class FlowNotifService extends Service {
                 java.util.TimeZone.getDefault(), occurrences);
         return QuestPolicy.select(projected, timeline, QuestPolicy.timelineUntil(notif, timeline),
                 now, java.util.TimeZone.getDefault(), QuestPolicy.MAX_CARDS, occurrences);
+    }
+
+    private String meaningfulZoneLabel(String zone) {
+        if (zone == null || zone.trim().isEmpty() || "Потік".equals(zone.trim())) return "Зона недоступна";
+        return zone.trim();
+    }
+
+    static String compactEligibleCountLabel(int eligibleCount) {
+        return eligibleCount > 9 ? "9+" : eligibleCount > 0 ? String.valueOf(eligibleCount) : "";
+    }
+
+    /** Keeps the zone accent visible against both the light and dark panel surfaces. */
+    private int accessibleZoneIndicatorColor(int color, boolean darkPanel) {
+        int background = darkPanel ? 0xFF202124 : 0xFFFFF9F2;
+        if (contrastRatio(color, background) >= 3.0) return color;
+        int target = darkPanel ? android.graphics.Color.WHITE : android.graphics.Color.BLACK;
+        for (int step = 1; step <= 20; step++) {
+            double amount = step / 20.0;
+            int blended = android.graphics.Color.rgb(
+                    blendChannel(android.graphics.Color.red(color), android.graphics.Color.red(target), amount),
+                    blendChannel(android.graphics.Color.green(color), android.graphics.Color.green(target), amount),
+                    blendChannel(android.graphics.Color.blue(color), android.graphics.Color.blue(target), amount));
+            if (contrastRatio(blended, background) >= 3.0) return blended;
+        }
+        return target;
+    }
+
+    private int blendChannel(int start, int end, double amount) {
+        return (int) Math.round(start + (end - start) * amount);
+    }
+
+    private double contrastRatio(int first, int second) {
+        double a = relativeLuminance(first), b = relativeLuminance(second);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+
+    private double relativeLuminance(int color) {
+        return 0.2126 * linearChannel(android.graphics.Color.red(color))
+                + 0.7152 * linearChannel(android.graphics.Color.green(color))
+                + 0.0722 * linearChannel(android.graphics.Color.blue(color));
+    }
+
+    private double linearChannel(int channel) {
+        double value = channel / 255.0;
+        return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
     }
 
     private String actionGenerationForTask(QuestPolicy.Task task, long now) {
