@@ -36,7 +36,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -62,9 +61,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -91,18 +88,17 @@ fun NativeTaskEditor(
     allowQuickReminder: Boolean = true,
 ) {
     val context = LocalContext.current
-    val catalog by produceState<EditorTypeCatalog?>(null, context) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val raw = com.flow.adhd.data.NativeContent.read(context, "task-types.json")
-                val source = Json.parseToJsonElement(raw) as JsonObject
-                require(source.isNotEmpty())
-                EditorTypeCatalog(source.map { (id, definition) ->
-                    val fields = definition as JsonObject
-                    EditorType(id, fields.editorText("label") ?: error("Missing task label"), fields.editorText("hint").orEmpty())
-                })
-            }.getOrElse { EditorTypeCatalog(emptyList(), "Не вдалося завантажити типи задач. Закрий редактор і відкрий його знову.") }
-        }
+    // The tiny, immutable APK catalog is already prepared by NativeContent.load at startup.
+    // A standalone editor can initialize that same cache; Save never waits on an unrelated IO coroutine.
+    val catalog = remember(context.applicationContext) {
+        runCatching {
+            val source = com.flow.adhd.data.NativeContent.taskTypes(context)
+            require(source.isNotEmpty())
+            EditorTypeCatalog(source.map { (id, definition) ->
+                val fields = definition as JsonObject
+                EditorType(id, fields.editorText("label") ?: error("Missing task label"), fields.editorText("hint").orEmpty())
+            })
+        }.getOrElse { EditorTypeCatalog(emptyList(), "Не вдалося завантажити типи задач. Закрий редактор і відкрий його знову.") }
     }
     val existing = snapshot.tasks.firstOrNull { it.id == taskId }
     val seed = remember(taskId) { existing?.raw ?: newEditorSeed(snapshot.data.editorText("taskEditorDraft").orEmpty()) }
@@ -333,7 +329,7 @@ fun NativeTaskEditor(
             unavailable -> "Цієї задачі вже немає. Закрий редактор і онови список."
             titleResult == TaskTitleSchedule.Result.InvalidTime -> "Час у позначці має бути від 00:00 до 23:59. Наприклад: ///12:40///."
             titleResult == TaskTitleSchedule.Result.EmptyTitle -> "Напиши, що потрібно зробити."
-            catalog?.types?.none { it.id == saveType } != false -> "Вибери доступний тип задачі."
+            catalog.types.none { it.id == saveType } -> "Вибери доступний тип задачі."
             saveDate.isNotBlank() && saveParsedDate == null -> "Введи дату у форматі РРРР-ММ-ДД, наприклад 2026-10-17."
             saveType == "sched" && saveParsedDate == null -> "Вкажи дату запланованої задачі."
             saveType == "sched" && saveParsedTime == null -> "Введи час задачі у форматі ГГ:ХХ, наприклад 15:30."
@@ -493,19 +489,17 @@ fun NativeTaskEditor(
                 Text("Тип задачі", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("simple", "sched").forEach { commonId ->
-                        val label = catalog?.types?.firstOrNull { it.id == commonId }?.label ?: if (commonId == "simple") "Звичайна" else "Запланована"
+                        val label = catalog.types.firstOrNull { it.id == commonId }?.label ?: if (commonId == "simple") "Звичайна" else "Запланована"
                         FilterChip(selected = type == commonId, onClick = { chooseType(commonId) }, enabled = enabled,
                             label = { Text(label) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-type-$commonId"))
                     }
                 }
-                val otherTypes = catalog?.types.orEmpty().filterNot { it.id == "simple" || it.id == "sched" }
+                val otherTypes = catalog.types.filterNot { it.id == "simple" || it.id == "sched" }
                 EditorPicker("Інший тип", type.takeIf { it !in setOf("simple", "sched") }.orEmpty(),
                     otherTypes.map { EditorChoice(it.id, it.label) }, enabled, "native-task-type", "Вибрати інший тип") { chooseType(it) }
-                catalog?.types?.firstOrNull { it.id == type }?.hint?.takeIf { it.isNotEmpty() }?.let {
+                catalog.types.firstOrNull { it.id == type }?.hint?.takeIf { it.isNotEmpty() }?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (catalog == null) Text("Завантажую типи задач…")
-                catalog?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
             if (type == "check") item {
                 if (storedItems.isNullOrEmpty() || checklistDefinition) {
@@ -653,13 +647,13 @@ fun NativeTaskEditor(
                 TextButton(onClick = { save(60) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("+1 год") }
                 TextButton(onClick = { save(tomorrow = true) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("Завтра") }
             }
-            val message = if (unavailable) "Цієї задачі вже немає. Закрий редактор і онови список." else error
+            val message = if (unavailable) "Цієї задачі вже немає. Закрий редактор і онови список." else catalog.error ?: error
             if (message.isNotEmpty()) Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }.testTag("native-task-editor-error"),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (compactAuthoring) TextButton(onClick = onClose, enabled = !busy,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-editor-close")) { Text("Назад") }
-            Button(onClick = { save() }, enabled = enabled && catalog?.types?.isNotEmpty() == true, shape = MaterialTheme.shapes.medium,
+            Button(onClick = { save() }, enabled = enabled && catalog.types.isNotEmpty(), shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-save")) {
                 Text(if (busy) "Зберігаю…" else if (simpleMode || compactAuthoring) { if (taskId == null) "Створити" else "Зберегти" } else if (taskId == null) "Створити задачу" else "Зберегти зміни")
             }

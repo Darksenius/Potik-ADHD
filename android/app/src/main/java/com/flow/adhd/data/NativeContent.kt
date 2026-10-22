@@ -6,9 +6,17 @@ import kotlinx.serialization.json.*
 /** Loads the same authored catalogs as the web app, entirely from the installed APK. */
 data class NativeContent(val taskXp: Map<String, Double>, val insights: Map<Int, JsonObject>, val progression: JsonObject = JsonObject(emptyMap())) {
     companion object {
+        @Volatile private var installedTaskTypes: JsonObject? = null
+
+        /** Immutable APK data, prepared during application startup and shared by editor instances. */
+        fun taskTypes(context: Context): JsonObject = installedTaskTypes ?: synchronized(this) {
+            installedTaskTypes ?: (Json.parseToJsonElement(read(context.applicationContext, "task-types.json")) as? JsonObject
+                ?: error("Task catalog must be an object")).also { installedTaskTypes = it }
+        }
+
         fun load(context: Context): NativeContent {
             fun read(name: String) = read(context, name)
-            return parse(read("task-types.json"), read("daily-insights.json"), read("progression.json"))
+            return parse(taskTypes(context).toString(), read("daily-insights.json"), read("progression.json"))
         }
 
         fun read(context: Context, name: String): String = context.assets.open("content/$name").bufferedReader(Charsets.UTF_8).use { it.readText() }
