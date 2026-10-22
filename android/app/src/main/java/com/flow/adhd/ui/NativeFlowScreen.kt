@@ -66,6 +66,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
     }
     var page by rememberSaveable { mutableStateOf("tasks") }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var planAuthoring by remember { mutableStateOf(false) }
     var moreAuthoring by rememberSaveable { mutableStateOf(false) }
     var editorId by rememberSaveable { mutableStateOf<Long?>(null) }
     var insightDay by rememberSaveable { mutableStateOf<String?>(null) }
@@ -91,7 +92,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
         }
     }
     BackHandler(editorOpen && !busy) { editorOpen = false }
-    val shellChromeVisible = !editorOpen && !(page == "more" && moreAuthoring)
+    val shellChromeVisible = !editorOpen && !(page == "more" && moreAuthoring) && !(page == "plan" && planAuthoring)
 
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(Unit) {
         awaitPointerEventScope {
@@ -151,7 +152,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                         onDraftChanged = model::editTaskDraft)
                     page == "notes" -> NativeNotesScreen(snapshot, draft, status, busy, model::editNotepad, model::command,
                         model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f), openNoteId = openedNote)
-                    page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f))
+                    page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f), onAuthoringChanged = { planAuthoring = it })
                     page == "more" -> NativeMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
                         onCreate = { editorId = null; editorOpen = true }, onEdit = edit, tools = tools, modifier = Modifier.weight(1f),
                         presetAuthoring = moreAuthoring,

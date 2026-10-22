@@ -1,5 +1,7 @@
 package com.flow.adhd.ui
 
+import androidx.activity.compose.BackHandler
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -35,7 +37,8 @@ fun NativePlannerScreen(
     busy: Boolean,
     onCommand: (FlowCommand, () -> Unit) -> Unit,
     onEditTask: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAuthoringChanged: (Boolean) -> Unit = {}
 ) {
     val zone = ZoneId.systemDefault()
     val today = LocalDate.now(zone)
@@ -101,6 +104,44 @@ fun NativePlannerScreen(
             if (selected == submittedDate && entry.trim() == submittedText) entry = ""
             showQuickAdd = false
         }
+    }
+
+    val authoringChanged by rememberUpdatedState(onAuthoringChanged)
+    DisposableEffect(showQuickAdd, editSchedule) { authoringChanged(showQuickAdd || editSchedule); onDispose { } }
+    DisposableEffect(Unit) { onDispose { authoringChanged(false) } }
+    BackHandler((showQuickAdd || editSchedule) && !busy) {
+        showQuickAdd = false; editSchedule = false; keyboard?.hide()
+    }
+    if (showQuickAdd) {
+        Column(modifier.fillMaxSize().imePadding().testTag("native-planner-quick-add")) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showQuickAdd = false; keyboard?.hide() }, enabled = !busy,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("native-planner-add-close")) { Text("Назад") }
+                Text("Додати до плану", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            }
+            HorizontalDivider()
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    Text(plannerDateLabel(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(entry, { entry = it }, label = { Text(if (isEvent) "Подія дня" else "Задача") },
+                        placeholder = { if (!isEvent) Text("Напр. 15:30 підготувати звіт") },
+                        modifier = Modifier.fillMaxWidth().testTag("native-planner-entry"), enabled = !busy, singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { addEntry(); keyboard?.hide() }))
+                }
+                item {
+                    Row(Modifier.fillMaxWidth().clickable(enabled = !busy) { isEvent = !isEvent }, verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(isEvent, { isEvent = it }, enabled = !busy)
+                        Text("Лише запис календаря", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+            Button(onClick = { addEntry(); keyboard?.hide() }, enabled = !busy && entry.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).heightIn(min = 48.dp)
+                    .testTag("native-planner-submit")) { Text(if (busy) "Зберігаю…" else "Додати") }
+        }
+        return
     }
 
     if (editSchedule) {
@@ -430,45 +471,6 @@ fun NativePlannerScreen(
                 }
             }
         }
-    }
-
-    if (showQuickAdd) {
-        AlertDialog(
-            onDismissRequest = { showQuickAdd = false; keyboard?.hide() },
-            title = { Text("Додати до плану") },
-            text = {
-                Column(
-                    Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        entry,
-                        { entry = it },
-                        label = { Text(if (isEvent) "Подія дня" else "Задача") },
-                        placeholder = { if (!isEvent) Text("Напр. 15:30 підготувати звіт") },
-                        modifier = Modifier.fillMaxWidth().testTag("native-planner-entry"),
-                        enabled = !busy,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { addEntry(); keyboard?.hide() })
-                    )
-                    Row(
-                        Modifier.fillMaxWidth().clickable(enabled = !busy) { isEvent = !isEvent },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(isEvent, { isEvent = it }, enabled = !busy)
-                        Text("Лише запис календаря", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { addEntry() }, enabled = !busy && entry.isNotBlank(), modifier = Modifier.testTag("native-planner-submit")) {
-                    Text("Додати")
-                }
-            },
-            dismissButton = { TextButton(onClick = { showQuickAdd = false }) { Text("Скасувати") } },
-            modifier = Modifier.testTag("native-planner-quick-add")
-        )
     }
 
     if (resetRequested) AlertDialog(

@@ -36,8 +36,14 @@ fun NativeDayZoneCard(snapshot: FlowSnapshot, context: QuestPolicy.Context, onOp
     val accent = runCatching { Color(android.graphics.Color.parseColor(zone?.zoneText("color"))) }
         .getOrDefault(MaterialTheme.colorScheme.secondary)
     val surface = MaterialTheme.colorScheme.surface
-    // Bright user-selected zone colors need darker ink on the light theme.
-    val nameInk = if (surface.luminance() > .5f) lerp(accent, Color.Black, .3f) else lerp(accent, Color.White, .15f)
+    // Keep user-chosen colors readable in either theme without changing the stored accent.
+    var nameInk = accent
+    repeat(10) {
+        val foreground = nameInk.luminance()
+        val background = surface.luminance()
+        if ((maxOf(foreground, background) + .05f) / (minOf(foreground, background) + .05f) < 4.5f)
+            nameInk = lerp(nameInk, MaterialTheme.colorScheme.onSurface, .2f)
+    }
     val name = zone?.zoneText("nm").orEmpty().ifBlank { "Вільний час" }
     val description = zone?.zoneText("desc").orEmpty()
     val range = current?.takeIf { it.zoneId != 0L }?.let {

@@ -109,10 +109,9 @@ class NativeAppUiTest {
             compose.onNodeWithTag("native-planner-add").performClick()
             compose.onNodeWithTag("native-planner-entry").performTextInput("10:15 $title")
             compose.onNodeWithTag("native-planner-entry").assertTextContains("10:15 $title")
-            // Complete the IME resize before locating the real touch target on short API28 screens.
-            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            // The pinned action must remain tappable without dismissing the keyboard first.
             compose.waitForIdle()
-            compose.onNodeWithTag("native-planner-submit").assertIsEnabled().performClick()
+            compose.onNodeWithTag("native-planner-submit").assertIsDisplayed().assertIsEnabled().performClick()
             compose.waitUntil(10_000) {
                 (container.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.tasks?.any { task -> task.title == title } == true
             }

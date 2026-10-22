@@ -32,6 +32,8 @@ JDK21, Android SDK36, min24/target36. Node/npm не потрібні для APK.
 
 package.json — єдине джерело версії, синхронно змінювати lockfile. 1.7.6-r26 → 1.7.6.r26, тег v1.7.6.r26, code1070626. Формула: major*1000000 + minor*10000 + patch*100 + revision; minor/patch/revision 0..99.
 
+Перед створенням тега UI-змін оглянути реальні екрани на API28/320dp/font130% з відкритою клавіатурою; перевірка лише після приховування клавіатури не доводить доступність кнопок.
+
 Перед випуском: особистий запис від першої особи в src/content/release-notes.json (зміни, короткі дії й очікування, перевірене та незавершене), Fastlane changelog. Попередні записи зберігати. Gradle перевіряє версію запису, node scripts/check-release-notes.mjs перевіряє повну структуру.
 
 Ревізія: валідний SOURCE_REVISION із середовища, Git або маркер релізного архіву. Без відомого SHA — unknown. node scripts/package-source.mjs із чистого checkout пакує всі tracked джерела та маркер SHA.
