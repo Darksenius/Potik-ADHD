@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="notification_panel_surface">#F8F9FC</color>
+    <color name="notification_panel_text">#171D29</color>
+    <color name="notification_panel_muted">#4F5C70</color>
+    <color name="notification_panel_outline">#D1D9E5</color>
+    <color name="notification_panel_tile">#E9EDF4</color>
+    <color name="notification_panel_tile_pressed">#DCE3ED</color>
+    <color name="notification_panel_icon">#405A7F</color>
+    <color name="notification_panel_primary">#A93610</color>
+    <color name="notification_panel_primary_pressed">#8F2D0C</color>
+    <color name="notification_panel_on_primary">#FFFFFF</color>
+    <color name="notification_panel_position">#DFE8F6</color>
+    <color name="notification_panel_position_text">#203550</color>
+</resources>

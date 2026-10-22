@@ -223,11 +223,13 @@ private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: 
     onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, tools: NativeStorageTools, modifier: Modifier,
     presetAuthoring: Boolean = false, onAuthoringChanged: (Boolean) -> Unit = {}) {
     var destination by rememberSaveable { mutableStateOf("") }
+    var settingsDocumentOpen by remember { mutableStateOf(false) }
     DisposableEffect(Unit) { onDispose { onAuthoringChanged(false) } }
     if (destination.isNotEmpty()) {
         BackHandler(destination.isNotEmpty() && !presetAuthoring) { destination = "" }
         Column(modifier) {
-            if (!(destination == "presets" && presetAuthoring)) TextButton(onClick = { destination = "" }) { Text("← Ще") }
+            if (!(destination == "presets" && presetAuthoring) && !(destination == "settings" && settingsDocumentOpen))
+                TextButton(onClick = { destination = "" }, modifier = Modifier.heightIn(min = 48.dp)) { Text("← Назад") }
             when (destination) {
                 "zones" -> NativeZonesScreen(snapshot, busy, onCommand, Modifier.weight(1f))
                 "folders" -> NativeFoldersScreen(snapshot, busy, onCommand, Modifier.weight(1f))
@@ -235,19 +237,17 @@ private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: 
                     onAuthoringChanged(active)
                 })
                 "stats" -> NativeStatsScreen(snapshot, content, busy, onCommand, onInsight, Modifier.weight(1f))
-                "settings" -> NativeSettingsScreen(snapshot, busy, onCommand, tools, Modifier.weight(1f))
+                "settings" -> NativeSettingsScreen(snapshot, busy, onCommand, tools, Modifier.weight(1f),
+                    onDocumentOpenChanged = { settingsDocumentOpen = it })
                 "state" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "daily",
                     header = { NativeStateControls(snapshot, busy, onCommand) })
-                "alltasks" -> NativeTasksScreen(snapshot, projection, busy, onCommand, onCreate, onEdit, Modifier.weight(1f), initialFilter = "all")
             }
         }
         return
     }
     LazyColumn(modifier.testTag("native-more"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Ще", style = MaterialTheme.typography.headlineSmall) }
         item { PotikMenuRow("Налаштування", "Вигляд, сповіщення, дані та допомога", { destination = "settings" }, Modifier.padding(top = 8.dp).testTag("native-open-settings")) }
         item { Text("Організувати", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        item { PotikMenuRow("Усі задачі", "Пошук, повторювані справи, «Колись» і кошик", { destination = "alltasks" }) }
         item { PotikMenuRow("Зони", "Напрямки дня та їхній розклад", { destination = "zones" }) }
         item { PotikMenuRow("Пресети дня", "Типові дні, справи й тижневі правила", { destination = "presets" }) }
         item { PotikMenuRow("Папки нотаток", "Назви й порядок твоїх папок", { destination = "folders" }) }

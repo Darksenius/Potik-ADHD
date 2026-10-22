@@ -58,7 +58,11 @@ object NotificationProjection {
             }
         }
         val reminders = tasks.flatMap { task ->
-            if (TaskSchedule.isCalendarRepeat(task)) recurringReminderRows(task, now, zone, timeline)
+            if (task.text("type") == "simple") {
+                TaskSchedule.nextReminderAt(task, scheduleContext)?.let {
+                    listOf(JsonObject(reminder(task, it) + ("quickReminder" to JsonPrimitive(true))))
+                }.orEmpty()
+            } else if (TaskSchedule.isCalendarRepeat(task)) recurringReminderRows(task, now, zone, timeline)
             else {
                 val due = TaskSchedule.nextReminderAt(task, scheduleContext)
                 if (due == null) emptyList() else buildList {
@@ -258,6 +262,12 @@ object NotificationProjection {
         listOf("type", "created", "repeat", "doneDate", "planDate", "schedDate", "schedTime", "alarmTime", "windowStart", "windowEnd", "counterDay", "completionCreditDate", "counterUnit").forEach { task.text(it) }
         listOf("done", "trashed", "someday", "completedToday", "reminderEnabled", "firedSched", "firedPre", "alarmFired", "counterEnabled").forEach { task.flag(it) }
         listOf("counter", "counterTarget", "counterStep", "remindBeforeMinutes", "snoozeUntil", "nextRepeatAt").forEach { task.number(it) }
+        listOf("quickReminderAt", "quickReminderFiredAt").forEach { key ->
+            task.number(key)?.let { value ->
+                require(value >= 1.0 && value <= 8_640_000_000_000_000.0 && value % 1.0 == 0.0) { "tasks.$key must be a positive epoch-millisecond timestamp" }
+                require(task.text("type") == "simple") { "tasks.$key is only supported for simple tasks" }
+            }
+        }
         listOf("schedTime", "alarmTime", "windowStart", "windowEnd").forEach { key ->
             task.text(key)?.takeIf { it.isNotEmpty() }?.let { require(normalizedTime(it.trim()) != null) { "tasks.$key must be a valid clock time" } }
         }

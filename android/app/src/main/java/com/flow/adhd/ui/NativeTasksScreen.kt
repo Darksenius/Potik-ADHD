@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -44,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -151,20 +154,35 @@ fun NativeTasksScreen(
     ) {
         if (initialFilter == "daily") item { header() }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         taskFilterLabel(filter),
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
                     )
+                    if (filter != "trash" && filter != "now") {
+                        Button(onClick = onCreate, enabled = !busy, shape = MaterialTheme.shapes.small,
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-create")) { Text("+ Нова") }
+                    }
                     Box {
                         OutlinedButton(
-                            onClick = { if (filter == "now") { filter = "all"; search = "" } else filterMenu = true },
+                            onClick = { filterMenu = true },
                             shape = MaterialTheme.shapes.small,
-                            modifier = Modifier.testTag("native-task-filter"),
-                        ) { Text(if (filter == "now") "Усі задачі" else "Показати") }
+                            contentPadding = PaddingValues(12.dp),
+                            modifier = Modifier.size(48.dp).semantics { contentDescription = "Фільтр задач" }.testTag("native-task-filter"),
+                        ) {
+                            val ink = LocalContentColor.current
+                            Canvas(Modifier.size(22.dp)) {
+                                val stroke = 2.dp.toPx()
+                                for ((index, fraction) in listOf(1f, .7f, .4f).withIndex()) {
+                                    val y = size.height * (.25f + index * .25f)
+                                    drawLine(ink, Offset(size.width * (1f - fraction) / 2f, y), Offset(size.width * (1f + fraction) / 2f, y), stroke)
+                                }
+                            }
+                        }
                         DropdownMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }) {
                             for (key in listOf("now", "all", "daily", "someday", "journal", "trash")) {
                                 DropdownMenuItem(
@@ -177,33 +195,22 @@ fun NativeTasksScreen(
                     }
                 }
                 if (filter == "now") CurrentZoneCard(projection, questContext)
-                else Text(
+                else if (filter != "all") Text(
                     when (filter) {
-                        "all" -> "Майбутні, відкладені й виконані задачі теж тут."
                         "someday" -> "Поверни задачу, коли знову захочеш до неї взятися."
                         "journal" -> "Фіксація події збільшує журнал. Завершення задачі тут немає."
                         "daily" -> "Лічильники та повторювані справи. Нове входження з’являється за розкладом."
                         else -> "Віднови потрібну задачу або видали її назавжди."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
+                    }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                 )
-                if (filter != "trash" && filter != "now") {
-                    Button(
-                        onClick = onCreate,
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-task-create"),
-                        shape = MaterialTheme.shapes.medium,
-                    ) { Text("+ Нова задача") }
-                }
                 if (filter != "now") {
                     OutlinedTextField(
                         value = search,
                         onValueChange = { search = it },
-                        label = { Text("Знайти задачу") },
+                        label = { Text("Пошук") },
                         placeholder = { Text("Назва, нотатка чи мітка") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("native-task-search"),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("native-task-search"),
                     )
                 }
                 if (busy) {
@@ -229,7 +236,7 @@ fun NativeTasksScreen(
                     Text(
                         when {
                             query.isNotEmpty() && filter != "now" -> "За цими умовами задач немає."
-                            filter == "now" -> "Зараз немає доречних справ. Створи задачу або відкрий «Усі задачі» — майбутні й відкладені справи залишаються там та в Плані."
+                            filter == "now" -> "Зараз немає доречних справ. Створи задачу — майбутні й відкладені залишаються у списку та в Плані."
                             filter == "trash" -> "Кошик порожній."
                             filter == "someday" -> "Немає задач, відкладених на колись."
                             filter == "journal" -> "Ще немає журналів подій."
@@ -368,7 +375,20 @@ private fun NativeTaskCard(
         "timewin" -> listOfNotNull(task.raw.stringValue("windowStart"), task.raw.stringValue("windowEnd")).joinToString("–").takeIf { it.isNotBlank() }
         else -> null
     }
-    val metadata = listOfNotNull(zoneName, date, time, if (task.someday && !task.trashed) "Колись" else null)
+    val quickReminderAt = if (task.type == "simple") task.raw.numberValue("quickReminderAt")?.toLong() else null
+    val quickReminderFiredAt = task.raw.numberValue("quickReminderFiredAt")?.toLong()
+    val quickReminderLabel = when {
+        quickReminderAt == null || quickReminderAt <= 0L -> null
+        quickReminderFiredAt == quickReminderAt -> "Нагадування надіслано"
+        else -> runCatching {
+            val due = java.time.Instant.ofEpochMilli(quickReminderAt).atZone(ZoneId.systemDefault())
+            val time = due.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+            val dateLabel = if (due.toLocalDate() == java.time.LocalDate.now(ZoneId.systemDefault())) "" else
+                due.toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("uk"))) + " "
+            "Нагадування о $dateLabel$time"
+        }.getOrNull()
+    }
+    val metadata = listOfNotNull(zoneName, date, time, quickReminderLabel, if (task.someday && !task.trashed) "Колись" else null)
 
     Card(
         modifier = Modifier.fillMaxWidth().testTag("native-task-${task.id}"),

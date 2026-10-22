@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,6 +43,21 @@ class TaskScheduleTest {
         val now = epoch("2026-03-08T05:00:00Z") // midnight EST on the spring-forward date
         val task = json("""{"type":"alarm","alarmTime":"02:30","repeat":"none"}""")
         assertEquals(epoch("2026-03-08T07:30:00Z"), TaskSchedule.nextReminderAt(task, ProjectionContext(now, emptyList(), zone)))
+    }
+
+    @Test fun simpleQuickReminderIsOneShotAndIndependentOfOriginalAvailability() {
+        val kyiv = ZoneId.of("Europe/Kyiv")
+        val due = epoch("2026-10-22T22:30:00Z") // 01:30 local on the following day
+        val task = json("""{"id":7,"type":"simple","zoneId":99,"planDate":"2026-10-25","quickReminderAt":$due,"reminderEnabled":false}""")
+        val before = ProjectionContext(due - 1, emptyList(), kyiv)
+        val after = ProjectionContext(due, emptyList(), kyiv)
+        assertEquals(due, TaskSchedule.nextReminderAt(task, before))
+        assertFalse("The explicit one-off reminder does not alter normal quest availability", TaskSchedule.available(task, before))
+        assertEquals("An overdue reminder remains pending until its exact receipt is committed", due,
+            TaskSchedule.nextReminderAt(task, ProjectionContext(due + 1, emptyList(), kyiv)))
+        assertNull(TaskSchedule.nextReminderAt(JsonObject(task + ("quickReminderFiredAt" to kotlinx.serialization.json.JsonPrimitive(due))), after))
+        assertNull(TaskSchedule.nextReminderAt(JsonObject(task + ("done" to kotlinx.serialization.json.JsonPrimitive(true))), before))
+        assertNull(TaskSchedule.nextReminderAt(JsonObject(task + ("someday" to kotlinx.serialization.json.JsonPrimitive(true))), before))
     }
 
     @Test fun scheduledAndAdvanceReminderUseStrictValidDatesAndNormalizedTimes() {

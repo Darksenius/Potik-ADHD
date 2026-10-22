@@ -117,6 +117,50 @@ class TaskEditorReducerTest {
         assertTrue(result.events.isEmpty())
     }
 
+    @Test fun quickReminderArmsFromSaveTimeAndOrdinaryEditsPreserveOrClearIt() {
+        val initial = snapshot()
+        val at = Instant.parse("2026-10-22T10:00:00Z").toEpochMilli()
+        val created = applied(TaskEditorReducer.reduce(initial,
+            FlowCommand.CreateTask(payload("""{"title":"Call back","type":"simple","quickReminderDelayMinutes":60}"""), "quick-create", at),
+            zone, types, now = at,
+        )).snapshot.tasks.single()
+        assertEquals(at + 60 * 60_000L, created.raw["quickReminderAt"]?.toString()?.toLong())
+        assertFalse(created.raw.containsKey("quickReminderDelayMinutes"))
+
+        val edited = applied(TaskEditorReducer.reduce(applied(TaskEditorReducer.reduce(initial,
+            FlowCommand.CreateTask(payload("""{"title":"Call back","type":"simple","quickReminderDelayMinutes":60}"""), "quick-create-2", at),
+            zone, types, now = at,
+        )).snapshot,
+            FlowCommand.UpdateTask(created.id, payload("""{"title":"Call back later","type":"simple"}"""), "quick-edit", at + 10_000),
+            zone, types, now = at + 10_000,
+        )).snapshot.tasks.single()
+        assertEquals(at + 60 * 60_000L, edited.raw["quickReminderAt"]?.toString()?.toLong())
+
+        val cleared = applied(TaskEditorReducer.reduce(snapshot(tasks = listOf(created.raw)),
+            FlowCommand.UpdateTask(created.id, payload("""{"title":"Call back later","type":"simple","clearQuickReminder":true}"""), "quick-clear", at + 20_000),
+            zone, types, now = at + 20_000,
+        )).snapshot.tasks.single()
+        assertFalse(cleared.raw.containsKey("quickReminderAt"))
+        assertFalse(cleared.raw.containsKey("quickReminderFiredAt"))
+    }
+
+    @Test fun quickReminderRejectsNonSimpleAndNonPositiveDelayAndTypeSwitchClearsOldOne() {
+        val at = Instant.parse("2026-10-22T10:00:00Z").toEpochMilli()
+        val source = snapshot(tasks = listOf(task("""{"id":42,"created":"c","title":"Call","type":"simple","quickReminderAt":${at + 60_000},"quickReminderFiredAt":${at + 60_000}}""")))
+        val switched = applied(TaskEditorReducer.reduce(source,
+            FlowCommand.UpdateTask(42, payload("""{"title":"Journal","type":"note"}"""), "switch", at), zone, types, now = at,
+        )).snapshot.tasks.single()
+        assertFalse(switched.raw.containsKey("quickReminderAt"))
+        assertFalse(switched.raw.containsKey("quickReminderFiredAt"))
+        for ((id, raw) in listOf(
+            "non-simple" to """{"title":"Journal","type":"note","quickReminderDelayMinutes":60}""",
+            "zero" to """{"title":"Call","type":"simple","quickReminderDelayMinutes":0}""",
+            "negative" to """{"title":"Call","type":"simple","quickReminderDelayMinutes":-1}""",
+        )) {
+            assertTrue(TaskEditorReducer.reduce(snapshot(), FlowCommand.CreateTask(payload(raw), id, at), zone, types, now = at) is FlowCommandResult.Rejected)
+        }
+    }
+
     @Test fun editorMarkerCreatesScheduledTaskAndPreservesExplicitDate() {
         val at = Instant.parse("2024-03-01T10:00:00Z").toEpochMilli()
         val initial = snapshot()

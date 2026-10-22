@@ -59,9 +59,9 @@ private val PotikTypography = Typography(
     headlineLarge = style(28, 34, FontWeight.Bold), headlineMedium = style(24, 30, FontWeight.Bold),
     headlineSmall = style(22, 28, FontWeight.Bold), titleLarge = style(20, 26, FontWeight.SemiBold),
     titleMedium = style(16, 23, FontWeight.SemiBold), titleSmall = style(14, 20, FontWeight.SemiBold),
-    bodyLarge = style(16, 24), bodyMedium = style(14, 21), bodySmall = style(12, 18),
-    labelLarge = style(14, 20, FontWeight.Medium), labelMedium = style(12, 17, FontWeight.Medium),
-    labelSmall = style(11, 16, FontWeight.Medium),
+    bodyLarge = style(16, 24), bodyMedium = style(14, 21), bodySmall = style(14, 20),
+    labelLarge = style(14, 20, FontWeight.Medium), labelMedium = style(13, 18, FontWeight.Medium),
+    labelSmall = style(12, 17, FontWeight.Medium),
 )
 @Composable
 fun FlowTheme(mode: String = "system", content: @Composable () -> Unit) {

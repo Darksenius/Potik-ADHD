@@ -129,7 +129,7 @@ object TaskUndo {
         for (key in listOf("done", "firedSched", "firedPre", "alarmFired", "completedToday", "zoneDoneToday")) {
             val value = before[key]; if (value != null && value != JsonNull && (value as? JsonPrimitive)?.booleanOrNull == null) return false
         }
-        for (key in listOf("snoozeUntil", "nextRepeatAt")) {
+        for (key in listOf("snoozeUntil", "nextRepeatAt", "quickReminderAt", "quickReminderFiredAt")) {
             val value = before[key]; if (value != null && value != JsonNull && (value as? JsonPrimitive)?.let { !it.isString && it.longOrNull != null } != true) return false
         }
         for (key in listOf("doneDate", "doneAt", "occurrenceId")) {
@@ -139,7 +139,7 @@ object TaskUndo {
     }
 
     private fun restoreFields(task: JsonObject, before: JsonObject): JsonObject {
-        val fields = listOf("done", "doneDate", "doneAt", "questDeferral", "completionDeferral", "snoozeUntil", "firedSched", "firedPre", "alarmFired", "completedToday", "zoneDoneToday", "nextRepeatAt", "occurrenceId")
+        val fields = listOf("done", "doneDate", "doneAt", "questDeferral", "completionDeferral", "snoozeUntil", "firedSched", "firedPre", "alarmFired", "completedToday", "zoneDoneToday", "nextRepeatAt", "occurrenceId", "quickReminderAt", "quickReminderFiredAt")
         val output = task.toMutableMap()
         fields.forEach { key -> val value = before[key]; if (value == null || value == JsonNull) output.remove(key) else output[key] = value }
         return JsonObject(output)

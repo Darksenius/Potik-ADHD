@@ -35,7 +35,7 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (FlowCommand, () -> Unit) -> Unit,
-    tools: NativeStorageTools, modifier: Modifier = Modifier) {
+    tools: NativeStorageTools, modifier: Modifier = Modifier, onDocumentOpenChanged: (Boolean) -> Unit = {}) {
     val state by tools.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var group by rememberSaveable { mutableStateOf("") }
@@ -53,7 +53,13 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) tools.readImport(uri) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permissionRevision++ }
     val enabled = !busy && !state.busy
+    val documentOpenChanged by rememberUpdatedState(onDocumentOpenChanged)
     LaunchedEffect(Unit) { tools.refresh() }
+    DisposableEffect(document) {
+        documentOpenChanged(document.isNotEmpty())
+        onDispose { }
+    }
+    DisposableEffect(Unit) { onDispose { documentOpenChanged(false) } }
     if (document.isNotEmpty()) {
         BackHandler { document = "" }
         NativeLocalDocument(document, { document = "" }, modifier)
@@ -216,7 +222,10 @@ private fun backupError(code: String) = when (code) {
         }
     }.getOrElse { listOf("Не вдалося прочитати локальний документ. Він має входити до встановленого APK.") } }
     Column(modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onClose) { Text("← Назад") }; Text(title, style = MaterialTheme.typography.titleLarge) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text("← Назад") }
+            Text(title, style = MaterialTheme.typography.titleLarge)
+        }
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             items(paragraphs.size) { index -> Text(paragraphs[index], style = MaterialTheme.typography.bodyMedium) }
         }

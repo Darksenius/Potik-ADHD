@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -44,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -86,6 +83,7 @@ fun NativeTaskEditor(
     onSnooze: ((JsonObject, Long?, Boolean) -> Unit)? = null,
     onDraftChanged: (String) -> Unit = {},
     checklistDefinition: Boolean = false,
+    allowQuickReminder: Boolean = true,
 ) {
     val context = LocalContext.current
     val catalog by produceState<EditorTypeCatalog?>(null, context) {
@@ -130,6 +128,8 @@ fun NativeTaskEditor(
     var negativeXp by rememberSaveable(taskId) { mutableStateOf(seed.editorNumberText("negXp", "5")) }
     var reminderEnabled by rememberSaveable(taskId) { mutableStateOf(seed.editorBoolean("reminderEnabled", true)) }
     var reminderAdvance by rememberSaveable(taskId) { mutableStateOf(seed.editorNumberText("remindBeforeMinutes", "0")) }
+    // null means preserve the saved deadline (or leave a new task unchanged).
+    var quickReminderChoice by rememberSaveable(taskId) { mutableStateOf(seed.editorText("quickReminderChoice")) }
     var tags by rememberSaveable(taskId) { mutableStateOf((seed["tags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { entry -> entry.isString }?.content }.joinToString(", ")) }
     var contextTags by rememberSaveable(taskId) { mutableStateOf((seed["ctxTags"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }.joinToString(", ")) }
     val hasSavedAdvancedValues = folderId.isNotBlank() || zoneId.isNotBlank() || tags.isNotBlank() || contextTags.isNotBlank() || counterEnabled || type == "counter"
@@ -171,6 +171,7 @@ fun NativeTaskEditor(
             put("note", note); put("repeat", repeat); put("repeatDays", JsonArray(List(7) { JsonPrimitive(repeatMask and (1 shl it) != 0) }))
             put("repeatInterval", repeatInterval); put("repeatUnit", repeatUnit); put("counterEnabled", counterEnabled); put("counterTarget", counterTarget); put("counterStep", counterStep); put("counterUnit", counterUnit)
             put("negXp", negativeXp); put("reminderEnabled", reminderEnabled); put("remindBeforeMinutes", reminderAdvance); put("checklistDraft", checklist)
+            quickReminderChoice?.let { put("quickReminderChoice", it) }
             put("tags", JsonArray(tags.split(',').map { JsonPrimitive(it.trim()) })); put("ctxTags", JsonArray(contextTags.split(',').map { JsonPrimitive(it.trim()) }))
         })
     }.toString()
@@ -248,6 +249,10 @@ fun NativeTaskEditor(
                 put("reminderEnabled", JsonPrimitive(if (markerTime != null) true else reminderEnabled))
                 put("remindBeforeMinutes", JsonPrimitive(if (markerTime != null) 0 else advance!!))
             }
+            if (allowQuickReminder && saveType == "simple" && markerTime == null) when (quickReminderChoice) {
+                "hour" -> put("quickReminderDelayMinutes", JsonPrimitive(60))
+                "off" -> put("clearQuickReminder", JsonPrimitive(true))
+            }
             if (saveType == "alarm") put("alarmTime", JsonPrimitive(alarmTime.trim()))
             if (saveType == "timewin") { put("windowStart", JsonPrimitive(windowStart.trim())); put("windowEnd", JsonPrimitive(windowEnd.trim())) }
             if (saveType == "negative") put("negXp", JsonPrimitive(penalty!!))
@@ -262,13 +267,11 @@ fun NativeTaskEditor(
         else onSave(JsonObject(payload))
     }
 
-    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     Column(modifier.fillMaxSize().imePadding().testTag("native-task-editor")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-editor-close")) { Text("Назад") }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(if (taskId == null) "Нова задача" else "Редагування задачі", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-                if (!keyboardVisible) Text("Спочатку назва. Решту можна налаштувати за потреби.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         HorizontalDivider()
@@ -278,7 +281,7 @@ fun NativeTaskEditor(
         ) {
             item {
                 EditorInput("Що потрібно зробити?", title, { title = it; error = "" }, "native-task-title", enabled, minLines = 1, maxLines = 2)
-                Text("Час у назві: ///12:40/// — створить заплановану задачу.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Нагадати о 12:40: ///12:40///", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             item {
                 Text("Тип задачі", style = MaterialTheme.typography.labelLarge)
@@ -328,6 +331,35 @@ fun NativeTaskEditor(
                     EditorTimeInput("Початок вікна", windowStart, "native-task-window-start", { windowStart = it; error = "" }, enabled)
                     EditorTimeInput("Кінець вікна", windowEnd, "native-task-window-end", { windowEnd = it; error = "" }, enabled)
                     Text("Вікно може переходити через північ.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (allowQuickReminder && type == "simple") item {
+                EditorHeading("Нагадування")
+                val savedAt = existing?.raw?.editorNumberText("quickReminderAt", "")?.toLongOrNull()
+                val firedAt = existing?.raw?.editorNumberText("quickReminderFiredAt", "")?.toLongOrNull()
+                val hasPendingReminder = savedAt != null && savedAt > 0L && firedAt != savedAt
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = quickReminderChoice == "off" || quickReminderChoice == null && !hasPendingReminder,
+                        onClick = { quickReminderChoice = "off"; error = "" }, enabled = enabled,
+                        label = { Text("Без нагадування") }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-quick-reminder-off"),
+                    )
+                    FilterChip(
+                        selected = quickReminderChoice == "hour" || quickReminderChoice == null && hasPendingReminder,
+                        onClick = { quickReminderChoice = "hour"; error = "" }, enabled = enabled,
+                        label = { Text("Через годину") }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-quick-reminder-hour"),
+                    )
+                }
+                Text("Задача залишиться доступною у списку.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (quickReminderChoice == null && savedAt != null && savedAt > 0L) {
+                    val status = if (firedAt == savedAt) "Нагадування вже надіслано" else runCatching {
+                        val due = java.time.Instant.ofEpochMilli(savedAt).atZone(localZone)
+                        val time = due.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                        val dateLabel = if (due.toLocalDate() == LocalDate.now(localZone)) "" else
+                            due.toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("uk"))) + " "
+                        "Нагадування заплановано на $dateLabel$time"
+                    }.getOrNull()
+                    status?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
             if (pastTime) item {

@@ -76,6 +76,14 @@ object NotificationTaskActions {
         val at = command.reminderAt
         if (at !in 1..MAX_TIME) return rejected("invalid-time", "Reminder time is invalid")
         val task = snapshot.tasks.firstOrNull { it.id == command.taskId } ?: return applied(snapshot)
+        if (!command.preReminder && task.type == "simple") {
+            val quickAt = task.raw.long("quickReminderAt") ?: return applied(snapshot)
+            if (quickAt != at || task.raw.long("quickReminderFiredAt") == quickAt) return applied(snapshot)
+            val changed = JsonObject(task.raw + ("quickReminderFiredAt" to JsonPrimitive(quickAt)))
+            return applied(FlowSnapshot.fromData(JsonObject(snapshot.data + ("tasks" to JsonArray(snapshot.tasks.map {
+                if (it.id == task.id) changed else it.raw
+            })))))
+        }
         val deferredAt = (task.raw["questDeferral"] as? JsonObject)?.number("requestedAt")?.toLong() ?: at
         val timeline = ZoneCalendar.timeline(snapshot.data, deferredAt, zone)
         val due = TaskSchedule.nextReminderAt(task.raw, ProjectionContext(at, timeline, zone)) ?: return applied(snapshot)
@@ -94,5 +102,6 @@ object NotificationTaskActions {
     private fun rejected(code: String, message: String) = FlowCommandResult.Rejected(code, message)
     private fun JsonObject.text(key: String) = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
     private fun JsonObject.number(key: String) = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
+    private fun JsonObject.long(key: String) = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
     private fun number(value: Double) = if (value % 1.0 == 0.0) JsonPrimitive(value.toLong()) else JsonPrimitive(value)
 }

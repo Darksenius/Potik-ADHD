@@ -178,7 +178,7 @@ public class FlowReminderTest {
                 if (("flow-task:" + id).equals(item.getTag())) shown = item;
             }
             assertNotNull(shown);
-            assertEquals("⏰ Збережений заголовок", shown.getNotification().extras.getString("android.title"));
+            assertEquals("Збережений заголовок", shown.getNotification().extras.getString("android.title"));
             JSONArray events = new JSONArray(bridge.getEventEnvelopes());
             assertEquals(1, countEvent(events, "sched_fired:" + id + ":" + due));
             assertEquals(1, countEvent(events, "task_remind:" + id));

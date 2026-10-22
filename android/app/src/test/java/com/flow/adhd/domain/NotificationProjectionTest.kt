@@ -52,6 +52,19 @@ class NotificationProjectionTest {
         assertFalse(rows[1]["fired"]!!.jsonPrimitive.boolean)
     }
 
+    @Test fun simpleQuickReminderProjectsExplicitOneShotEvenWhenTaskIsNormallyUnavailable() {
+        val deadline = epoch("2026-10-16T11:00:00Z")
+        val source = FlowSnapshot.parse("""{"tasks":[
+          {"id":21,"title":"Call","type":"simple","zoneId":44,"planDate":"2026-10-20","reminderEnabled":false,"quickReminderAt":$deadline},
+          {"id":22,"title":"Acked","type":"simple","quickReminderAt":$deadline,"quickReminderFiredAt":$deadline},
+          {"id":23,"title":"Ordinary deferral","type":"simple","questDeferral":{"kind":"time","requestedAt":${deadline - 1},"sourceZoneId":1,"targetZoneId":2,"startAt":$deadline}}
+        ]}""")
+        val rows = NotificationProjection.build(source, now, utc).rows("schedList")
+        assertEquals(listOf("21"), rows.map { it.text("id") })
+        assertEquals(deadline, rows.single().long("dueMs"))
+        assertTrue(rows.single()["quickReminder"]!!.jsonPrimitive.boolean)
+    }
+
     @Test fun calendarRowsAdvanceCompletedAndFiredOccurrencesAndKeepCalendarRules() {
         val task = json("""{"id":4,"title":"Daily","type":"sched","repeat":"daily","repeatDays":[false,false,false,false,false,false,false],
           "created":"2026-10-01T00:00:00Z","schedTime":"9:05","done":true,"doneDate":"2026-10-16","remindBeforeMinutes":20}""")

@@ -350,8 +350,8 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_REMIND)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("⏰ " + title)
-                .setContentText("Запланований час настав")
+                .setContentTitle(title)
+                .setContentText("Час нагадування настав")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
@@ -456,7 +456,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
     }
 
     /**
-     * Overlays durable native commands on the last JS reminder snapshot. This
+     * Overlays queued native commands on the published reminder snapshot. This
      * prevents an old scheduled alarm from firing while the Activity is closed
      * and installs the one-off time derived from a pending deferral.
      */
@@ -473,6 +473,7 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
             List<QuestPolicy.Task> projected = QuestPolicy.projectPendingEvents(source,
                     QuestPolicy.eventsFromJson(rawEvents), now, timeline, zone, occurrences);
             Map<String, QuestPolicy.Task> byId = new HashMap<>();
+            java.util.Set<String> quickReminderRows = new java.util.HashSet<>();
             for (QuestPolicy.Task task : projected) {
                 byId.put(task.id, task);
             }
@@ -482,9 +483,20 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                 String id = row.optString("id", "");
                 String taskId = id.endsWith("_pre") ? id.substring(0, id.length() - 4) : id;
                 QuestPolicy.Task task = byId.get(taskId);
+                if (row.optBoolean("quickReminder", false)) {
+                    if (task == null || !"simple".equals(task.type) || task.quickReminderAt <= 0L
+                            || task.done || task.trashed || task.someday || "negative".equals(task.type)
+                            || task.quickReminderFiredAt == task.quickReminderAt) continue;
+                    row.put("dueMs", task.quickReminderAt);
+                    row.put("fired", false);
+                    quickReminderRows.add(task.id);
+                    output.put(row);
+                    continue;
+                }
                 if (task != null && (task.deferral != null || task.done || task.trashed || task.someday
                         || "negative".equals(task.type))) continue;
                 if (task != null && !isCalendarRepeat(row)) {
+                    if (!"sched".equals(task.type) && !"alarm".equals(task.type)) continue;
                     if (task.snoozeUntil > now) {
                         output.put(row); // snoozeUntil is an absolute elapsed deadline.
                         continue;
@@ -505,6 +517,15 @@ public class FlowAlarmReceiver extends BroadcastReceiver {
                     if (anchor == null) anchor = QuestPolicy.createdLocalDate(task.created, zone);
                     if (anchor != null) row.put("anchorDate", anchor);
                 }
+                output.put(row);
+            }
+            for (QuestPolicy.Task task : projected) {
+                if (!"simple".equals(task.type) || task.quickReminderAt <= 0L
+                        || task.quickReminderFiredAt == task.quickReminderAt || task.done || task.trashed || task.someday
+                        || quickReminderRows.contains(task.id)) continue;
+                JSONObject row = new JSONObject();
+                row.put("id", task.id); row.put("title", task.title); row.put("dueMs", task.quickReminderAt);
+                row.put("fired", false); row.put("quickReminder", true);
                 output.put(row);
             }
             for (QuestPolicy.Task task : projected) {

@@ -89,7 +89,8 @@ public class FlowNotifService extends Service {
     private static final String UNDO_PREFS = "flow_task_undo";
     private static final String[] UNDO_RUNTIME_FIELDS = {"done", "doneDate", "doneAt", "questDeferral",
             "completionDeferral", "snoozeUntil", "firedSched", "firedPre", "alarmFired", "completedToday",
-            "zoneDoneToday", "nextRepeatAt", "occurrenceId", "completionCredited", "completionCreditDate"};
+            "zoneDoneToday", "nextRepeatAt", "occurrenceId", "completionCredited", "completionCreditDate",
+            "quickReminderAt", "quickReminderFiredAt"};
     private Runnable undoExpiryCallback;
     private String panelTaskId = "";
     private int panelIndex = 0;
@@ -675,15 +676,18 @@ public class FlowNotifService extends Service {
         String position = task == null ? "" : (index + 1) + " із " + rows.size();
         String receipt = activeCaptureReceipt();
         String details = !selection.valid ? selection.hint : zone + (slots.isEmpty() ? "" : " · " + slots);
-        if (task != null && task.counterEnabled) details += " · " + task.counter
-                + (task.counterTarget > 0 ? "/" + task.counterTarget : "") + " " + counterUnitLabel(task.counterUnit);
+        String counterText = task != null && task.counterEnabled
+                ? task.counter + (task.counterTarget > 0 ? "/" + task.counterTarget : "")
+                    + " " + counterUnitLabel(task.counterUnit)
+                : "";
         if (!receipt.isEmpty()) details = receipt;
         UndoCapture undo = activeUndo();
         String[] ids = new String[rows.size()];
         for (int i = 0; i < rows.size(); i++) ids[i] = rows.get(i).id;
         // Skip identical projections: no cancel/repost, no minute-by-minute refresh of unchanged content.
         String fingerprint = java.util.Arrays.toString(ids) + "|" + index + "|" + generation
-                + "|" + title + "|" + details + "|" + lastZoneColor + "|" + (undo == null ? "" : undo.token);
+                + "|" + title + "|" + details + "|" + counterText + "|" + lastZoneColor
+                + "|" + (undo == null ? "" : undo.token);
         if (fingerprint.equals(lastPanelFingerprint)) return;
 
         RemoteViews compact = new RemoteViews(getPackageName(), R.layout.notification_task_compact);
@@ -693,8 +697,13 @@ public class FlowNotifService extends Service {
             view.setTextViewText(R.id.panel_details, details);
             view.setTextViewText(R.id.panel_position, position);
         }
+        if (!receipt.isEmpty()) compact.setTextViewText(R.id.panel_title, receipt);
         expanded.setViewVisibility(R.id.panel_navigation_row, task == null ? View.GONE : View.VISIBLE);
         expanded.setViewVisibility(R.id.panel_defer_row, task == null ? View.GONE : View.VISIBLE);
+        expanded.setViewVisibility(R.id.panel_counter_row,
+                task != null && task.counterEnabled ? View.VISIBLE : View.GONE);
+        expanded.setViewVisibility(R.id.panel_details,
+                task != null && task.counterEnabled && receipt.isEmpty() ? View.GONE : View.VISIBLE);
         if (task != null) {
             expanded.setOnClickPendingIntent(R.id.panel_previous,
                     actionService(0, "Попередня", ACTION_PANEL_PREVIOUS, 31).getActionIntent());
@@ -707,9 +716,8 @@ public class FlowNotifService extends Service {
                     actionItem(0, "Не зараз", ACTION_TASK_NEXT_ZONE, task.id, NOTIF_ID, generation).getActionIntent());
             expanded.setOnClickPendingIntent(R.id.panel_not_today,
                     actionItem(0, "Не сьогодні", ACTION_TASK_NOT_TODAY, task.id, NOTIF_ID, generation).getActionIntent());
-            expanded.setViewVisibility(R.id.panel_minus, task.counterEnabled ? View.VISIBLE : View.GONE);
-            expanded.setViewVisibility(R.id.panel_plus, task.counterEnabled ? View.VISIBLE : View.GONE);
             if (task.counterEnabled) {
+                expanded.setTextViewText(R.id.panel_counter_value, counterText);
                 expanded.setOnClickPendingIntent(R.id.panel_minus,
                         actionItem(0, "Зменшити", ACTION_TASK_DEC, task.id, NOTIF_ID, generation).getActionIntent());
                 expanded.setOnClickPendingIntent(R.id.panel_plus,
@@ -1433,6 +1441,8 @@ public class FlowNotifService extends Service {
             putProjectedBoolean(before, "completedToday", rawTask.completedToday, effectiveTask.completedToday);
             putProjectedBoolean(before, "zoneDoneToday", rawTask.zoneDoneToday, effectiveTask.zoneDoneToday);
             putProjectedLong(before, "nextRepeatAt", rawTask.nextRepeatAt, effectiveTask.nextRepeatAt);
+            putProjectedLong(before, "quickReminderAt", rawTask.quickReminderAt, effectiveTask.quickReminderAt);
+            putProjectedLong(before, "quickReminderFiredAt", rawTask.quickReminderFiredAt, effectiveTask.quickReminderFiredAt);
             putProjectedString(before, "occurrenceId", rawTask.occurrenceId, effectiveTask.occurrenceId);
             putProjectedBoolean(before, "completionCredited", rawTask.completionCredited, effectiveTask.completionCredited);
             putProjectedString(before, "completionCreditDate", rawTask.completionCreditDate, effectiveTask.completionCreditDate);
@@ -1528,6 +1538,8 @@ public class FlowNotifService extends Service {
                 case "completedToday": value = task.completedToday; break;
                 case "zoneDoneToday": value = task.zoneDoneToday; break;
                 case "nextRepeatAt": value = task.nextRepeatAt; break;
+                case "quickReminderAt": value = task.quickReminderAt; break;
+                case "quickReminderFiredAt": value = task.quickReminderFiredAt; break;
                 case "occurrenceId": value = task.occurrenceId; break;
                 case "completionCredited": value = task.completionCredited; break;
                 case "completionCreditDate": value = task.completionCreditDate; break;

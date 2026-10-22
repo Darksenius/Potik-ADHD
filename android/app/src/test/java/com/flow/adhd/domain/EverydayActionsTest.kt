@@ -104,6 +104,37 @@ class EverydayActionsTest {
         assertEquals(JsonArray(emptyList()), due.data["progressDays"])
     }
 
+    @Test fun quickReminderReceiptAcknowledgesOnlyItsExactCurrentDeadline() {
+        val first = at + 3_600_000L
+        val task = TaskFactory.create(300, "Подзвонити", "simple", at).toMutableMap().apply {
+            put("quickReminderAt", JsonPrimitive(first))
+        }.let(::JsonObject)
+        val source = initial(buildJsonObject { put("tasks", JsonArray(listOf(task))) })
+        val stale = apply(source, FlowCommand.MarkTaskReminderFired(300, first - 1, false, "stale", at)).snapshot
+        assertEquals(source.data, stale.data)
+        val acknowledged = apply(source, FlowCommand.MarkTaskReminderFired(300, first, false, "quick", at)).snapshot
+        assertEquals(JsonPrimitive(first), acknowledged.tasks.single().raw["quickReminderFiredAt"])
+        val repeated = apply(acknowledged, FlowCommand.MarkTaskReminderFired(300, first, false, "again", at)).snapshot
+        assertEquals(acknowledged.data, repeated.data)
+
+        val rescheduled = JsonObject(task + ("quickReminderAt" to JsonPrimitive(first + 60_000)))
+        val newer = initial(buildJsonObject { put("tasks", JsonArray(listOf(rescheduled))) })
+        val oldReceipt = apply(newer, FlowCommand.MarkTaskReminderFired(300, first, false, "old-after-edit", at)).snapshot
+        assertFalse(oldReceipt.tasks.single().raw.containsKey("quickReminderFiredAt"))
+    }
+
+    @Test fun completingBeforeQuickDeadlineAcknowledgesOnlyTheCurrentRepeatOccurrence() {
+        val deadline = at + 3_600_000L
+        val task = TaskFactory.create(300, "Daily", "simple", at).toMutableMap().apply {
+            put("repeat", JsonPrimitive("daily"))
+            put("quickReminderAt", JsonPrimitive(deadline))
+        }.let(::JsonObject)
+        val source = initial(buildJsonObject { put("tasks", JsonArray(listOf(task))) })
+        val completed = apply(source, FlowCommand.SetTaskDone(300, true, at, "done-before-reminder", at)).snapshot
+        assertEquals(JsonPrimitive(deadline), completed.tasks.single().raw["quickReminderFiredAt"])
+        assertNull(TaskSchedule.nextReminderAt(completed.tasks.single().raw, ProjectionContext(deadline + 86_400_000L, emptyList(), zone)))
+    }
+
     @Test fun notificationNotePreservesTheCaptureRewardAndNormalNotesDoNotGetIt() {
         val source = initial()
         val captured = apply(source, FlowCommand.CaptureNote("  Швидка думка  ", "capture", at)).snapshot

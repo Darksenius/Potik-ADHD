@@ -150,7 +150,7 @@ class NativeAppUiTest {
             compose.waitForIdle()
             compose.onNodeWithTag("native-focus-start").performScrollTo().performClick()
             compose.waitUntil(10_000) { ((app.commandRepository.state.value as? SnapshotRead.Ready)?.snapshot?.data?.get("currentFocus") as? kotlinx.serialization.json.JsonPrimitive)?.content == focus }
-            compose.onNodeWithText("← Ще").performClick()
+            compose.onNodeWithText("← Назад").performClick()
             compose.onNodeWithTag("native-more").performScrollToNode(hasText("Статистика"))
             compose.onNodeWithText("Статистика", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("native-stats").assertIsDisplayed()

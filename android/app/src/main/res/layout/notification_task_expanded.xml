@@ -3,15 +3,16 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp">
+    android:background="@drawable/notification_panel_card"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="top"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <TextView
@@ -20,99 +21,154 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:maxLines="2"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Title" />
+            android:maxLines="1"
+            android:textAppearance="@style/TextAppearance.Compat.Notification.Title"
+            android:textColor="@color/notification_panel_text"
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/panel_position"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/notification_panel_position"
+            android:gravity="center"
             android:maxLines="1"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Info" />
+            android:minHeight="24dp"
+            android:paddingStart="9dp"
+            android:paddingEnd="9dp"
+            android:textAppearance="@style/TextAppearance.Compat.Notification.Info"
+            android:textColor="@color/notification_panel_position_text"
+            android:textSize="12sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/panel_details"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textAppearance="@style/TextAppearance.Compat.Notification.Info" />
+        android:textAppearance="@style/TextAppearance.Compat.Notification.Info"
+        android:textColor="@color/notification_panel_muted"
+        android:textSize="13sp" />
 
     <LinearLayout
         android:id="@+id/panel_navigation_row"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginTop="2dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <TextView
+        <ImageView
             android:id="@+id/panel_previous"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:background="@drawable/notification_panel_tile"
+            android:clickable="true"
             android:contentDescription="Попередня задача"
-            android:clickable="true"
             android:focusable="true"
-            android:gravity="center"
-            android:text="‹"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Title" />
+            android:padding="13dp"
+            android:src="@drawable/notification_panel_previous" />
 
-        <TextView
-            android:id="@+id/panel_minus"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="Зменшити кількість"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:text="−"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Title"
-            android:visibility="gone" />
-
-        <TextView
+        <LinearLayout
             android:id="@+id/panel_complete"
             android:layout_width="0dp"
             android:layout_height="48dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
+            android:background="@drawable/notification_panel_primary"
             android:clickable="true"
+            android:contentDescription="Готово"
             android:focusable="true"
             android:gravity="center"
-            android:minWidth="88dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="Виконано"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Title"
-            android:textStyle="bold" />
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/panel_plus"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="Збільшити кількість"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:text="+"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Title"
-            android:visibility="gone" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Готово"
+                android:textAppearance="@style/TextAppearance.Compat.Notification.Title"
+                android:textColor="@color/notification_panel_on_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
-        <TextView
+        <ImageView
             android:id="@+id/panel_next"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:contentDescription="Наступна задача"
+            android:background="@drawable/notification_panel_tile"
             android:clickable="true"
+            android:contentDescription="Наступна задача"
             android:focusable="true"
+            android:padding="13dp"
+            android:src="@drawable/notification_panel_next" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/panel_counter_row"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="2dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/panel_minus"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/notification_panel_tile"
+            android:clickable="true"
+            android:contentDescription="Зменшити лічильник"
+            android:focusable="true"
+            android:padding="14dp"
+            android:src="@drawable/notification_panel_minus" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
             android:gravity="center"
-            android:text="›"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Title" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/panel_counter_value"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textAppearance="@style/TextAppearance.Compat.Notification.Title"
+                android:textColor="@color/notification_panel_text"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/panel_plus"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/notification_panel_tile"
+            android:clickable="true"
+            android:contentDescription="Збільшити лічильник"
+            android:focusable="true"
+            android:padding="14dp"
+            android:src="@drawable/notification_panel_plus" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/panel_defer_row"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginTop="2dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -120,24 +176,40 @@
             android:id="@+id/panel_not_now"
             android:layout_width="0dp"
             android:layout_height="48dp"
+            android:layout_marginEnd="4dp"
             android:layout_weight="1"
+            android:background="@drawable/notification_panel_tile"
             android:clickable="true"
+            android:ellipsize="end"
             android:focusable="true"
             android:gravity="center"
-            android:maxLines="1"
+            android:maxLines="2"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:text="Не зараз"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Info" />
+            android:textAppearance="@style/TextAppearance.Compat.Notification.Info"
+            android:textColor="@color/notification_panel_text"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/panel_not_today"
             android:layout_width="0dp"
             android:layout_height="48dp"
+            android:layout_marginStart="4dp"
             android:layout_weight="1"
+            android:background="@drawable/notification_panel_tile"
             android:clickable="true"
+            android:ellipsize="end"
             android:focusable="true"
             android:gravity="center"
-            android:maxLines="1"
+            android:maxLines="2"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:text="Не сьогодні"
-            android:textAppearance="@style/TextAppearance.Compat.Notification.Info" />
+            android:textAppearance="@style/TextAppearance.Compat.Notification.Info"
+            android:textColor="@color/notification_panel_text"
+            android:textSize="14sp"
+            android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>

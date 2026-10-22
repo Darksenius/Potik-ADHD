@@ -77,6 +77,10 @@ object TaskCompletionReducer {
                     val nextRepeatAt = if (raw.text("repeat") == "interval" && repeatMs != null && repeatMs != 0.0)
                         Math.addExact(at, repeatMs.toLong()) else 0L
                     put("nextRepeatAt", JsonPrimitive(nextRepeatAt))
+                    raw.long("quickReminderAt")?.takeIf { it > 0L }?.let {
+                        // A one-shot reminder belongs to this completion occurrence.
+                        put("quickReminderFiredAt", JsonPrimitive(it))
+                    }
                 } else {
                     remove("doneDate")
                     remove("doneAt")

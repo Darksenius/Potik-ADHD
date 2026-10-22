@@ -143,7 +143,7 @@ import kotlinx.serialization.json.*
             val entry = buildJsonObject { put("id", previous?.text("id") ?: newCommandId()); put("task", payload) }
             tasksText = JsonArray(if (editingIndex == null) tasks + entry else tasks.mapIndexed { index, task -> if (index == editingIndex) entry else task }).toString()
             editor = false
-        }, onClose = { editor = false }, modifier, checklistDefinition = true)
+        }, onClose = { editor = false }, modifier, checklistDefinition = true, allowQuickReminder = false)
         return
     }
     NativeForm("Пресет дня", busy, onClose, {

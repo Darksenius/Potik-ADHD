@@ -183,7 +183,13 @@ object TaskSchedule {
     }
 
     fun nextReminderAt(task: JsonObject, context: ProjectionContext): Long? {
-        if (task.bool("done") || task.bool("trashed") || task.bool("someday") || task["reminderEnabled"] == JsonPrimitive(false)) return null
+        if (task.bool("done") || task.bool("trashed") || task.bool("someday")) return null
+        if (task.string("type") == "simple") {
+            val due = task.long("quickReminderAt")?.takeIf { it > 0L } ?: return null
+            if (task.long("quickReminderFiredAt") == due) return null
+            return due
+        }
+        if (task["reminderEnabled"] == JsonPrimitive(false)) return null
         val type = task.string("type")
         if (task.obj("questDeferral") != null && (type == "sched" || type == "alarm")) {
             val fired = if (type == "sched") task.bool("firedSched") else task.bool("alarmFired")
@@ -240,5 +246,6 @@ object TaskSchedule {
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
     private fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull == true
     private fun JsonObject.number(key: String): Double? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
+    private fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
     private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 }

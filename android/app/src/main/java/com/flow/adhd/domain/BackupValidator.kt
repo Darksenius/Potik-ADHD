@@ -99,7 +99,12 @@ object BackupValidator {
     private fun task(value: JsonElement, path: String, taskTypes: Set<String>): JsonElement {
         val fields = commonTaskFields(taskTypes)
         fields["id"] = ::id
-        return shape(value, path, setOf("id", "title"), fields, taskDefaults())
+        val checked = shape(value, path, setOf("id", "title"), fields, taskDefaults()) as JsonObject
+        for (key in listOf("quickReminderAt", "quickReminderFiredAt")) {
+            val value = (checked[key] as? JsonPrimitive)?.doubleOrNull ?: continue
+            if (value < 1.0 || value > 8_640_000_000_000_000.0 || value % 1.0 != 0.0 || checked["type"] != JsonPrimitive("simple")) fail("$path.$key")
+        }
+        return checked
     }
 
     private fun templateTask(value: JsonElement, path: String, taskTypes: Set<String>): JsonElement {
@@ -116,6 +121,7 @@ object BackupValidator {
         "type" to { v, p -> oneOf(v, taskTypes.map { JsonPrimitive(it) }, p) }, "done" to ::bool, "someday" to ::bool,
         "zoneId" to ::nullableId, "zoneColor" to { v, p -> nullable(v, p, ::string) }, "zoneName" to { v, p -> nullable(v, p, ::string) }, "folderId" to { v, p -> nullable(v, p, ::string) },
         "expanded" to ::bool, "created" to ::string, "trashed" to ::bool, "doneDate" to ::string, "doneAt" to ::string, "completionCredited" to ::bool, "completionCreditDate" to ::string, "snoozeUntil" to ::number,
+        "quickReminderAt" to ::number, "quickReminderFiredAt" to ::number,
         "questDeferral" to ::questDeferral, "completionDeferral" to ::questDeferral, "occurrenceId" to ::string,
         "items" to { v, p -> array(v, p) { x, xp -> shape(x, xp, setOf("text"), mapOf("text" to ::string, "done" to ::bool, "credited" to ::bool), mapOf("done" to JsonPrimitive(false))) } },
         "counter" to ::number, "counterTarget" to ::number, "cntHit" to ::bool, "negXp" to ::number, "note" to ::string, "alarmTime" to ::string, "alarmFired" to ::bool,

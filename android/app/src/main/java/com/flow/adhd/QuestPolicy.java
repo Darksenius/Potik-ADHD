@@ -91,6 +91,8 @@ final class QuestPolicy {
         long nextRepeatAt;
         long repeatMs;
         long snoozeUntil;
+        long quickReminderAt;
+        long quickReminderFiredAt;
         int remindBeforeMinutes;
         boolean hasZone;
         boolean done;
@@ -119,6 +121,7 @@ final class QuestPolicy {
             c.counterUnit=counterUnit; c.counterDay=counterDay; c.zoneId=zoneId; c.priorityIndex=priorityIndex; c.counter=counter;
             c.counterTarget=counterTarget; c.counterStep=counterStep; c.repeatMs=repeatMs; c.nextRepeatAt=nextRepeatAt;
             c.snoozeUntil=snoozeUntil; c.hasZone=hasZone; c.done=done; c.trashed=trashed; c.someday=someday;
+            c.quickReminderAt=quickReminderAt; c.quickReminderFiredAt=quickReminderFiredAt;
             c.completedToday=completedToday; c.zoneDoneToday=zoneDoneToday; c.counterEnabled=counterEnabled;
             c.reminderEnabled=reminderEnabled; c.firedSched=firedSched; c.alarmFired=alarmFired;
             c.remindBeforeMinutes=remindBeforeMinutes; c.firedPre=firedPre;
@@ -143,6 +146,8 @@ final class QuestPolicy {
             t.counter=Math.max(0, row.optInt("counter", 0)); t.counterTarget=Math.max(0, row.optInt("counterTarget", 0));
             t.counterStep=Math.max(1, row.optInt("counterStep", 1)); t.repeatMs=Math.max(0L, row.optLong("repeatMs", 0L));
             t.nextRepeatAt=row.optLong("nextRepeatAt", 0L);
+            t.quickReminderAt=row.optLong("quickReminderAt", 0L);
+            t.quickReminderFiredAt=row.optLong("quickReminderFiredAt", 0L);
             t.snoozeUntil=row.optLong("snoozeUntil", 0L); t.done=row.optBoolean("done", false);
             t.trashed=row.optBoolean("trashed", false); t.someday=row.optBoolean("someday", false);
             t.completedToday=row.optBoolean("completedToday", false); t.zoneDoneToday=row.optBoolean("zoneDoneToday", false);
@@ -188,14 +193,16 @@ final class QuestPolicy {
     }
 
     static final class Event {
-        static final int DONE=1, SKIP=2, INCREMENT=3, DECREMENT=4, DEFER=5, CAPTURE_TASK=6, UNDO=7;
+        static final int DONE=1, SKIP=2, INCREMENT=3, DECREMENT=4, DEFER=5, CAPTURE_TASK=6, UNDO=7, REMINDER=8;
         final int type; final String taskId; final long createdAt; final Deferral deferral; final String captureTitle;
+        final boolean preReminder;
         final Undo undo;
-        Event(int type,String taskId,long at,Deferral deferral) { this(type,taskId,at,deferral,"",null); }
-        Event(int type,String taskId,long at,Deferral deferral,String captureTitle) { this(type,taskId,at,deferral,captureTitle,null); }
-        Event(int type,String taskId,long at,Deferral deferral,String captureTitle,Undo undo) {
+        Event(int type,String taskId,long at,Deferral deferral) { this(type,taskId,at,deferral,"",false,null); }
+        Event(int type,String taskId,long at,Deferral deferral,String captureTitle) { this(type,taskId,at,deferral,captureTitle,false,null); }
+        Event(int type,String taskId,long at,Deferral deferral,String captureTitle,boolean preReminder,Undo undo) {
             this.type=type; this.taskId=taskId==null?"":taskId; this.createdAt=at;
-            this.deferral=deferral; this.captureTitle=captureTitle==null?"":captureTitle; this.undo=undo;
+            this.deferral=deferral; this.captureTitle=captureTitle==null?"":captureTitle;
+            this.preReminder=preReminder; this.undo=undo;
         }
         static Event done(String id,long at) { return new Event(DONE,id,at,null); }
         static Event skip(String id,long at) { return new Event(SKIP,id,at,null); }
@@ -203,7 +210,8 @@ final class QuestPolicy {
         static Event decrement(String id,long at) { return new Event(DECREMENT,id,at,null); }
         static Event defer(String id,long at,Deferral d) { return new Event(DEFER,id,at,d); }
         static Event captureTask(String id,String title,long at) { return new Event(CAPTURE_TASK,id,at,null,title); }
-        static Event undo(Undo value) { return new Event(UNDO, value.id, value.undoneAt, null, "", value); }
+        static Event reminder(String id,long at,boolean pre) { return new Event(REMINDER,id,at,null,"",pre,null); }
+        static Event undo(Undo value) { return new Event(UNDO, value.id, value.undoneAt, null, "",false,value); }
     }
 
     static final class Undo {
@@ -360,7 +368,7 @@ final class QuestPolicy {
         appendIdentity(value, task.schedTime); appendIdentity(value, task.alarmTime);
         appendIdentity(value, task.repeat); appendIdentity(value, task.zoneId + ":" + task.hasZone);
         appendIdentity(value, task.repeatMs + ":" + task.nextRepeatAt + ":" + task.snoozeUntil);
-        appendIdentity(value, task.reminderEnabled + ":" + task.remindBeforeMinutes);
+        appendIdentity(value, task.reminderEnabled + ":" + task.remindBeforeMinutes + ":" + task.quickReminderAt);
         for (boolean day : task.repeatDays) appendIdentity(value, day ? "1" : "0");
         appendIdentity(value, task.deferral == null ? "" : task.deferral.toJson());
         appendIdentity(value, localDate(now, zone));
@@ -528,6 +536,12 @@ final class QuestPolicy {
     }
     private static Event eventFromEnvelope(JSONObject row) {
         String raw=row.optString("event",""); long at=row.optLong("createdAt",0L);
+        java.util.regex.Matcher reminder=java.util.regex.Pattern.compile("^sched_fired:([1-9][0-9]{0,15})(_pre)?:([1-9][0-9]{0,15})$").matcher(raw);
+        if(reminder.matches())try{
+            long taskId=Long.parseLong(reminder.group(1)),due=Long.parseLong(reminder.group(3));
+            if(taskId<9_007_199_254_740_991L&&due<=8_640_000_000_000_000L)
+                return Event.reminder(reminder.group(1),due,reminder.group(2)!=null);
+        }catch(NumberFormatException ignored){}
         String capturePrefix="capture_task_v2:";
         if(raw.startsWith(capturePrefix)){
             int cut=raw.indexOf(':',capturePrefix.length());
@@ -574,7 +588,8 @@ final class QuestPolicy {
 
     private static final String[] UNDO_RUNTIME_FIELDS = {"done", "doneDate", "doneAt", "questDeferral",
             "completionDeferral", "snoozeUntil", "firedSched", "firedPre", "alarmFired", "completedToday",
-            "zoneDoneToday", "nextRepeatAt", "occurrenceId", "completionCredited", "completionCreditDate"};
+            "zoneDoneToday", "nextRepeatAt", "occurrenceId", "completionCredited", "completionCreditDate",
+            "quickReminderAt", "quickReminderFiredAt"};
 
     private static boolean validUndoBefore(JSONObject before) {
         if (before == null || before.length() != UNDO_RUNTIME_FIELDS.length) return false;
@@ -585,7 +600,8 @@ final class QuestPolicy {
                 || !nullableBoolean(before, "completionCredited")) return false;
         if (!nullableString(before, "doneDate") || !nullableString(before, "doneAt")
                 || !nullableString(before, "occurrenceId") || !nullableString(before, "completionCreditDate")) return false;
-        if (!nullableNumber(before, "snoozeUntil") || !nullableNumber(before, "nextRepeatAt")) return false;
+        if (!nullableNumber(before, "snoozeUntil") || !nullableNumber(before, "nextRepeatAt")
+                || !nullableNumber(before, "quickReminderAt") || !nullableNumber(before, "quickReminderFiredAt")) return false;
         if (!nullableDeferral(before, "questDeferral") || !nullableDeferral(before, "completionDeferral")) return false;
         return true;
     }
@@ -634,6 +650,11 @@ final class QuestPolicy {
         if(events==null)return result;
         for(Event e:events){
             if(e==null||e.createdAt<=0)continue; Task t=byId.get(e.taskId);
+            if(e.type==Event.REMINDER) {
+                if(t!=null&&!e.preReminder&&"simple".equals(t.type)&&t.quickReminderAt==e.createdAt
+                        &&t.quickReminderFiredAt!=e.createdAt)t.quickReminderFiredAt=e.createdAt;
+                continue;
+            }
             if(e.type==Event.UNDO) {
                 if(t!=null&&e.undo!=null&&!createdAfter(t,e.undo.undoneAt,zone)
                         &&canApplyUndo(t,e.undo,zone)) applyUndo(t,e.undo);
@@ -649,6 +670,7 @@ final class QuestPolicy {
                     t.doneAt=localTime(e.createdAt,zone);
                     if(!t.completionCredited)t.completionCreditDate=t.doneDate;
                     t.completionCredited=true;
+                    if(t.quickReminderAt>0L)t.quickReminderFiredAt=t.quickReminderAt;
                     t.occurrenceId=taskOccurrenceId(t,e.createdAt,timeline,zone,occurrences);
                     t.snoozeUntil=0L;t.deferral=null;
                     if("timewin".equals(t.type))t.completedToday=sameLocalDate(e.createdAt,now,zone);
@@ -699,6 +721,7 @@ final class QuestPolicy {
         task.firedSched=before.optBoolean("firedSched",false); task.firedPre=before.optBoolean("firedPre",false);
         task.alarmFired=before.optBoolean("alarmFired",false); task.completedToday=before.optBoolean("completedToday",false);
         task.zoneDoneToday=before.optBoolean("zoneDoneToday",false); task.nextRepeatAt=before.optLong("nextRepeatAt",0L);
+        task.quickReminderAt=before.optLong("quickReminderAt",0L); task.quickReminderFiredAt=before.optLong("quickReminderFiredAt",0L);
         task.occurrenceId=undoString(before,"occurrenceId");
         // Native projection cannot reverse XP/history. Keep the current credit
         // marker until JS applies the same action snapshot and its gamification path.

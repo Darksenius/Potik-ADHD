@@ -77,7 +77,7 @@ object TaskEditingActions {
         val id = maxOf(300L, snapshot.data.long("nid") ?: 300L, snapshot.tasks.maxOfOrNull { it.id + 1L } ?: 300L)
         if (id >= MAX_ID) return rejected("id-exhausted", "No safe task ID remains")
         val copy = task.raw.toMutableMap()
-        for (key in listOf("completionCreditDate", "doneDate", "doneAt", "occurrenceId", "legacyRoutineId", "questDeferral", "completionDeferral", "zoneOccurrenceKey", "counterDay", "dayPresetKey")) copy.remove(key)
+        for (key in listOf("completionCreditDate", "doneDate", "doneAt", "occurrenceId", "legacyRoutineId", "questDeferral", "completionDeferral", "zoneOccurrenceKey", "counterDay", "dayPresetKey", "quickReminderAt", "quickReminderFiredAt")) copy.remove(key)
         copy.putAll(mapOf("id" to JsonPrimitive(id), "title" to JsonPrimitive(task.title + " (копія)"), "done" to JsonPrimitive(false),
             "completionCredited" to JsonPrimitive(false), "nextRepeatAt" to JsonPrimitive(0), "snoozeUntil" to JsonPrimitive(0), "expanded" to JsonPrimitive(false),
             "alarmFired" to JsonPrimitive(false), "firedSched" to JsonPrimitive(false), "firedPre" to JsonPrimitive(false),

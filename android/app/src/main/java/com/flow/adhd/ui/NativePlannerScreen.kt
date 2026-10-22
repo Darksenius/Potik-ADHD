@@ -53,6 +53,8 @@ import kotlinx.serialization.json.*
     var entry by rememberSaveable(selected) { mutableStateOf("") }
     var isEvent by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val weekScroll = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(selected) { weekScroll.animateScrollToItem(date.dayOfWeek.value - 1) }
     fun send(factory: (String, Long) -> FlowCommand, done: () -> Unit = {}) = onCommand(factory(newCommandId(), commandTime()), done)
     fun addEntry() {
         if (busy || entry.isBlank()) return
@@ -78,12 +80,14 @@ import kotlinx.serialization.json.*
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { selected = date.minusWeeks(1).toString() }) { Text("←") }
+                        IconButton(onClick = { selected = date.minusWeeks(1).toString() },
+                            modifier = Modifier.size(48.dp).semantics { contentDescription = "Попередній тиждень" }.testTag("native-planner-previous-week")) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
                         Text(weekLabel(monday, monday.plusDays(6)), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                        TextButton(onClick = { selected = date.plusWeeks(1).toString() }) { Text("→") }
+                        IconButton(onClick = { selected = date.plusWeeks(1).toString() },
+                            modifier = Modifier.size(48.dp).semantics { contentDescription = "Наступний тиждень" }.testTag("native-planner-next-week")) { Text("›", style = MaterialTheme.typography.headlineSmall) }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        repeat(7) { index ->
+                    LazyRow(Modifier.fillMaxWidth(), state = weekScroll, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(7) { index ->
                             val day = monday.plusDays(index.toLong())
                             val dayString = day.toString()
                             val count = snapshot.tasks.count { TaskSchedule.occursOn(it.raw, dayString, context) }
@@ -97,7 +101,7 @@ import kotlinx.serialization.json.*
                                 if (isSelected) append(", вибрано")
                             }
                             Card(
-                                Modifier.weight(1f).heightIn(min = 48.dp)
+                                Modifier.width(52.dp).heightIn(min = 64.dp)
                                     .border(1.dp, if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
                                     .semantics { contentDescription = dayDescription; this.selected = isSelected }
                                     .clickable { selected = dayString }
@@ -105,7 +109,7 @@ import kotlinx.serialization.json.*
                                 colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                             ) {
                                 Column(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                    Text(listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд")[index], style = MaterialTheme.typography.labelSmall)
+                                    Text(listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд")[index], style = MaterialTheme.typography.labelMedium)
                                     Text(day.dayOfMonth.toString(), style = if (isSelected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium)
                                     Text(if (count == 0) "·" else count.toString(), style = MaterialTheme.typography.labelSmall)
                                 }
@@ -119,7 +123,7 @@ import kotlinx.serialization.json.*
         item {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(plannerDateLabel(date), style = MaterialTheme.typography.titleLarge)
+                    Text(plannerDateLabel(date), style = MaterialTheme.typography.titleMedium)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(rest, { value -> send({ id, at -> FlowCommand.SetPlanRestDay(selected, value, id, at) }) }, enabled = !busy)
                         Text("Вихідний день")
