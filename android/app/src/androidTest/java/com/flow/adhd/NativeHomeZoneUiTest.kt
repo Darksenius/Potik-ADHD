@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -19,6 +21,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
@@ -77,6 +80,7 @@ class NativeHomeZoneUiTest {
         compose.onNodeWithTag("native-task-search").assertDoesNotExist()
         scrollTo("native-task-search-toggle")
         compose.onNodeWithTag("native-task-search-toggle").performClick()
+        compose.onNodeWithTag("native-task-search").assertIsFocused()
         scrollTo("native-task-search")
         compose.onNodeWithTag("native-task-search").performTextReplacement("NO-MATCH-TO-THIS-TASK")
         scrollTo("native-tasks-empty")
@@ -84,6 +88,8 @@ class NativeHomeZoneUiTest {
 
         scrollTo("native-task-search")
         compose.onNodeWithTag("native-task-search").performTextReplacement("Справа 08")
+        compose.onNodeWithTag("native-task-search").performImeAction()
+        compose.onNodeWithTag("native-task-search").assertIsNotFocused()
         scrollTo("native-task-8")
         compose.onNodeWithTag("native-task-8").assertExists()
         scrollTo("native-task-search-toggle")
@@ -91,6 +97,9 @@ class NativeHomeZoneUiTest {
         compose.onNodeWithTag("native-task-search").assertDoesNotExist()
         scrollTo("native-task-1")
         compose.onNodeWithText("Справа 01").assertExists()
+        scrollTo("native-task-search-toggle")
+        compose.onNodeWithTag("native-task-search-toggle").performClick()
+        compose.onNodeWithTag("native-task-search").assertIsFocused()
     }
 
     @Test fun freeTimeExplainsTomorrowsNextZoneAndTheUnconfiguredDay() {

@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -38,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +52,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -57,6 +64,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.flow.adhd.domain.FlowCommand
@@ -102,6 +110,17 @@ fun NativeTasksScreen(
     var filterMenu by remember { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var requestSearchFocus by remember { mutableStateOf(searchOpen) }
+    val searchFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun closeSearch() {
+        requestSearchFocus = false
+        searchOpen = false
+        search = ""
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
     val compactDayCard = LocalConfiguration.current.screenHeightDp < 600
@@ -173,7 +192,10 @@ fun NativeTasksScreen(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                             modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-create")) { Text("+ Нова") }
                     }
-                    if (filter != "now") IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) search = "" },
+                    if (filter != "now") IconButton(onClick = {
+                        if (searchOpen) closeSearch()
+                        else { searchOpen = true; requestSearchFocus = true }
+                    },
                         modifier = Modifier.size(48.dp).testTag("native-task-search-toggle").semantics {
                             contentDescription = if (searchOpen) "Закрити пошук" else "Пошук задач"
                         }) {
@@ -209,7 +231,7 @@ fun NativeTasksScreen(
                             for (key in listOf("now", "all", "daily", "someday", "journal", "trash")) {
                                 DropdownMenuItem(
                                     text = { Text(taskFilterLabel(key)) },
-                                    onClick = { filter = key; search = ""; searchOpen = false; filterMenu = false },
+                                    onClick = { closeSearch(); filter = key; filterMenu = false },
                                     modifier = Modifier.testTag("native-task-filter-$key"),
                                 )
                             }
@@ -231,8 +253,18 @@ fun NativeTasksScreen(
                         label = { Text("Пошук") },
                         placeholder = { Text("Назва, нотатка чи мітка") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("native-task-search"),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); keyboard?.hide() }),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).focusRequester(searchFocus).testTag("native-task-search"),
                     )
+                    // This item is lazy: request focus only after its field is actually attached.
+                    LaunchedEffect(requestSearchFocus) {
+                        if (requestSearchFocus) {
+                            searchFocus.requestFocus()
+                            keyboard?.show()
+                            requestSearchFocus = false
+                        }
+                    }
                 }
                 if (busy) {
                     Text(
