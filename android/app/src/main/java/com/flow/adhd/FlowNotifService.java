@@ -95,6 +95,12 @@ public class FlowNotifService extends Service {
     private String panelTaskId = "";
     private int panelIndex = 0;
     private String lastPanelFingerprint = "";
+    private static final String PANEL_FINGERPRINT_EXTRA = "flow_panel_fingerprint";
+    private static final long PANEL_POST_CHECK_MS = 1_500L;
+    private static final int PANEL_POST_MAX_RETRIES = 2;
+    private String panelRetryFingerprint = "";
+    private int panelPostRetries;
+    private Runnable panelPostCheck;
     private static final String PANEL_PREFS = "flow_task_panel";
 
     @Override
@@ -706,6 +712,10 @@ public class FlowNotifService extends Service {
                 + "|" + notificationTheme + "|" + darkPanel
                 + "|" + (undo == null ? "" : undo.token);
         if (fingerprint.equals(lastPanelFingerprint)) return;
+        if (!fingerprint.equals(panelRetryFingerprint)) {
+            panelRetryFingerprint = fingerprint;
+            panelPostRetries = 0;
+        }
 
         RemoteViews compact = new RemoteViews(getPackageName(), R.layout.notification_task_compact);
         RemoteViews expanded = new RemoteViews(getPackageName(), R.layout.notification_task_expanded);
@@ -753,6 +763,7 @@ public class FlowNotifService extends Service {
         openIntent.putExtra("nav", "tasks");
         PendingIntent openPI = PendingIntent.getActivity(this, 0, openIntent, flagImmutable() | PendingIntent.FLAG_UPDATE_CURRENT);
         Bundle extras = new Bundle();
+        extras.putString(PANEL_FINGERPRINT_EXTRA, fingerprint);
         extras.putStringArray("flow_panel_ids", ids);
         extras.putString("flow_panel_task_id", task == null ? "" : task.id);
         extras.putInt("flow_panel_index", index);
@@ -777,6 +788,38 @@ public class FlowNotifService extends Service {
         }
         startForeground(NOTIF_ID, builder.build());
         lastPanelFingerprint = fingerprint;
+        schedulePanelPostCheck(fingerprint);
+    }
+
+    /** Android may silently shed an over-rate foreground update. Confirm the active
+     * panel after a quiet interval, then rebuild current state at most twice. */
+    private void schedulePanelPostCheck(String expectedFingerprint) {
+        if (destroyed || handler == null) return;
+        if (panelPostCheck != null) handler.removeCallbacks(panelPostCheck);
+        panelPostCheck = () -> FlowDatabase.executeStorage(() -> {
+            if (destroyed || !expectedFingerprint.equals(lastPanelFingerprint)) return;
+            NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (manager == null) return;
+            try {
+                for (android.service.notification.StatusBarNotification posted : manager.getActiveNotifications()) {
+                    if (posted.getId() == NOTIF_ID && expectedFingerprint.equals(
+                            posted.getNotification().extras.getString(PANEL_FINGERPRINT_EXTRA))) return;
+                }
+            } catch (RuntimeException error) {
+                android.util.Log.w("FlowNotifService", "Unable to confirm task panel delivery", error);
+                return;
+            }
+            if (panelPostRetries >= PANEL_POST_MAX_RETRIES) return;
+            panelPostRetries++;
+            lastPanelFingerprint = "";
+            // Re-read Room and the current selection; never replay a superseded page.
+            try {
+                rebuildFromDb();
+            } catch (RuntimeException error) {
+                android.util.Log.w("FlowNotifService", "Unable to retry task panel delivery", error);
+            }
+        });
+        handler.postDelayed(panelPostCheck, PANEL_POST_CHECK_MS);
     }
 
     private boolean isDarkNotificationPanel(String theme) {

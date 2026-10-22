@@ -127,6 +127,16 @@ class TaskPanelNotificationTest {
             panel = awaitPanel(manager, "Light notification theme must update without task changes") {
                 it.status.notification.color == 0xFFFFF9F2.toInt() && it.ids.take(3) == pinned
             }
+            // Traverse a complete ring even when the previous selection already points at
+            // fixture zero: the final-page -> first-page transition must be exercised too.
+            val ringStart = panel
+            repeat(panel.ids.size) {
+                val before = panel
+                val expectedIndex = (before.index + 1) % before.ids.size
+                clickPanelAction(context, before.status.notification.bigContentView, R.id.panel_next, "Next around full ring")
+                panel = awaitPanelStep(manager, before, expectedIndex, before.ids[expectedIndex])
+            }
+            assertEquals("A full paging ring must return to the same task", ringStart.selectedId, panel.selectedId)
             val maxPagingSteps = panel.ids.size
             repeat(maxPagingSteps) {
                 if (panel.selectedId != pinned.first()) {
@@ -280,7 +290,8 @@ class TaskPanelNotificationTest {
         throw AssertionError("Next page did not reach expected selected ID/index; " +
             "before={${panelSummary(before)}} expected={id=$expectedId,index=$expectedIndex," +
             "ids=${before.ids},generation=${before.generation}} " +
-            "observed={${observed?.let(::panelSummary) ?: "no active panel"}}")
+            "observed={${observed?.let(::panelSummary) ?: "no active panel"}} " +
+            "servicePrefs=${InstrumentationRegistry.getInstrumentation().targetContext.getSharedPreferences("flow_task_panel", Context.MODE_PRIVATE).all}")
     }
 
     private fun panelSummary(panel: PanelState): String =
