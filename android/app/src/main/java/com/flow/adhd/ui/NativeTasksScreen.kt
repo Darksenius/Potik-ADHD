@@ -45,10 +45,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -96,12 +96,15 @@ fun NativeTasksScreen(
     modifier: Modifier = Modifier,
     initialFilter: String = "all",
     header: @Composable () -> Unit = {},
+    onOpenPlan: (() -> Unit)? = null,
 ) {
     var filter by rememberSaveable(initialFilter) { mutableStateOf(initialFilter) }
     var filterMenu by remember { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
+    val compactDayCard = LocalConfiguration.current.screenHeightDp < 600
     val typeLabels = remember(context) { taskTypeLabels(context) }
     val tasks = snapshot.tasks
     val questContext = remember(snapshot, projection) {
@@ -153,11 +156,14 @@ fun NativeTasksScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (initialFilter == "daily") item { header() }
+        if (filter == "all" || filter == "now") item {
+            NativeDayZoneCard(snapshot, questContext, onOpenPlan, compact = compactDayCard)
+        }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        taskFilterLabel(filter),
+                        if (filter == "all") "Задачі" else taskFilterLabel(filter),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
@@ -166,6 +172,22 @@ fun NativeTasksScreen(
                         Button(onClick = onCreate, enabled = !busy, shape = MaterialTheme.shapes.small,
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                             modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-create")) { Text("+ Нова") }
+                    }
+                    if (filter != "now") IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) search = "" },
+                        modifier = Modifier.size(48.dp).testTag("native-task-search-toggle").semantics {
+                            contentDescription = if (searchOpen) "Закрити пошук" else "Пошук задач"
+                        }) {
+                        val ink = LocalContentColor.current
+                        Canvas(Modifier.size(22.dp)) {
+                            val stroke = 2.dp.toPx()
+                            if (searchOpen) {
+                                drawLine(ink, Offset(size.width * .2f, size.height * .2f), Offset(size.width * .8f, size.height * .8f), stroke)
+                                drawLine(ink, Offset(size.width * .8f, size.height * .2f), Offset(size.width * .2f, size.height * .8f), stroke)
+                            } else {
+                                drawCircle(ink, size.width * .3f, Offset(size.width * .4f, size.height * .4f), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+                                drawLine(ink, Offset(size.width * .63f, size.height * .63f), Offset(size.width * .92f, size.height * .92f), stroke)
+                            }
+                        }
                     }
                     Box {
                         OutlinedButton(
@@ -187,15 +209,14 @@ fun NativeTasksScreen(
                             for (key in listOf("now", "all", "daily", "someday", "journal", "trash")) {
                                 DropdownMenuItem(
                                     text = { Text(taskFilterLabel(key)) },
-                                    onClick = { filter = key; search = ""; filterMenu = false },
+                                    onClick = { filter = key; search = ""; searchOpen = false; filterMenu = false },
                                     modifier = Modifier.testTag("native-task-filter-$key"),
                                 )
                             }
                         }
                     }
                 }
-                if (filter == "now") CurrentZoneCard(projection, questContext)
-                else if (filter != "all") Text(
+                if (filter != "now" && filter != "all") Text(
                     when (filter) {
                         "someday" -> "Поверни задачу, коли знову захочеш до неї взятися."
                         "journal" -> "Фіксація події збільшує журнал. Завершення задачі тут немає."
@@ -203,7 +224,7 @@ fun NativeTasksScreen(
                         else -> "Віднови потрібну задачу або видали її назавжди."
                     }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                 )
-                if (filter != "now") {
+                if (filter != "now" && searchOpen) {
                     OutlinedTextField(
                         value = search,
                         onValueChange = { search = it },
@@ -728,31 +749,3 @@ private fun JsonObject.stringValue(key: String): String? = (this[key] as? JsonPr
 private fun JsonObject.booleanValue(key: String): Boolean? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
 private fun JsonObject.numberValue(key: String): Double? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
 private fun JsonObject.numberId(key: String): Long? = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
-
-@Composable private fun CurrentZoneCard(projection: JsonObject, context: QuestPolicy.Context) {
-    val fallback = MaterialTheme.colorScheme.secondary
-    val accent = remember(projection.stringValue("zoneColor"), fallback) {
-        runCatching { Color(android.graphics.Color.parseColor(projection.stringValue("zoneColor").orEmpty())) }.getOrDefault(fallback)
-    }
-    val current = context.timeline.firstOrNull { context.now >= it.startAt && context.now < it.endAt }
-    val clock = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
-    val time = current?.let { java.time.Instant.ofEpochMilli(it.startAt).atZone(context.zone).format(clock) + "–" +
-        java.time.Instant.ofEpochMilli(it.endAt).atZone(context.zone).format(clock) }.orEmpty()
-    Card(Modifier.fillMaxWidth().testTag("native-current-zone"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(Modifier.width(4.dp).fillMaxHeight().background(accent))
-            Column(Modifier.weight(1f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("У фокусі зараз", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(time, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(projection.stringValue("zone") ?: "Вільний час", style = MaterialTheme.typography.titleLarge)
-                projection.stringValue("desc")?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
-}

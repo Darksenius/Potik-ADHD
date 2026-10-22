@@ -157,7 +157,8 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                         presetAuthoring = moreAuthoring,
                         onAuthoringChanged = { moreAuthoring = it })
                     else -> NativeTasksScreen(snapshot, projection, busy, model::command,
-                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f))
+                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f),
+                        onOpenPlan = { page = "plan" })
                 }
             }
         }

@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="notification_panel_surface">#F8F9FC</color>
-    <color name="notification_panel_text">#171D29</color>
-    <color name="notification_panel_muted">#4F5C70</color>
-    <color name="notification_panel_outline">#D1D9E5</color>
-    <color name="notification_panel_tile">#E9EDF4</color>
-    <color name="notification_panel_tile_pressed">#DCE3ED</color>
-    <color name="notification_panel_icon">#405A7F</color>
-    <color name="notification_panel_primary">#A93610</color>
-    <color name="notification_panel_primary_pressed">#8F2D0C</color>
-    <color name="notification_panel_on_primary">#FFFFFF</color>
-    <color name="notification_panel_position">#DFE8F6</color>
-    <color name="notification_panel_position_text">#203550</color>
+    <!-- RemoteViews sits inside the system notification card. Keep its surface transparent
+         and use framework Notification text appearances; uiMode can be dark on Android 9
+         while the system still draws a light notification card. -->
+    <color name="notification_panel_surface">@android:color/transparent</color>
+    <color name="notification_panel_outline">#2478808C</color>
+    <color name="notification_panel_tile">#1078808C</color>
+    <color name="notification_panel_tile_pressed">#2878808C</color>
+    <color name="notification_panel_icon">#7A818C</color>
+    <color name="notification_panel_primary">#1CB4683F</color>
+    <color name="notification_panel_primary_pressed">#38B4683F</color>
+    <color name="notification_panel_primary_outline">#8FB4683F</color>
+    <color name="notification_panel_position">#1878808C</color>
 </resources>

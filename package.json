@@ -1,6 +1,6 @@
 {
   "name": "potik-native",
-  "version": "1.7.6-r32",
+  "version": "1.7.6-r33",
   "description": "Потік — органайзер для людей з РДУГ (ADHD)",
   "private": true,
   "type": "module",
