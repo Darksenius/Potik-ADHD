@@ -110,6 +110,16 @@ class TaskOrderTest {
         assertEquals(listOf(20L, 21L, 22L, 23L), ranked.map { it.long("id") })
     }
 
+    @Test fun quickReminderWaitsInFullListThenPromotesAtItsDeadline() {
+        val due = now + 30 * 60_000L
+        val waiting = json("""{"id":70,"type":"simple","quickReminderAt":$due}""")
+        val ordinary = json("""{"id":71,"type":"simple","title":"Anytime"}""")
+        assertEquals(listOf(71L, 70L), TaskOrder.rank(listOf(waiting, ordinary), context).map { it.long("id") })
+
+        val atDue = context.copy(now = due)
+        assertEquals(listOf(70L, 71L), TaskOrder.rank(listOf(ordinary, waiting), atDue).map { it.long("id") })
+    }
+
     @Test fun invalidDatesAndExtremeTimestampsDoNotDropOrMutateTasks() {
         val invalidDate = json("""{"id":30,"type":"sched","schedDate":"999999999999999999999-99-99","schedTime":"bad"}""")
         val extreme = json("""{"id":31,"type":"simple","snoozeUntil":1e300}""")

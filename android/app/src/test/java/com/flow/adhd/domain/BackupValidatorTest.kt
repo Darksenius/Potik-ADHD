@@ -38,6 +38,10 @@ class BackupValidatorTest {
 
         val explicit = validate("""{"theme":"light","preferences":{"themeMode":"system"}}""")
         assertEquals("system", explicit.getValue("preferences").jsonObject.getValue("themeMode").toString().trim('"'))
+
+        val notificationTheme = validate("""{"preferences":{"notificationTheme":"dark"}}""")
+        assertEquals("dark", notificationTheme.getValue("preferences").jsonObject.getValue("notificationTheme").toString().trim('"'))
+        assertInvalid("""{"preferences":{"notificationTheme":"sepia"}}""")
     }
 
     @Test fun preservesUnknownFieldsAndDefaultsWithinTemplateTasks() {

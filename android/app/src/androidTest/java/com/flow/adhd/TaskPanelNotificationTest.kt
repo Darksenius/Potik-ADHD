@@ -20,6 +20,7 @@ import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
@@ -61,6 +62,7 @@ class TaskPanelNotificationTest {
         val titles = (1..6).map { "Panel task $suffix $it" }
         runBlocking { withTimeout(TIMEOUT_MS) { app.nativeRuntime.refresh().await() } }
         val priorPriorities = readStore(database).state.optJSONArray("priorities") ?: JSONArray()
+        val priorTheme = readStore(database).state.optJSONObject("preferences")?.optString("notificationTheme", "system") ?: "system"
 
         try {
             instrumentation.runOnMainSync {
@@ -68,6 +70,10 @@ class TaskPanelNotificationTest {
                     lifecycle.getActivitiesInStage(Stage.RESUMED).isEmpty())
             }
 
+            runBlocking { app.nativeRuntime.submit(FlowCommand.SetPreferences(
+                kotlinx.serialization.json.buildJsonObject { put("notificationTheme", kotlinx.serialization.json.JsonPrimitive("dark")) },
+                UUID.randomUUID().toString(), System.currentTimeMillis(),
+            )).await() }
             FlowNotifService.start(context)
             val capturedIds = titles.map { title ->
                 sendRemoteInput(context, awaitCaptureAction(manager, FlowNotifService.KEY_TASK), FlowNotifService.KEY_TASK, title)
@@ -99,6 +105,20 @@ class TaskPanelNotificationTest {
             // A Room projection commit precedes the service's queued/coalesced render.
             var panel = awaitPanel(manager, "The foreground service must render the latest captured tasks") { current ->
                 current.ids.size == 5 && current.ids.take(3) == pinned
+            }
+            panel = awaitPanel(manager, "Dark notification theme must update the existing panel") {
+                it.status.notification.color == 0xFF202124.toInt()
+            }
+            instrumentation.runOnMainSync {
+                val view = requireNotNull(panel.status.notification.bigContentView).apply(context, null)
+                assertEquals(0xFFF1F3F4.toInt(), view.findViewById<android.widget.TextView>(R.id.panel_title).currentTextColor)
+            }
+            runBlocking { app.nativeRuntime.submit(FlowCommand.SetPreferences(
+                kotlinx.serialization.json.buildJsonObject { put("notificationTheme", kotlinx.serialization.json.JsonPrimitive("light")) },
+                UUID.randomUUID().toString(), System.currentTimeMillis(),
+            )).await() }
+            panel = awaitPanel(manager, "Light notification theme must update without task changes") {
+                it.status.notification.color == 0xFFFFF9F2.toInt() && it.ids.take(3) == pinned
             }
             repeat(panel.ids.size) {
                 if (panel.selectedId != pinned.first()) {
@@ -182,6 +202,10 @@ class TaskPanelNotificationTest {
             })
             assertTrue("Notification task controls must not open any app Activity: $activitiesStarted", activitiesStarted.isEmpty())
         } finally {
+            runBlocking { app.nativeRuntime.submit(FlowCommand.SetPreferences(
+                kotlinx.serialization.json.buildJsonObject { put("notificationTheme", kotlinx.serialization.json.JsonPrimitive(priorTheme)) },
+                UUID.randomUUID().toString(), System.currentTimeMillis(),
+            )).await() }
             repeat(3) { slot ->
                 val id = if (priorPriorities.isNull(slot)) null else priorPriorities.optLong(slot).takeIf { it > 0 }
                 runBlocking { withTimeout(TIMEOUT_MS) {

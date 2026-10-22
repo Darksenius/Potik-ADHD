@@ -35,10 +35,19 @@ object QuestPolicy {
         if (taskZone != null && context.zones.none { it.number("id") == taskZone }) return unavailable("missing-zone", zoneId)
         if (task.string("type") == "zonelinked" && taskZone == null) return unavailable("unassigned-zone", zoneId)
 
-        deferralAllowsTask(task, context, current)?.let { return it }
+        val quickAt = task.number("quickReminderAt")?.takeIf { task.string("type") == "simple" && it > context.now.toDouble() }
+        deferralAllowsTask(task, context, current)?.let { deferred ->
+            if (deferred.eligible && quickAt != null) {
+                return Availability(false, "quick-reminder", zoneId, maxOf(quickAt.toLong(), deferred.availableAt ?: Long.MIN_VALUE))
+            }
+            return deferred
+        }
         task.obj("questDeferral")?.takeIf { it.string("kind") == "time" }?.let { deferral ->
             val start = deferral.number("startAt")?.toLong() ?: return unavailable("not-due", zoneId)
-            if (context.now >= start) return Availability(true, currentZoneId = zoneId)
+            if (context.now >= start) {
+                if (quickAt != null) return Availability(false, "quick-reminder", zoneId, maxOf(quickAt.toLong(), start))
+                return Availability(true, currentZoneId = zoneId)
+            }
         }
         val base = baseAvailability(task, context, zoneId)
         if (!base.eligible) return base
@@ -130,6 +139,8 @@ object QuestPolicy {
         if (isDoneForCurrentOccurrence(task, context)) return unavailable("done", zoneId)
         val planDate = TaskSchedule.planDate(task)
         if (planDate != null && planDate > today) return unavailable("future-date", zoneId)
+        task.number("quickReminderAt")?.takeIf { task.string("type") == "simple" && it > now.toDouble() }
+            ?.let { return Availability(false, "quick-reminder", zoneId, it.toLong()) }
         task.number("snoozeUntil")?.takeIf { it > now.toDouble() }?.let { return Availability(false, "snoozed", zoneId, it.toLong()) }
         if (task.string("type") == "timewin" && task.bool("completedToday") && (task.string("doneDate").isNullOrEmpty() || task.string("doneDate") == today)) return unavailable("timewin-completed", zoneId)
         val repeat = task.string("repeat")

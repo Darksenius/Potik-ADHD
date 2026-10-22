@@ -79,7 +79,7 @@ fun NativePlannerScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val dayScroll = androidx.compose.foundation.lazy.rememberLazyListState()
     val weekScroll = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(selected) { weekScroll.animateScrollToItem(date.dayOfWeek.value - 1) }
+    LaunchedEffect(selected) { weekScroll.animateScrollToItem((date.dayOfWeek.value - 4).coerceAtLeast(0)) }
     LaunchedEffect(showNote) {
         if (showNote && dayScroll.layoutInfo.totalItemsCount > 0)
             dayScroll.animateScrollToItem(dayScroll.layoutInfo.totalItemsCount - 1)
@@ -329,7 +329,7 @@ fun NativePlannerScreen(
                 Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
             ) {
                 Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     PotikCompletionTarget(done,
@@ -341,8 +341,13 @@ fun NativePlannerScreen(
                     Text(task.title, Modifier.weight(1f).heightIn(min = 48.dp)
                         .clickable(enabled = !busy) { onEditTask(task.id) }.padding(vertical = 12.dp),
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                    val time = task.raw.text("schedTime").ifEmpty { task.raw.text("alarmTime") }
-                    if (time.isNotEmpty()) Text(time, Modifier.padding(end = 8.dp), style = MaterialTheme.typography.labelSmall)
+                    val time = task.raw.text("schedTime").ifEmpty { task.raw.text("alarmTime") }.ifEmpty {
+                        if (task.type == "simple") (task.raw["quickReminderAt"] as? JsonPrimitive)?.content?.toLongOrNull()?.let { at ->
+                            runCatching { java.time.Instant.ofEpochMilli(at).atZone(context.zone)
+                                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")) }.getOrNull()
+                        }.orEmpty() else ""
+                    }
+                    if (time.isNotEmpty()) Text(time, Modifier.padding(end = 8.dp).testTag("native-planner-time-${task.id}"), style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

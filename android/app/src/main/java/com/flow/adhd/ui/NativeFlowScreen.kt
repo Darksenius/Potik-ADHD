@@ -128,8 +128,9 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                if (recoveryNotice) Surface(color = MaterialTheme.colorScheme.secondaryContainer) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Старі дані збережено в архів. Його можна експортувати в Налаштуваннях.", Modifier.weight(1f))
+                if (recoveryNotice && shellChromeVisible) Surface(color = MaterialTheme.colorScheme.secondaryContainer) { Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Старі дані — в архіві у Налаштуваннях.", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     TextButton(onClick = { recoveryPrefs.edit().putBoolean("notice", false).apply(); recoveryNotice = false }) { Text("Гаразд") }
                 } }
                 if (error != null) Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().testTag("native-save-error")) {

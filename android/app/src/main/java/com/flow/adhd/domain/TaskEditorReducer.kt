@@ -62,6 +62,9 @@ object TaskEditorReducer {
         validatePayload(payload)?.let { return rejected("invalid-field", it) }
         val quickDelay = payload.safeLong("quickReminderDelayMinutes")
         val hasQuickDelay = payload.containsKey("quickReminderDelayMinutes")
+        val quickDay = payload.string("quickReminderDay")
+        val hasQuickDay = payload.containsKey("quickReminderDay")
+        val quickCapture = payload.boolean("quickCapture") == true
         val clearQuickReminder = payload.boolean("clearQuickReminder") == true
         if (hasQuickDelay && (quickDelay == null || quickDelay <= 0L)) {
             return rejected("invalid-field", "Reminder delay must be a positive whole number")
@@ -69,8 +72,23 @@ object TaskEditorReducer {
         if (quickDelay != null && clearQuickReminder) {
             return rejected("invalid-field", "Choose a reminder delay or clear the reminder")
         }
-        if (quickDelay != null && type != "simple") {
+        if ((quickDelay != null || hasQuickDay || quickCapture) && clearQuickReminder) {
+            return rejected("invalid-field", "Choose a reminder or clear the reminder")
+        }
+        if (hasQuickDay && quickDay !in setOf("today", "tomorrow")) {
+            return rejected("invalid-field", "quickReminderDay must be today or tomorrow")
+        }
+        if (hasQuickDay && quickDelay != null) {
+            return rejected("invalid-field", "Choose a day or a reminder delay")
+        }
+        if (quickCapture && quickDelay == null && quickDay == null) {
+            return rejected("invalid-field", "Quick capture requires a day or reminder delay")
+        }
+        if ((quickDelay != null || hasQuickDay || quickCapture) && type != "simple") {
             return rejected("unsupported-reminder", "One-shot reminders are currently available for simple tasks")
+        }
+        if (quickDay != null && type == "sched") {
+            return rejected("unsupported-reminder", "Day reminders are not available for scheduled tasks")
         }
         return try {
             val isNew = create != null
@@ -121,6 +139,21 @@ object TaskEditorReducer {
             if (payload.containsKey("planDate")) {
                 val plan = payload["planDate"]?.stringOrNull()?.takeIf { it.isNotEmpty() }
                 if (plan == null) next.remove("planDate") else next["planDate"] = JsonPrimitive(plan)
+            }
+            val quickDeadline = when {
+                quickDay != null -> SimpleTaskTiming.dayReminderAt(quickDay, command.activityAt, zone)
+                    ?: return rejected("invalid-field", "Reminder deadline is outside the supported range")
+                quickDelay != null -> try { Math.addExact(command.activityAt, Math.multiplyExact(quickDelay, 60_000L)) }
+                    catch (_: ArithmeticException) { return rejected("invalid-field", "Reminder deadline is outside the supported range") }
+                else -> null
+            }
+            if (quickDeadline != null && quickDeadline > MAX_DATE_MILLIS) {
+                return rejected("invalid-field", "Reminder deadline is outside the supported range")
+            }
+            if (quickDay != null || quickCapture) {
+                val planned = quickDeadline?.let { SimpleTaskTiming.localDateKey(it, zone) }
+                    ?: return rejected("invalid-field", "Reminder date is outside the supported range")
+                next["planDate"] = JsonPrimitive(planned)
             }
             val planDate = next["planDate"].stringOrNull()
             if (type != oldType || planDate != priorPlanDate) next["snoozeUntil"] = JsonPrimitive(0)
@@ -237,13 +270,15 @@ object TaskEditorReducer {
                     next.remove("quickReminderAt")
                     next.remove("quickReminderFiredAt")
                 }
-                quickDelay != null -> {
-                    if (quickDelay <= 0L) return rejected("invalid-field", "Reminder delay must be positive")
-                    val deadline = try { Math.addExact(command.activityAt, Math.multiplyExact(quickDelay, 60_000L)) }
-                    catch (_: ArithmeticException) { return rejected("invalid-field", "Reminder deadline is outside the supported range") }
-                    if (deadline > MAX_DATE_MILLIS) return rejected("invalid-field", "Reminder deadline is outside the supported range")
-                    next["quickReminderAt"] = JsonPrimitive(deadline)
+                quickDeadline != null -> {
+                    next["quickReminderAt"] = JsonPrimitive(quickDeadline)
                     next.remove("quickReminderFiredAt")
+                    if (quickCapture) {
+                        next.remove("questDeferral")
+                        next.remove("completionDeferral")
+                        next["snoozeUntil"] = JsonPrimitive(0)
+                        next.remove("zoneOccurrenceKey")
+                    }
                 }
             }
 
@@ -284,7 +319,7 @@ object TaskEditorReducer {
         for (key in listOf("repeat", "schedDate", "schedTime", "windowStart", "windowEnd", "repeatUnit", "alarmTime", "note", "counterUnit")) {
             if (payload.containsKey(key) && payload[key] == JsonNull) return "$key must be a string"
         }
-        val booleanFields = listOf("reminderEnabled", "counterEnabled")
+        val booleanFields = listOf("reminderEnabled", "counterEnabled", "quickCapture")
         for (key in booleanFields) if (payload.containsKey(key) && payload[key].booleanValue() == null) return "$key must be a boolean"
         val numberFields = listOf("zoneId", "remindBeforeMinutes", "repeatInterval", "counterTarget", "counterStep", "negXp", "quickReminderDelayMinutes")
         for (key in numberFields) if (payload.containsKey(key) && payload[key] != JsonNull && payload[key].safeDouble() == null) return "$key must be a finite number"
@@ -292,6 +327,7 @@ object TaskEditorReducer {
             if (payload.containsKey(key) && payload[key] == JsonNull) return "$key must be a number"
         }
         if (payload.containsKey("clearQuickReminder") && payload["clearQuickReminder"].booleanValue() == null) return "clearQuickReminder must be a boolean"
+        if (payload.containsKey("quickReminderDay") && payload["quickReminderDay"].stringOrNull() == null) return "quickReminderDay must be a string"
         for (key in listOf("tags", "repeatDays", "items")) if (payload.containsKey(key) && payload[key] !is JsonArray) return "$key must be an array"
         (payload["tags"] as? JsonArray)?.forEach { if (it.stringOrNull() == null) return "tags entries must be strings" }
         (payload["repeatDays"] as? JsonArray)?.forEach { if (it.booleanValue() == null) return "repeatDays entries must be booleans" }

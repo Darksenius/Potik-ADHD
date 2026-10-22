@@ -100,6 +100,10 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
             Text("Мова: українська", style = MaterialTheme.typography.bodyMedium)
         } }
         item { SettingsGroup("notifications", "Сповіщення", "Дозволи й перевірка сигналів", group, { group = it }) {
+            NativeChoice("Тло сповіщення", prefs.text("notificationTheme").ifBlank { "system" },
+                listOf("system" to "Як у системі", "dark" to "Темне", "light" to "Світле"), enabled) {
+                preference("notificationTheme", JsonPrimitive(it))
+            }
             val allowed = remember(permissionRevision) { NotificationManagerCompat.from(context).areNotificationsEnabled() }
             Text(if (allowed) "Сповіщення дозволені" else "Сповіщення вимкнені в Android")
             if (Build.VERSION.SDK_INT >= 33 && !allowed) OutlinedButton(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Дозволити сповіщення") }

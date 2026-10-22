@@ -67,6 +67,21 @@ public class QuestPolicyTest {
         assertEquals(Arrays.asList("simple", "check", "counter", "note", "ctx"), ids(result.tasks));
     }
 
+    @Test public void futureSimpleQuickReminderIsExcludedUntilDueEvenWhenPinned() {
+        long due = NOW + 10 * 60_000L;
+        QuestPolicy.Task waiting = QuestPolicy.Task.builder("quick").priority(0).build();
+        waiting.quickReminderAt = due;
+        QuestPolicy.Task ordinary = QuestPolicy.Task.builder("ordinary").priority(1).build();
+
+        QuestPolicy.Selection before = QuestPolicy.select(Arrays.asList(waiting, ordinary), ordinaryTimeline(),
+                NOW + DAY, NOW, UTC, 5);
+        assertEquals(Collections.singletonList("ordinary"), ids(before.tasks));
+
+        QuestPolicy.Selection atDue = QuestPolicy.select(Arrays.asList(ordinary, waiting), ordinaryTimeline(),
+                NOW + DAY, due, UTC, 5);
+        assertEquals(Arrays.asList("quick", "ordinary"), ids(atDue.tasks));
+    }
+
     @Test public void scheduleAlarmAndTimeWindowGatesStillApplyWithoutDeferral() {
         QuestPolicy.Task futureSched = QuestPolicy.Task.builder("sched").sched("2026-10-15", "09:00").build();
         QuestPolicy.Task futureAlarm = QuestPolicy.Task.builder("alarm").alarm("23:59").build();
@@ -529,6 +544,20 @@ public class QuestPolicyTest {
                 Collections.singletonList(QuestPolicy.Event.skip("quick", NOW)), NOW, ordinaryTimeline(), UTC);
         assertEquals(0L, skipped.get(0).quickReminderAt);
         assertEquals(0L, skipped.get(0).quickReminderFiredAt);
+
+        QuestPolicy.Task freeSaved = QuestPolicy.Task.builder("quick-free")
+                .created("2026-10-14T00:00:00.000Z").build();
+        freeSaved.quickReminderAt = due;
+        freeSaved.quickReminderFiredAt = due - 120_000L;
+        QuestPolicy.Deferral notToday = QuestPolicy.deferNotToday(freeSaved, ordinaryTimeline(), NOW, UTC);
+        List<QuestPolicy.Task> notTodayProjection = QuestPolicy.projectPendingEvents(
+                Collections.singletonList(freeSaved),
+                Collections.singletonList(QuestPolicy.Event.defer("quick-free", NOW, notToday)),
+                NOW, ordinaryTimeline(), UTC);
+        assertEquals(0L, notTodayProjection.get(0).quickReminderAt);
+        assertEquals(0L, notTodayProjection.get(0).quickReminderFiredAt);
+        assertTrue(QuestPolicy.select(notTodayProjection, ordinaryTimeline(), NOW + DAY,
+                notToday.startAt, UTC, 5).tasks.contains(notTodayProjection.get(0)));
 
     }
 

@@ -87,6 +87,9 @@ object NotificationProjection {
         }
         return buildJsonObject {
             put("zone", zoneName); put("zoneColor", currentZone?.text("color")?.takeIf { it.isNotEmpty() } ?: if (currentZone == null) "#888" else "#4f8ef7")
+            state.objectValue("preferences")?.text("notificationTheme")
+                ?.takeIf { it == "dark" || it == "light" }
+                ?.let { put("notificationTheme", it) }
             put("zoneTimeline", JsonArray(ranges.map(::zoneRow))); put("zoneBaseline", JsonArray(ranges.filterNot { it.planned }.map(::zoneRow)))
             put("zoneTasksById", JsonObject(top.filter { (id(it, "zoneId") ?: 0) != 0L }.groupBy { id(it, "zoneId").toString() }
                 .mapValues { (_, values) -> JsonArray(values.map { JsonPrimitive(it.text("title")!!) }) }))

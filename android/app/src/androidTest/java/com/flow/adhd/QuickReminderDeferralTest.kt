@@ -1,13 +1,12 @@
 package com.flow.adhd
 
 import android.Manifest
-import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
-import android.view.View
 import androidx.test.platform.app.InstrumentationRegistry
 import com.flow.adhd.data.CommandCommit
+import com.flow.adhd.domain.QuestDeferralKind
 import com.flow.adhd.domain.FlowCommand
 import com.flow.adhd.domain.SnapshotRead
 import java.util.UUID
@@ -20,12 +19,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
-/** Real task-panel defer and notification Undo against the isolated native Room store. */
+/** Future captures remain outside the task panel; app deferral and receipt-based Undo share the Room owner. */
 class QuickReminderDeferralTest {
     @Test
     fun notTodayClearsQuickReminderAndUndoRestoresItsDeadline() = runBlocking {
@@ -58,23 +56,13 @@ class QuickReminderDeferralTest {
             val deadline = task.raw.getValue("quickReminderAt").toString().toLong()
             assertEquals("simple", task.type)
 
-            val pinned = app.nativeRuntime.submit(FlowCommand.SetPriority(
-                0, task.id, "pin-quick-reminder-$suffix", System.currentTimeMillis(),
-            )).await()
-            assertTrue("The fixture must be pinned so the real panel can reach it", pinned is CommandCommit.Committed)
             FlowNotifService.start(context)
-
-            var panel = awaitPanel(manager) { task.id.toString() in it.ids }
-            repeat(panel.ids.size) {
-                if (panel.selectedId != task.id.toString()) {
-                    val priorSelection = panel.selectedId
-                    clickPanelAction(context, panel.status.notification.bigContentView, R.id.panel_next)
-                    panel = awaitPanel(manager) { it.selectedId != priorSelection }
-                }
-            }
-            assertEquals("The test must select its pinned fixture through the real panel", task.id.toString(), panel.selectedId)
-
-            clickPanelAction(context, panel.status.notification.bigContentView, R.id.panel_not_today)
+            val deferredAt = System.currentTimeMillis()
+            val result = app.nativeRuntime.submit(FlowCommand.DeferTask(
+                task.id, QuestDeferralKind.NOT_TODAY, deferredAt, null,
+                "defer-quick-reminder-$suffix", deferredAt,
+            )).await()
+            assertTrue("Deferring a future task from the app must durably commit", result is CommandCommit.Committed)
             var deferred = awaitStore(database) { stored ->
                 taskById(stored.state, task.id)?.optJSONObject("questDeferral")?.optString("kind") == "not-today"
             }
@@ -83,8 +71,11 @@ class QuickReminderDeferralTest {
             assertFalse("Not Today must remove its fired marker", deferredTask.has("quickReminderFiredAt"))
             assertFalse("A deferred task must have no scheduled alarm row", schedRows(deferred.notification).any { idText(it) == task.id.toString() })
 
-            val undoAction = awaitUndoAction(manager)
-            undoAction.actionIntent.send(context, 0, null)
+            val receipt = requireNotNull((result as CommandCommit.Committed).undoReceipt)
+            val undone = app.nativeRuntime.submit(FlowCommand.UndoTask(
+                task.id, "undo-future-reminder-$suffix", System.currentTimeMillis(), receipt = receipt,
+            )).await()
+            assertTrue("App Undo must durably restore the pending deadline", undone is CommandCommit.Committed)
             val restored = awaitStore(database) { stored ->
                 taskById(stored.state, task.id)?.optLong("quickReminderAt", 0L) == deadline &&
                     schedRows(stored.notification).any { idText(it) == task.id.toString() && it.optBoolean("quickReminder", false) }
@@ -107,43 +98,6 @@ class QuickReminderDeferralTest {
                 manager.cancel(FlowNotifService.NOTIF_ID)
             }
         }
-    }
-
-    private fun clickPanelAction(context: Context, remoteViews: android.widget.RemoteViews?, viewId: Int) {
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            assertNotNull("The task panel must include expanded RemoteViews", remoteViews)
-            val applied = requireNotNull(remoteViews).apply(context, null)
-            val target = applied.findViewById<View>(viewId)
-            assertNotNull("The panel action must exist", target)
-            assertTrue("The actual RemoteViews action must invoke its PendingIntent", requireNotNull(target).performClick())
-        }
-    }
-
-    private fun awaitPanel(manager: NotificationManager, predicate: (Panel) -> Boolean): Panel {
-        val deadline = android.os.SystemClock.elapsedRealtime() + 30_000L
-        while (android.os.SystemClock.elapsedRealtime() < deadline) {
-            val status = manager.activeNotifications.firstOrNull { it.id == FlowNotifService.NOTIF_ID }
-            val extras = status?.notification?.extras
-            val ids = extras?.getStringArray("flow_panel_ids")?.toList()
-            val selectedId = extras?.getString("flow_panel_task_id")
-            if (status != null && ids != null && selectedId != null) {
-                val panel = Panel(status, ids, selectedId)
-                if (predicate(panel)) return panel
-            }
-            android.os.SystemClock.sleep(100L)
-        }
-        throw AssertionError("The real task panel did not reach the expected fixture state")
-    }
-
-    private fun awaitUndoAction(manager: NotificationManager): Notification.Action {
-        val deadline = android.os.SystemClock.elapsedRealtime() + 30_000L
-        while (android.os.SystemClock.elapsedRealtime() < deadline) {
-            val action = manager.activeNotifications.firstOrNull { it.id == FlowNotifService.NOTIF_ID }
-                ?.notification?.actions?.firstOrNull { it.title?.toString() == "Скасувати" }
-            if (action != null) return action
-            android.os.SystemClock.sleep(100L)
-        }
-        throw AssertionError("The notification must expose the real Undo action")
     }
 
     private fun awaitStore(database: FlowDatabase, predicate: (Store) -> Boolean): Store {
@@ -176,6 +130,5 @@ class QuickReminderDeferralTest {
         return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
     }
 
-    private data class Panel(val status: android.service.notification.StatusBarNotification, val ids: List<String>, val selectedId: String)
     private data class Store(val state: JSONObject, val notification: JSONObject)
 }

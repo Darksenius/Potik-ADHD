@@ -8,6 +8,7 @@ import android.view.ContextThemeWrapper
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -46,12 +48,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.flow.adhd.domain.FlowSnapshot
+import com.flow.adhd.domain.SimpleTaskTiming
 import com.flow.adhd.domain.TaskTitleSchedule
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -59,6 +63,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -101,6 +106,47 @@ fun NativeTaskEditor(
     }
     val existing = snapshot.tasks.firstOrNull { it.id == taskId }
     val seed = remember(taskId) { existing?.raw ?: newEditorSeed(snapshot.data.editorText("taskEditorDraft").orEmpty()) }
+    val draftValues = runCatching {
+        (Json.parseToJsonElement(snapshot.data.editorText("taskEditorDraft").orEmpty()) as? JsonObject)?.get("values") as? JsonObject
+    }.getOrNull()
+    val savedMode = draftValues?.editorText("editorMode").takeIf { taskId == null }
+    val seedHasReminder = seed.editorNumberText("quickReminderAt", "").toLongOrNull()?.let { it > 0L } == true
+    val seedHasPlannedDate = seed.editorText("planDate").orEmpty().isNotBlank()
+    val seedHasNonSimpleFields = seed.editorText("schedTime").orEmpty().isNotBlank() || seed.editorText("alarmTime").orEmpty().isNotBlank() ||
+        seed.editorText("windowStart")?.let { it != "07:00" } == true || seed.editorText("windowEnd")?.let { it != "09:00" } == true ||
+        seed.editorNumberText("repeatInterval", "30") != "30" || seed.editorText("repeatUnit")?.let { it != "min" } == true ||
+        seed.editorNumberText("counterTarget", "0") != "0" || seed.editorNumberText("counterStep", "1") != "1" ||
+        seed.editorText("counterUnit")?.let { it != "count" } == true || seed.editorNumberText("negXp", "5") != "5" ||
+        seed.editorNumberText("remindBeforeMinutes", "0") != "0"
+    val seedHasTags = listOf("tags", "ctxTags").any { key ->
+        (seed[key] as? JsonArray).orEmpty().any { value ->
+            (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.isNotBlank() == true
+        }
+    }
+    val seedIsPlainSimple = (seed.editorText("type") == null || seed.editorText("type") == "simple") &&
+        seed.editorText("note").orEmpty().isBlank() && seed.editorText("folderId").orEmpty().isBlank() &&
+        seed.editorNumberText("zoneId", "").isBlank() && !seedHasTags && (seed.editorText("repeat") ?: "none") == "none" &&
+        !seed.editorBoolean("counterEnabled", false) && seed.editorText("checklistDraft").orEmpty().isBlank() &&
+        (seed["items"] as? JsonArray).orEmpty().isEmpty() && !seedHasNonSimpleFields &&
+        (!seedHasPlannedDate || seedHasReminder)
+    val initialSimpleMode = savedMode?.let { it == "simple" && seedIsPlainSimple }
+        ?: (taskId == null && !checklistDefinition && allowQuickReminder && seedIsPlainSimple && seed.editorText("type") == null)
+    var simpleMode by rememberSaveable(taskId) { mutableStateOf(initialSimpleMode) }
+    var complexModeVisited by rememberSaveable(taskId) { mutableStateOf(!initialSimpleMode) }
+    var simpleTimingChoice by rememberSaveable(taskId) {
+        mutableStateOf(if (taskId == null) draftValues?.editorText("simpleTimingChoice") ?: "delay" else "keep")
+    }
+    var simpleDelayIndex by rememberSaveable(taskId) {
+        mutableStateOf(if (taskId == null) draftValues?.editorNumberText("simpleDelayIndex", "0")?.toIntOrNull()?.coerceIn(0, 5) ?: 0 else 0)
+    }
+    val delayChoices = SimpleTaskTiming.delayMinutes.map { it.toInt() }
+    var previewNow by rememberSaveable(taskId) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(simpleMode) {
+        while (simpleMode) {
+            previewNow = System.currentTimeMillis()
+            delay(60_000)
+        }
+    }
     var title by rememberSaveable(taskId) { mutableStateOf(seed.editorText("title").orEmpty()) }
     var type by rememberSaveable(taskId) { mutableStateOf(seed.editorText("type") ?: "simple") }
     var zoneId by rememberSaveable(taskId) { mutableStateOf(seed.editorNumberText("zoneId", "")) }
@@ -148,6 +194,26 @@ fun NativeTaskEditor(
         folder.editorText("id")?.let { EditorChoice(it, folder.editorText("nm") ?: "Без назви") }
     }
     val storedItems = existing?.raw?.get("items") as? JsonArray
+    val existingQuickReminder = existing?.raw?.editorNumberText("quickReminderAt", "")?.toLongOrNull()?.let { it > 0L } == true
+    val savedReminderDateCanStaySimple = existing != null && existingQuickReminder && date == seededDate
+    val existingHasOtherFields = existing?.raw?.let { raw ->
+        val rawType = raw.editorText("type") ?: "simple"
+        raw["items"]?.let { it != JsonNull && (it as? JsonArray)?.isNotEmpty() == true } == true ||
+            listOf("schedDate", "schedTime", "alarmTime").any { raw.editorText(it).orEmpty().isNotBlank() } ||
+            raw.editorText("windowStart")?.let { it != "07:00" } == true || raw.editorText("windowEnd")?.let { it != "09:00" } == true ||
+            raw.editorNumberText("negXp", "5") != "5" || raw.editorNumberText("repeatInterval", "30") != "30" ||
+            raw.editorText("repeatUnit")?.let { it != "min" } == true || raw.editorNumberText("counterTarget", "0") !in setOf("0", "10") ||
+            raw.editorNumberText("counterStep", "1") != "1" || raw.editorText("counterUnit")?.let { it != "count" } == true ||
+            rawType != "simple" && (raw["reminderEnabled"] != null || raw["remindBeforeMinutes"] != null) ||
+            raw.editorNumberText("remindBeforeMinutes", "0") != "0"
+    } == true
+    val simpleModeAllowed = allowQuickReminder && !checklistDefinition && type == "simple" && note.isBlank() && zoneId.isBlank() && folderId.isBlank() &&
+        tags.isBlank() && contextTags.isBlank() && repeat == "none" && repeatMask == 0 && !counterEnabled && quickReminderChoice == null &&
+        checklist.isBlank() && storedItems.orEmpty().isEmpty() && !existingHasOtherFields &&
+        (date.isBlank() || savedReminderDateCanStaySimple)
+    LaunchedEffect(simpleModeAllowed) {
+        if (!simpleModeAllowed) simpleMode = false
+    }
     val localZone = ZoneId.systemDefault()
     val scheduled = type == "sched"
     val hasCounter = type != "negative" && (type == "counter" || counterEnabled)
@@ -172,6 +238,8 @@ fun NativeTaskEditor(
             put("repeatInterval", repeatInterval); put("repeatUnit", repeatUnit); put("counterEnabled", counterEnabled); put("counterTarget", counterTarget); put("counterStep", counterStep); put("counterUnit", counterUnit)
             put("negXp", negativeXp); put("reminderEnabled", reminderEnabled); put("remindBeforeMinutes", reminderAdvance); put("checklistDraft", checklist)
             quickReminderChoice?.let { put("quickReminderChoice", it) }
+            put("editorMode", if (simpleMode) "simple" else "complex")
+            put("simpleTimingChoice", simpleTimingChoice); put("simpleDelayIndex", simpleDelayIndex)
             put("tags", JsonArray(tags.split(',').map { JsonPrimitive(it.trim()) })); put("ctxTags", JsonArray(contextTags.split(',').map { JsonPrimitive(it.trim()) }))
         })
     }.toString()
@@ -182,6 +250,70 @@ fun NativeTaskEditor(
         val titleResult = TaskTitleSchedule.parse(title)
         val parsedTitle = (titleResult as? TaskTitleSchedule.Result.Valid)?.value
         val markerTime = parsedTitle?.time
+        if (simpleMode && simpleModeAllowed && markerTime == null && postponeMinutes == null && !tomorrow) {
+            val problem = when {
+                unavailable -> "Цієї задачі вже немає. Закрий редактор і онови список."
+                titleResult == TaskTitleSchedule.Result.InvalidTime -> "Час у позначці має бути від 00:00 до 23:59. Наприклад: ///12:40///."
+                titleResult == TaskTitleSchedule.Result.EmptyTitle -> "Напиши, що потрібно зробити."
+                else -> null
+            }
+            if (problem != null) { error = problem; return }
+            val payload = (existing?.raw ?: JsonObject(emptyMap())).toMutableMap().apply {
+                put("title", JsonPrimitive(parsedTitle?.title ?: title.trim()))
+                if (existing == null && !complexModeVisited) {
+                    put("type", JsonPrimitive("simple")); put("planDate", JsonNull); put("zoneId", JsonNull); put("folderId", JsonNull)
+                    put("note", JsonPrimitive("")); put("repeat", JsonPrimitive("none")); put("counterEnabled", JsonPrimitive(false))
+                    put("tags", JsonArray(emptyList()))
+                }
+                if (complexModeVisited) {
+                    put("type", JsonPrimitive(type)); put("zoneId", zoneId.toLongOrNull()?.let(::JsonPrimitive) ?: JsonNull)
+                    put("folderId", folderId.takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+                    if (date.isNotEmpty() || existing?.raw?.get("planDate") != null) {
+                        put("planDate", date.takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+                    }
+                    put("note", JsonPrimitive(note)); put("repeat", JsonPrimitive(repeat))
+                    put("repeatDays", JsonArray(List(7) { JsonPrimitive(repeatMask and (1 shl it) != 0) }))
+                    put("tags", JsonArray(tags.split(',').mapNotNull { it.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) }))
+                    if (type == "ctx") put("ctxTags", JsonArray(contextTags.split(',').mapNotNull { it.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) }))
+                    put("counterEnabled", JsonPrimitive(type == "counter" || counterEnabled))
+                    if (type == "counter" || counterEnabled) {
+                        counterStep.toLongOrNull()?.let { put("counterStep", JsonPrimitive(it)) }
+                        counterTarget.toLongOrNull()?.let { put("counterTarget", JsonPrimitive(it)) }
+                        put("counterUnit", JsonPrimitive(counterUnit))
+                    }
+                    if (repeat == "interval") {
+                        repeatInterval.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }?.let { put("repeatInterval", JsonPrimitive(it)) }
+                        put("repeatUnit", JsonPrimitive(repeatUnit))
+                    }
+                    if (type == "sched") {
+                        put("schedDate", JsonPrimitive(date)); put("schedTime", JsonPrimitive(time))
+                        put("reminderEnabled", JsonPrimitive(reminderEnabled)); reminderAdvance.toLongOrNull()?.let { put("remindBeforeMinutes", JsonPrimitive(it)) }
+                    }
+                    if (type == "alarm") put("alarmTime", JsonPrimitive(alarmTime))
+                    if (type == "timewin") { put("windowStart", JsonPrimitive(windowStart)); put("windowEnd", JsonPrimitive(windowEnd)) }
+                    if (type == "negative") negativeXp.toLongOrNull()?.let { put("negXp", JsonPrimitive(it)) }
+                    if (type == "check" && checklistDefinition) put("items", JsonArray(checklist.lineSequence().mapNotNull { line ->
+                        line.trim().takeIf(String::isNotEmpty)?.let { text -> buildJsonObject { put("text", text); put("done", false); put("credited", false) } }
+                    }.toList()))
+                }
+                if (allowQuickReminder && simpleTimingChoice != "keep") {
+                    put("quickCapture", JsonPrimitive(true))
+                    when (simpleTimingChoice) {
+                        "today", "tomorrow" -> {
+                            put("quickReminderDay", JsonPrimitive(simpleTimingChoice))
+                            remove("quickReminderDelayMinutes")
+                        }
+                        "delay" -> {
+                            put("quickReminderDelayMinutes", JsonPrimitive(delayChoices[simpleDelayIndex]))
+                            remove("quickReminderDay")
+                        }
+                    }
+                }
+            }
+            error = ""
+            onSave(JsonObject(payload))
+            return
+        }
         val saveType = if (markerTime != null) "sched" else type
         val saveTime = markerTime ?: time.trim()
         val explicitDateAvailable = dateExplicit && date.isNotBlank()
@@ -267,18 +399,92 @@ fun NativeTaskEditor(
         else onSave(JsonObject(payload))
     }
 
-    Column(modifier.fillMaxSize().imePadding().testTag("native-task-editor")) {
+    BoxWithConstraints(modifier.fillMaxSize().imePadding()) {
+    val compactAuthoring = maxHeight < 280.dp
+    Column(Modifier.fillMaxSize().testTag("native-task-editor")) {
+        if (!compactAuthoring) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-editor-close")) { Text("Назад") }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(if (taskId == null) "Нова задача" else "Редагування задачі", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
             }
         }
+        if (allowQuickReminder && !checklistDefinition) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = simpleMode, onClick = {
+                if (simpleModeAllowed) { simpleMode = true; error = "" }
+                else error = "Для цих параметрів потрібна складена задача."
+            }, enabled = enabled, label = { Text("Проста") }, modifier = Modifier.testTag("native-task-mode-simple"))
+            FilterChip(selected = !simpleMode, onClick = { simpleMode = false; complexModeVisited = true; error = "" }, enabled = enabled, label = { Text("Складена") }, modifier = Modifier.testTag("native-task-mode-complex"))
+        }
+        if (!simpleModeAllowed) Text("Для цих параметрів потрібна складена задача.", Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         HorizontalDivider()
+        }
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("native-task-editor-body"),
-            contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(if (compactAuthoring) 8.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (simpleMode) {
+                item {
+                    EditorInput("Що потрібно зробити?", title, { title = it; error = "" }, "native-task-title", enabled, minLines = 1, maxLines = 2)
+                }
+                item {
+                    val today = LocalDate.now(localZone)
+                    val todayFive = today.atTime(5, 0).atZone(localZone).toInstant().toEpochMilli()
+                    val todayAt = SimpleTaskTiming.dayReminderAt("today", previewNow, localZone)
+                    val tomorrowAt = SimpleTaskTiming.dayReminderAt("tomorrow", previewNow, localZone)
+                    val markerTime = (TaskTitleSchedule.parse(title) as? TaskTitleSchedule.Result.Valid)?.value?.time
+                    val markerDate = markerTime?.let { TaskTitleSchedule.defaultDate(it, previewNow, localZone) }
+                    val markerPreview = markerTime?.let { time ->
+                        val day = markerDate?.let(::editorDate)?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("uk")))
+                        "$day, $time"
+                    }
+                    val quickTimingEnabled = enabled && markerTime == null
+                    val selectedAt = when (simpleTimingChoice) {
+                        "today" -> todayAt
+                        "tomorrow" -> tomorrowAt
+                        "delay" -> previewNow + delayChoices[simpleDelayIndex] * 60_000L
+                        else -> null
+                    }
+                    val formattedAt = selectedAt?.let { java.time.Instant.ofEpochMilli(it).atZone(localZone).format(java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm", Locale.forLanguageTag("uk"))) }
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = simpleTimingChoice == "today", onClick = { simpleTimingChoice = "today"; error = "" }, enabled = quickTimingEnabled,
+                                label = { Text(if (previewNow < todayFive) "Сьогодні · 05:00" else "Сьогодні") }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-quick-today"))
+                            FilterChip(selected = simpleTimingChoice == "tomorrow", onClick = { simpleTimingChoice = "tomorrow"; error = "" }, enabled = quickTimingEnabled,
+                                label = { Text("Завтра · 05:00") }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-quick-tomorrow"))
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            FilterChip(selected = simpleTimingChoice == "delay", onClick = { simpleTimingChoice = "delay"; error = "" }, enabled = quickTimingEnabled,
+                                label = { Text("Через ${delayChoices[simpleDelayIndex]} хв") }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-quick-delay"))
+                            OutlinedButton(onClick = {
+                                if (simpleTimingChoice == "delay") {
+                                    val next = SimpleTaskTiming.nextDelayMinutes(delayChoices[simpleDelayIndex].toLong()).toInt()
+                                    simpleDelayIndex = delayChoices.indexOf(next).coerceAtLeast(0)
+                                }
+                                simpleTimingChoice = "delay"; error = ""
+                            }, enabled = quickTimingEnabled, modifier = Modifier.width(56.dp).heightIn(min = 48.dp).semantics { contentDescription = "Збільшити затримку нагадування" }.testTag("native-task-quick-delay-more")) { Text("+") }
+                        }
+                        if (markerPreview != null) Text("Заплановано на $markerPreview", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("native-task-quick-preview"))
+                        else if (formattedAt != null) Text("Нагадати $formattedAt", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("native-task-quick-preview"))
+                        else if (taskId != null && simpleTimingChoice == "keep") {
+                            val savedAt = existing?.raw?.editorNumberText("quickReminderAt", "")?.toLongOrNull()
+                            val firedAt = existing?.raw?.editorNumberText("quickReminderFiredAt", "")?.toLongOrNull()
+                            val summary = savedAt?.takeIf { it > 0L }?.let { instant ->
+                                if (firedAt == instant) "Нагадування вже надіслано" else runCatching {
+                                    "Нагадування заплановано на " + java.time.Instant.ofEpochMilli(instant).atZone(localZone)
+                                        .format(java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm", Locale.forLanguageTag("uk")))
+                                }.getOrNull()
+                            }
+                            Text(summary ?: "Поточне нагадування збережеться, якщо воно є.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            } else {
             item {
                 EditorInput("Що потрібно зробити?", title, { title = it; error = "" }, "native-task-title", enabled, minLines = 1, maxLines = 2)
                 Text("Нагадати о 12:40: ///12:40///", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -438,10 +644,11 @@ fun NativeTaskEditor(
                 item { EditorInput("Мітки через кому", tags, { tags = it; error = "" }, "native-task-tags", enabled) }
                 if (type == "ctx") item { EditorInput("Контекстні мітки через кому", contextTags, { contextTags = it; error = "" }, "native-task-context-tags", enabled) }
             }
+            }
         }
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (taskId != null && onSnooze != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!compactAuthoring && !simpleMode && taskId != null && onSnooze != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TextButton(onClick = { save(15) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("+15 хв") }
                 TextButton(onClick = { save(60) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("+1 год") }
                 TextButton(onClick = { save(tomorrow = true) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("Завтра") }
@@ -449,11 +656,16 @@ fun NativeTaskEditor(
             val message = if (unavailable) "Цієї задачі вже немає. Закрий редактор і онови список." else error
             if (message.isNotEmpty()) Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }.testTag("native-task-editor-error"),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (compactAuthoring) TextButton(onClick = onClose, enabled = !busy,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("native-task-editor-close")) { Text("Назад") }
             Button(onClick = { save() }, enabled = enabled && catalog?.types?.isNotEmpty() == true, shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("native-task-save")) {
-                Text(if (busy) "Зберігаю…" else if (taskId == null) "Створити задачу" else "Зберегти зміни")
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("native-task-save")) {
+                Text(if (busy) "Зберігаю…" else if (simpleMode || compactAuthoring) { if (taskId == null) "Створити" else "Зберегти" } else if (taskId == null) "Створити задачу" else "Зберегти зміни")
+            }
             }
         }
+    }
     }
 }
 

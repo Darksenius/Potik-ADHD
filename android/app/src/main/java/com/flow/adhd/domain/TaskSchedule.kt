@@ -148,6 +148,7 @@ object TaskSchedule {
     fun available(task: JsonObject, context: ProjectionContext): Boolean {
         if (task.bool("trashed") || task.bool("someday")) return false
         if (task.bool("done")) return true
+        if (task.string("type") == "simple" && task.long("quickReminderAt")?.let { it > context.now } == true) return false
         val today = formatDay(context.now, context.zone) ?: return false
         if (planDate(task)?.let { it > today } == true) return false
         if (task.number("snoozeUntil")?.let { it > context.now.toDouble() } == true) return false

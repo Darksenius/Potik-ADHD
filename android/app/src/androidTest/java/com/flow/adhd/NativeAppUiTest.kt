@@ -26,6 +26,7 @@ class NativeAppUiTest {
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             scenario.onActivity { assertFalse("Native hierarchy contains a WebView", containsWebView(it.window.decorView)) }
             compose.onNodeWithTag("native-task-create").performClick()
+            compose.onNodeWithTag("native-task-mode-complex").performClick()
             compose.onNodeWithTag("native-task-title").performTextReplacement(title)
             compose.onNodeWithTag("native-task-editor-body").performScrollToNode(hasTestTag("native-task-note"))
             compose.onNodeWithTag("native-task-note").performTextInput("A saved note without JavaScript")
@@ -170,7 +171,10 @@ class NativeAppUiTest {
             compose.onNodeWithTag("native-nav-more").performClick()
             compose.onNodeWithTag("native-more").performScrollToNode(hasText("Пресети дня"))
             compose.onNodeWithText("Пресети дня", useUnmergedTree = true).performClick()
-            compose.onNodeWithTag("native-preset-create").performClick()
+            compose.waitUntil(10_000) {
+                runCatching { compose.onNodeWithTag("native-preset-create").assertIsEnabled(); true }.getOrDefault(false)
+            }
+            compose.onNodeWithTag("native-preset-create").assertIsEnabled().performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-nav-more").fetchSemanticsNodes().isEmpty() }
             compose.onNodeWithTag("native-preset-name").performTextInput(name)
             androidx.test.espresso.Espresso.closeSoftKeyboard()
@@ -216,6 +220,7 @@ class NativeAppUiTest {
         ActivityScenario.launch(NativeFlowActivity::class.java).use { scenario ->
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-task-create").performClick()
+            compose.onNodeWithTag("native-task-mode-complex").performClick()
             compose.onNodeWithTag("native-task-title").performTextReplacement(title)
             compose.onNodeWithTag("native-task-editor-body").performScrollToNode(hasTestTag("native-task-note"))
             compose.onNodeWithTag("native-task-note").performTextReplacement("Нотатка незбереженого редактора")

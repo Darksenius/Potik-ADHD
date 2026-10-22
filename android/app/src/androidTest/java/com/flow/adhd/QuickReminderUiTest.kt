@@ -6,6 +6,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import com.flow.adhd.domain.QuestPolicy
+import com.flow.adhd.domain.SimpleTaskTiming
 import com.flow.adhd.domain.SnapshotRead
 import com.flow.adhd.domain.ZoneCalendar
 import java.time.ZoneId
@@ -26,7 +27,7 @@ class QuickReminderUiTest {
     @get:Rule val compose = createEmptyComposeRule()
 
     @Test
-    fun simpleTaskOneHourReminderSurvivesTitleEditAndClearsOnExplicitOptOut() {
+    fun simpleCaptureDelayReminderSurvivesTitleEditAndClearsOnExplicitOptOut() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assumeTrue(BuildConfig.NATIVE_RUNTIME && context.packageName.endsWith(".native"))
         val app = AppContainer.get(context)
@@ -37,12 +38,16 @@ class QuickReminderUiTest {
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("native-task-create").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("native-task-create").performClick()
             compose.onNodeWithTag("native-task-title").performTextReplacement(title)
-            parentLazyScrollToNode("native-task-editor-body", "native-task-quick-reminder-hour")
-            compose.onNodeWithTag("native-task-quick-reminder-hour").assertIsDisplayed().performClick()
-            savedAt = System.currentTimeMillis()
+            parentLazyScrollToNode("native-task-editor-body", "native-task-quick-delay")
             Espresso.closeSoftKeyboard()
             compose.waitForIdle()
-            compose.onNodeWithTag("native-task-save").assertIsDisplayed().assertIsEnabled().performClick()
+            compose.onNodeWithTag("native-task-quick-delay").assertIsDisplayed().assertTextContains("Через 10 хв", substring = true)
+            parentLazyScrollToNode("native-task-editor-body", "native-task-title")
+            compose.onNodeWithTag("native-task-title").performClick()
+            compose.onNodeWithTag("native-task-save").assertIsDisplayed().assertIsEnabled()
+            savedAt = System.currentTimeMillis()
+            compose.waitForIdle()
+            compose.onNodeWithTag("native-task-save").performClick()
 
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("native-task-editor").fetchSemanticsNodes().isEmpty() }
             compose.waitUntil(10_000) {
@@ -53,9 +58,10 @@ class QuickReminderUiTest {
             var task = runBlocking { (app.commandRepository.read() as SnapshotRead.Ready).snapshot.tasks.first { it.title == title } }
             val firstDeadline = (task.raw["quickReminderAt"] as JsonPrimitive).content.toLong()
             assertEquals("simple", task.type)
-            assertTrue("The deadline must be based on the save action", firstDeadline - savedAt in 3_590_000L..3_610_000L)
-            assertFalse("A simple reminder must not add a planned date", task.raw.containsKey("planDate"))
-            assertTrue("A quick reminder does not defer an otherwise available task", isEligible(task.raw, app))
+            assertTrue("The deadline must be based on the save action", firstDeadline - savedAt in 590_000L..610_000L)
+            val expectedPlanDate = requireNotNull(SimpleTaskTiming.localDateKey(firstDeadline, ZoneId.systemDefault()))
+            assertEquals("A quick capture plans the reminder's local date", JsonPrimitive(expectedPlanDate), task.raw["planDate"])
+            assertFalse("A fresh quick capture defers attention until its reminder", isEligible(task.raw, app))
 
             val editTag = "native-task-edit-${task.id}"
             parentLazyScrollToNode("native-tasks", "native-task-actions-${task.id}")

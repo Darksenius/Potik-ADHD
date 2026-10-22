@@ -44,6 +44,21 @@ class PreferencesReducerTest {
         assertTrue(invalidTheme is FlowCommandResult.Rejected)
     }
 
+    @Test
+    fun notificationThemeIsPersistedAsAValidatedPreferenceWithoutChangingAppTheme() {
+        val input = FlowSnapshot.parse("""{"tasks":[],"theme":"dark","preferences":{"themeMode":"system"}}""")
+        val updated = PreferencesReducer.reduce(input, FlowCommand.SetPreferences(
+            JsonObject(mapOf("notificationTheme" to j("light"))), "notification-theme", 5,
+        )) as FlowCommandResult.Applied
+        assertEquals("light", updated.snapshot.data["preferences"]!!.jsonObject["notificationTheme"]!!.jsonPrimitive.content)
+        assertEquals("dark", updated.snapshot.data["theme"]!!.jsonPrimitive.content)
+        assertTrue(updated.events.isEmpty())
+        val invalid = PreferencesReducer.reduce(input, FlowCommand.SetPreferences(
+            JsonObject(mapOf("notificationTheme" to j("sepia"))), "bad-notification-theme", 6,
+        ))
+        assertTrue(invalid is FlowCommandResult.Rejected)
+    }
+
     private fun j(value: String) = kotlinx.serialization.json.JsonPrimitive(value)
     private fun j(value: Boolean) = kotlinx.serialization.json.JsonPrimitive(value)
 }

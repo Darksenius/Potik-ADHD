@@ -11,6 +11,15 @@ class NotificationProjectionTest {
     private val utc = ZoneId.of("UTC")
     private val now = epoch("2026-10-16T10:00:00Z")
 
+    @Test fun notificationThemePreferenceIsProjectedWithSystemFallback() {
+        val default = NotificationProjection.build(FlowSnapshot.parse("""{"tasks":[]}"""), now, utc)
+        assertFalse(default.containsKey("notificationTheme")) // The service interprets absence as system to preserve the legacy projection shape.
+        val system = NotificationProjection.build(FlowSnapshot.parse("""{"tasks":[],"preferences":{"notificationTheme":"system"}}"""), now, utc)
+        assertFalse(system.containsKey("notificationTheme"))
+        val dark = NotificationProjection.build(FlowSnapshot.parse("""{"tasks":[],"preferences":{"notificationTheme":"dark"}}"""), now, utc)
+        assertEquals("dark", dark.text("notificationTheme"))
+    }
+
     @Test fun fiveQuestsKeepPriorityOrderAndFullTaskDataWhileJournalHasNoDoneAction() {
         val result = NotificationProjection.build(FlowSnapshot.parse("""{
           "tasks":[

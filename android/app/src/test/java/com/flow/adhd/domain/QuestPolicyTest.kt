@@ -122,6 +122,22 @@ class QuestPolicyTest {
         assertEquals(start, result.availableAt)
     }
 
+    @Test fun futureQuickReminderStaysVisibleButIsIneligibleUntilDeadline() {
+        val due = epoch("2026-10-16T10:30:00Z")
+        val task = json("""{"id":70,"type":"simple","repeat":"none","quickReminderAt":$due}""")
+        val before = QuestPolicy.Context(due - 1, listOf(TimelineSegment(0, due - 60_000, due + 60_000)), zones, zone = utc)
+        val waiting = QuestPolicy.availability(task, before)
+        assertFalse(waiting.eligible)
+        assertEquals("quick-reminder", waiting.reason)
+        assertEquals(due, waiting.availableAt)
+        assertTrue(QuestPolicy.select(listOf(task), before).isEmpty())
+        assertEquals(task, TaskOrder.rank(listOf(task), before).single())
+
+        val atDue = before.copy(now = due)
+        assertTrue(QuestPolicy.availability(task, atDue).eligible)
+        assertEquals(70.0, QuestPolicy.select(listOf(task), atDue).single().number("id"))
+    }
+
     private fun json(raw: String): JsonObject = Json.parseToJsonElement(raw) as JsonObject
     private fun epoch(text: String): Long = Instant.parse(text).toEpochMilli()
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.content

@@ -52,12 +52,19 @@ class TaskScheduleTest {
         val before = ProjectionContext(due - 1, emptyList(), kyiv)
         val after = ProjectionContext(due, emptyList(), kyiv)
         assertEquals(due, TaskSchedule.nextReminderAt(task, before))
-        assertFalse("The explicit one-off reminder does not alter normal quest availability", TaskSchedule.available(task, before))
+        assertFalse("The future plan date keeps the task unavailable", TaskSchedule.available(task, before))
         assertEquals("An overdue reminder remains pending until its exact receipt is committed", due,
             TaskSchedule.nextReminderAt(task, ProjectionContext(due + 1, emptyList(), kyiv)))
         assertNull(TaskSchedule.nextReminderAt(JsonObject(task + ("quickReminderFiredAt" to kotlinx.serialization.json.JsonPrimitive(due))), after))
         assertNull(TaskSchedule.nextReminderAt(JsonObject(task + ("done" to kotlinx.serialization.json.JsonPrimitive(true))), before))
         assertNull(TaskSchedule.nextReminderAt(JsonObject(task + ("someday" to kotlinx.serialization.json.JsonPrimitive(true))), before))
+    }
+
+    @Test fun futureQuickReminderExcludesSimpleTaskFromAvailabilityUntilDue() {
+        val due = epoch("2026-10-22T10:30:00Z")
+        val task = json("""{"type":"simple","quickReminderAt":$due}""")
+        assertFalse(TaskSchedule.available(task, ProjectionContext(due - 1, emptyList(), ZoneId.of("UTC"))))
+        assertTrue(TaskSchedule.available(task, ProjectionContext(due, emptyList(), ZoneId.of("UTC"))))
     }
 
     @Test fun scheduledAndAdvanceReminderUseStrictValidDatesAndNormalizedTimes() {

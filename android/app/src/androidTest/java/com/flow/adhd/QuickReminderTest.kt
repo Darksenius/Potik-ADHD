@@ -50,9 +50,17 @@ class QuickReminderTest {
             assertFalse(task.raw.containsKey("planDate"))
             assertFalse(task.raw.containsKey("schedDate"))
             assertTrue(task.raw["zoneId"] == null || task.raw["zoneId"] == JsonNull)
-            assertTrue("Quick reminders do not hide a task before their deadline", TaskSchedule.available(
+            assertFalse("A future quick reminder waits before entering the active task panel", TaskSchedule.available(
                 task.raw, ProjectionContext(now, emptyList(), ZoneId.systemDefault())))
-            assertTrue(NotificationProjection.build(saved, now, ZoneId.systemDefault()).rows("taskList").any { it.long("id") == task.id })
+            assertFalse(NotificationProjection.build(saved, now, ZoneId.systemDefault()).rows("taskList").any { it.long("id") == task.id })
+            assertTrue("The full projection retains the captured task before its reminder",
+                NotificationProjection.build(saved, now, ZoneId.systemDefault()).rows("questTasks").any { it.long("id") == task.id })
+
+            container.nativeRuntime.submit(FlowCommand.SetPriority(
+                0, task.id, "pin-pending-reminder-$id", System.currentTimeMillis(),
+            )).await()
+            FlowNotifService.start(context)
+            awaitPanel(notifications) { ids -> task.id.toString() !in ids }
 
             // NativeRuntime schedules the real exact alarm after commit. Do not invoke the receiver or
             // its test clock: this wait observes the OS-delivered notification and its persisted receipt.
@@ -74,12 +82,25 @@ class QuickReminderTest {
                     .getValue("schedList").jsonArray.any { it.jsonObject["id"]?.jsonPrimitive?.content == task.id.toString() })
             assertTrue("The simple task remains visible after reminder delivery",
                 projected.tasks.any { it.id == task.id && it.type == "simple" && !it.done })
+            awaitPanel(notifications) { ids -> task.id.toString() in ids }
         } finally {
             taskId?.let { notifications.cancel("flow-task:$it", 5000) }
             container.nativeRuntime.submit(FlowCommand.RestoreSnapshot(
                 Json.parseToJsonElement(before.toJson()).jsonObject, "restore-quick-reminder-$id", System.currentTimeMillis(),
             )).await()
+            FlowNotifService.stop(context)
         }
+    }
+
+    private fun awaitPanel(manager: NotificationManager, matches: (List<String>) -> Boolean) {
+        val end = android.os.SystemClock.elapsedRealtime() + 15_000L
+        while (android.os.SystemClock.elapsedRealtime() < end) {
+            val status = manager.activeNotifications.firstOrNull { it.id == FlowNotifService.NOTIF_ID }
+            val ids = status?.notification?.extras?.getStringArray("flow_panel_ids")?.toList()
+            if (ids != null && matches(ids)) return
+            android.os.SystemClock.sleep(100L)
+        }
+        throw AssertionError("The real task panel must match the pending/due reminder state")
     }
 
     private fun JsonObject.rows(key: String) = this.getValue(key).jsonArray.map { it.jsonObject }

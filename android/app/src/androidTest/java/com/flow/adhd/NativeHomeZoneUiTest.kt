@@ -146,6 +146,19 @@ class NativeHomeZoneUiTest {
         compose.runOnIdle { assertEquals(QuestDeferralKind.NEXT_ZONE, commands.filterIsInstance<FlowCommand.DeferTask>().single().kind) }
     }
 
+    @Test fun futureSimpleReminderStaysInAllTasksButOutsideNearestGroup() {
+        val now = System.currentTimeMillis()
+        val state = FlowSnapshot.parse("""{"formatVersion":2,"zones":[],"tasks":[{"id":501,"title":"Задача на потім","type":"simple","quickReminderAt":${now + 3_600_000L}}]}""")
+        compose.setContent {
+            NarrowHome { NativeTasksScreen(state, JsonObject(emptyMap()), false, { _, _ -> }, {}, {}) }
+        }
+
+        compose.onNodeWithTag("native-tasks").performScrollToNode(hasText("Решта задач"))
+        compose.onNodeWithText("Решта задач").assertExists()
+        compose.onNodeWithTag("native-task-501").assertExists()
+        compose.onNodeWithText("Нагадування о", substring = true).assertExists()
+    }
+
     @Test fun plannerNoteActionBringsTheEditorIntoViewPastALongTaskList() {
         val base = fixture()
         val tasks = base.tasks.map { task -> JsonObject(task.raw + ("planDate" to kotlinx.serialization.json.JsonPrimitive(java.time.LocalDate.now().toString()))) }
@@ -154,6 +167,15 @@ class NativeHomeZoneUiTest {
         compose.onNodeWithTag("native-planner-day-actions").performClick()
         compose.onNodeWithTag("native-planner-note-action").performClick()
         compose.onNodeWithTag("native-planner-note").assertIsDisplayed()
+    }
+
+    @Test fun plannerShowsSimpleReminderClockOnItsPlannedDay() {
+        val today = java.time.LocalDate.now()
+        val at = today.atTime(5, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val state = FlowSnapshot.parse("""{"formatVersion":2,"zones":[],"tasks":[{"id":507,"title":"Справа з нагадуванням","type":"simple","planDate":"$today","quickReminderAt":$at}]}""")
+        compose.setContent { NarrowHome { NativePlannerScreen(state, false, { _, _ -> }, {}) } }
+        compose.onNodeWithTag("native-planner").performScrollToNode(hasTestTag("native-planner-time-507"))
+        compose.onNodeWithTag("native-planner-time-507").assertIsDisplayed().assertTextContains("05:00")
     }
 
     private fun scrollTo(tag: String) = compose.onNodeWithTag("native-tasks").performScrollToNode(hasTestTag(tag))

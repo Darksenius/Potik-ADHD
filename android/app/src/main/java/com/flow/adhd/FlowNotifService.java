@@ -372,7 +372,7 @@ public class FlowNotifService extends Service {
         String notifJson = bridge.getNotifJson();
 
         String zone = "Потік", slots = "", desc = "", tasks = "",
-               routine = "", body = "Застосунок активний", time = "", zoneColor = "";
+               routine = "", body = "Застосунок активний", time = "", zoneColor = "", notificationTheme = "system";
         int done = 0, total = 0, energy = 0;
 
         if (notifJson != null && !notifJson.isEmpty()) {
@@ -389,6 +389,7 @@ public class FlowNotifService extends Service {
                 total     = j.optInt("total", total);
                 energy    = j.optInt("energy", energy);
                 zoneColor = j.optString("zoneColor", "");
+                notificationTheme = j.optString("notificationTheme", "system");
 
                 // New payloads carry the resolved 35-day primary-zone timeline. Use
                 // its current segment for the header as well as task eligibility, so
@@ -485,7 +486,7 @@ public class FlowNotifService extends Service {
             } catch (Exception ignored) {}
         }
         lastZoneColor = parseZoneColor(zoneColor);
-        buildMain(zone, slots, desc, tasks, routine, body, time, done, total, energy);
+        buildMain(zone, slots, desc, tasks, routine, body, time, done, total, energy, notificationTheme);
     }
 
     /** Додає назви задач із масиву до '|'-списку, не більше 7 загалом (n[0] — лічильник) */
@@ -664,7 +665,7 @@ public class FlowNotifService extends Service {
     }
     /** One stable foreground notification. Paging is UI state, never a task command. */
     private void buildMain(String zone, String slots, String desc, String tasks,
-            String routine, String body, String time, int done, int total, int energy) {
+            String routine, String body, String time, int done, int total, int energy, String notificationTheme) {
         if (destroyed) return;
         long now = System.currentTimeMillis();
         QuestPolicy.Selection selection = currentQuestSelection(now);
@@ -684,14 +685,18 @@ public class FlowNotifService extends Service {
         UndoCapture undo = activeUndo();
         String[] ids = new String[rows.size()];
         for (int i = 0; i < rows.size(); i++) ids[i] = rows.get(i).id;
+        boolean darkPanel = isDarkNotificationPanel(notificationTheme);
         // Skip identical projections: no cancel/repost, no minute-by-minute refresh of unchanged content.
         String fingerprint = java.util.Arrays.toString(ids) + "|" + index + "|" + generation
                 + "|" + title + "|" + details + "|" + counterText + "|" + lastZoneColor
+                + "|" + notificationTheme + "|" + darkPanel
                 + "|" + (undo == null ? "" : undo.token);
         if (fingerprint.equals(lastPanelFingerprint)) return;
 
         RemoteViews compact = new RemoteViews(getPackageName(), R.layout.notification_task_compact);
         RemoteViews expanded = new RemoteViews(getPackageName(), R.layout.notification_task_expanded);
+        applyNotificationPanelTheme(compact, darkPanel, false);
+        applyNotificationPanelTheme(expanded, darkPanel, true);
         for (RemoteViews view : new RemoteViews[]{compact, expanded}) {
             view.setTextViewText(R.id.panel_title, title);
             view.setTextViewText(R.id.panel_details, details);
@@ -743,12 +748,72 @@ public class FlowNotifService extends Service {
                 .setCustomContentView(compact).setCustomBigContentView(expanded).addExtras(extras)
                 .addAction(buildCaptureAction(KEY_TASK, "+ Задача", "Назва задачі · ///12:40/// для часу", ACTION_CAPTURE_TASK, 2))
                 .addAction(buildCaptureAction(KEY_NOTE, "+ Нотатка", "Текст нотатки", ACTION_CAPTURE_NOTE, 4));
+        // Foreground notifications on API26+ can also color the system template.
+        // Keep the default system mode unchanged; older Android still uses our panel palette.
+        if (!"system".equals(notificationTheme)) builder.setColorized(true)
+                .setColor(darkPanel ? 0xFF202124 : 0xFFFFF9F2);
         if (undo != null) {
             scheduleUndoExpiry(undo);
             builder.addAction(buildUndoAction(undo));
         }
         startForeground(NOTIF_ID, builder.build());
         lastPanelFingerprint = fingerprint;
+    }
+
+    private boolean isDarkNotificationPanel(String theme) {
+        if ("dark".equals(theme)) return true;
+        if ("light".equals(theme)) return false;
+        int mode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        return mode == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    private void applyNotificationPanelTheme(RemoteViews view, boolean dark, boolean expanded) {
+        if (dark) {
+            view.setInt(R.id.panel_root, "setBackgroundResource", R.drawable.notification_panel_card_dark);
+            view.setTextColor(R.id.panel_title, android.graphics.Color.parseColor("#FFF1F3F4"));
+            view.setTextColor(R.id.panel_details, android.graphics.Color.parseColor("#FFC3C7CD"));
+            view.setTextColor(R.id.panel_position, android.graphics.Color.parseColor("#FFE0E3E7"));
+            view.setInt(R.id.panel_position, "setBackgroundResource", R.drawable.notification_panel_position_dark);
+            if (!expanded) return;
+            view.setTextColor(R.id.panel_counter_value, android.graphics.Color.parseColor("#FFF1F3F4"));
+            view.setTextColor(R.id.panel_not_now, android.graphics.Color.parseColor("#FFE0E3E7"));
+            view.setTextColor(R.id.panel_not_today, android.graphics.Color.parseColor("#FFE0E3E7"));
+            view.setTextColor(R.id.panel_complete_label, android.graphics.Color.parseColor("#FFFFF4EC"));
+            view.setInt(R.id.panel_previous, "setBackgroundResource", R.drawable.notification_panel_tile_dark);
+            view.setInt(R.id.panel_next, "setBackgroundResource", R.drawable.notification_panel_tile_dark);
+            view.setInt(R.id.panel_minus, "setBackgroundResource", R.drawable.notification_panel_tile_dark);
+            view.setInt(R.id.panel_plus, "setBackgroundResource", R.drawable.notification_panel_tile_dark);
+            view.setInt(R.id.panel_not_now, "setBackgroundResource", R.drawable.notification_panel_tile_dark);
+            view.setInt(R.id.panel_not_today, "setBackgroundResource", R.drawable.notification_panel_tile_dark);
+            view.setInt(R.id.panel_complete, "setBackgroundResource", R.drawable.notification_panel_primary_dark);
+            tintPanelIcons(view, android.graphics.Color.parseColor("#FFD6D0C7"));
+        } else {
+            view.setInt(R.id.panel_root, "setBackgroundResource", R.drawable.notification_panel_card_light);
+            view.setTextColor(R.id.panel_title, android.graphics.Color.parseColor("#FF272522"));
+            view.setTextColor(R.id.panel_details, android.graphics.Color.parseColor("#FF625F5A"));
+            view.setTextColor(R.id.panel_position, android.graphics.Color.parseColor("#FF514C46"));
+            view.setInt(R.id.panel_position, "setBackgroundResource", R.drawable.notification_panel_position_light);
+            if (!expanded) return;
+            view.setTextColor(R.id.panel_counter_value, android.graphics.Color.parseColor("#FF272522"));
+            view.setTextColor(R.id.panel_not_now, android.graphics.Color.parseColor("#FF514237"));
+            view.setTextColor(R.id.panel_not_today, android.graphics.Color.parseColor("#FF514237"));
+            view.setTextColor(R.id.panel_complete_label, android.graphics.Color.parseColor("#FF49382C"));
+            view.setInt(R.id.panel_previous, "setBackgroundResource", R.drawable.notification_panel_tile_light);
+            view.setInt(R.id.panel_next, "setBackgroundResource", R.drawable.notification_panel_tile_light);
+            view.setInt(R.id.panel_minus, "setBackgroundResource", R.drawable.notification_panel_tile_light);
+            view.setInt(R.id.panel_plus, "setBackgroundResource", R.drawable.notification_panel_tile_light);
+            view.setInt(R.id.panel_not_now, "setBackgroundResource", R.drawable.notification_panel_tile_light);
+            view.setInt(R.id.panel_not_today, "setBackgroundResource", R.drawable.notification_panel_tile_light);
+            view.setInt(R.id.panel_complete, "setBackgroundResource", R.drawable.notification_panel_primary_light);
+            tintPanelIcons(view, android.graphics.Color.parseColor("#FF776B61"));
+        }
+    }
+
+    private void tintPanelIcons(RemoteViews view, int color) {
+        view.setInt(R.id.panel_previous, "setColorFilter", color);
+        view.setInt(R.id.panel_next, "setColorFilter", color);
+        view.setInt(R.id.panel_minus, "setColorFilter", color);
+        view.setInt(R.id.panel_plus, "setColorFilter", color);
     }
 
     private int resolvePanelIndex(List<QuestPolicy.Task> tasks) {

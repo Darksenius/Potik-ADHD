@@ -792,6 +792,7 @@ final class QuestPolicy {
                 ||isCurrentlyDone(t,now,timeline,zone,occurrences))return false;
         if("everyzone".equals(t.repeat)&&!t.hasZone)return false;
         if("zonelinked".equals(t.type)&&!t.hasZone)return false;
+        if("simple".equals(t.type)&&t.quickReminderAt>now)return false;
         if(t.snoozeUntil>now)return false;
         // An explicit deferral describes one occurrence. During that primary
         // segment it bypasses the permanent date, recurrence, zone, and clock

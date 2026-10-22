@@ -159,6 +159,7 @@ fun NativeTasksScreen(
     }
     val nearest = if (filter == "all") visible.filter {
         if (it.trashed || it.someday || it.type == "negative") false
+        else if (it.type == "simple" && (it.raw.numberValue("quickReminderAt") ?: 0.0) > questContext.now) false
         else QuestPolicy.availability(it.raw, questContext).reason !in setOf("done", "missing-zone", "unassigned-zone", "journal")
     }.take(5) else emptyList()
     val nearestIds = nearest.mapTo(mutableSetOf()) { it.id }
@@ -219,15 +220,24 @@ fun NativeTasksScreen(
                             onClick = { filterMenu = true },
                             shape = MaterialTheme.shapes.small,
                             contentPadding = PaddingValues(12.dp),
-                            modifier = Modifier.size(48.dp).semantics { contentDescription = "Фільтр задач" }.testTag("native-task-filter"),
+                            modifier = Modifier.size(48.dp).semantics {
+                                contentDescription = "Фільтр задач"
+                                stateDescription = if (filter == "all") "Показано всі задачі" else "Активний фільтр: ${taskFilterLabel(filter)}"
+                            }.testTag("native-task-filter"),
                         ) {
                             val ink = LocalContentColor.current
+                            val activeInk = MaterialTheme.colorScheme.primary
                             Canvas(Modifier.size(22.dp)) {
                                 val stroke = 2.dp.toPx()
                                 for ((index, fraction) in listOf(1f, .7f, .4f).withIndex()) {
                                     val y = size.height * (.25f + index * .25f)
                                     drawLine(ink, Offset(size.width * (1f - fraction) / 2f, y), Offset(size.width * (1f + fraction) / 2f, y), stroke)
                                 }
+                                if (filter != "all") drawCircle(
+                                    color = activeInk,
+                                    radius = 3.dp.toPx(),
+                                    center = Offset(size.width * .86f, size.height * .16f),
+                                )
                             }
                         }
                         DropdownMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }) {
@@ -441,15 +451,16 @@ private fun NativeTaskCard(
             "Нагадування о $dateLabel$time"
         }.getOrNull()
     }
-    val metadata = listOfNotNull(zoneName, date, time, quickReminderLabel, if (task.someday && !task.trashed) "Колись" else null)
+    val visibleDate = date.takeUnless { quickReminderAt != null && quickReminderFiredAt != quickReminderAt }
+    val metadata = listOfNotNull(zoneName, visibleDate, time, quickReminderLabel, if (task.someday && !task.trashed) "Колись" else null)
 
     Card(
         modifier = Modifier.fillMaxWidth().testTag("native-task-${task.id}"),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, if (priorityIndex >= 0) MaterialTheme.colorScheme.primary.copy(alpha = .6f) else MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.dp, if (priorityIndex >= 0) MaterialTheme.colorScheme.primary.copy(alpha = .55f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f)),
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (!task.trashed && !task.someday && !isJournal) {
                     TaskCompletionTarget(
@@ -604,10 +615,11 @@ private fun NativeTaskCard(
                 val currentText = taskNumber(counter)
                 val targetText = taskNumber(target)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    horizontalArrangement = Arrangement.Center) {
                     CounterStepButton("−", progressEnabled && counter > 0, "Зменшити: ${task.title}",
                         "native-task-counter-minus-${task.id}") { send { id, now -> FlowCommand.ChangeCounter(task.id, -step, id, now) } }
-                    Column(Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.weight(1f, fill = false).widthIn(min = 72.dp).padding(horizontal = 4.dp)
+                        .semantics { liveRegion = LiveRegionMode.Polite }, horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(if (target > 0) "$currentText / $targetText" else currentText,
                             style = MaterialTheme.typography.bodyLarge, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
                         Text(unit, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

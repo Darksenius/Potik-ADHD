@@ -75,7 +75,7 @@ object BackupValidator {
         "priorities" -> array(value, key) { e, p -> if (e == JsonNull) e else id(e, p) }
         "focusLog" -> array(value, key) { e, p -> shape(e, p, setOf("val", "start"), mapOf("val" to ::string, "start" to ::string, "end" to { v, path -> nullable(v, path, ::string) }, "date" to ::string, "time" to ::string, "dur" to ::number), mapOf("end" to JsonNull, "date" to JsonPrimitive(""), "time" to JsonPrimitive(""))) }
         "theme" -> oneOf(value, listOf("light", "dark"), key)
-        "preferences" -> shape(value, key, emptySet(), mapOf("themeMode" to { v, p -> oneOf(v, listOf("system", "light", "dark"), p) }, "reduceMotion" to ::bool, "showGamification" to ::bool, "waterSeedRetired" to ::bool))
+        "preferences" -> shape(value, key, emptySet(), mapOf("themeMode" to { v, p -> oneOf(v, listOf("system", "light", "dark"), p) }, "notificationTheme" to { v, p -> oneOf(v, listOf("system", "light", "dark"), p) }, "reduceMotion" to ::bool, "showGamification" to ::bool, "waterSeedRetired" to ::bool))
         "rareEvents" -> array(value, key) { e, p -> shape(e, p, setOf("id", "nm"), mapOf("id" to ::id, "nm" to ::string, "val" to ::number, "dir" to { v, path -> oneOf(v, listOf("up", "down"), path) }, "unit" to ::string), mapOf("val" to JsonPrimitive(0), "dir" to JsonPrimitive("up"), "unit" to JsonPrimitive(""))) }
         "dayTemplates" -> array(value, key) { e, p -> shape(e, p, setOf("id", "name"), mapOf(
             "id" to ::string, "name" to ::string,

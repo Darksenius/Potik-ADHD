@@ -144,6 +144,34 @@ class TaskEditorReducerTest {
         assertFalse(cleared.raw.containsKey("quickReminderFiredAt"))
     }
 
+    @Test fun quickCaptureRetimeClearsOldDeferralsAndSnoozeWhileTitleEditPreservesThem() {
+        val at = Instant.parse("2026-10-22T10:00:00Z").toEpochMilli()
+        val raw = task("""{"id":43,"created":"2026-10-01T00:00:00Z","title":"Call","type":"simple","repeat":"none","planDate":"2026-10-22","snoozeUntil":${at + 30 * 60_000L},"quickReminderAt":${at + 45 * 60_000L},"quickReminderFiredAt":${at + 45 * 60_000L},"questDeferral":{"kind":"not-today","requestedAt":$at,"sourceZoneId":0,"targetZoneId":0,"startAt":${at + 2 * 60 * 60_000L}},"completionDeferral":{"kind":"not-today","requestedAt":$at,"sourceZoneId":0,"targetZoneId":0,"startAt":${at + 2 * 60 * 60_000L}},"zoneOccurrenceKey":"old-occurrence"}""")
+        val source = snapshot(tasks = listOf(raw))
+
+        val titleOnly = applied(TaskEditorReducer.reduce(source,
+            FlowCommand.UpdateTask(43, payload("""{"title":"Call tomorrow","type":"simple"}"""), "title-only", at + 1_000),
+            zone, types, now = at + 1_000,
+        )).snapshot.tasks.single()
+        assertEquals(raw["questDeferral"], titleOnly.raw["questDeferral"])
+        assertEquals(raw["completionDeferral"], titleOnly.raw["completionDeferral"])
+        assertEquals(at + 30 * 60_000L, titleOnly.raw["snoozeUntil"]?.toString()?.toLong())
+        assertEquals("old-occurrence", titleOnly.raw["zoneOccurrenceKey"]?.toString()?.trim('"'))
+
+        val retimed = applied(TaskEditorReducer.reduce(source,
+            FlowCommand.UpdateTask(43, payload("""{"title":"Call","type":"simple","quickCapture":true,"quickReminderDelayMinutes":10}"""), "retime", at),
+            zone, types, now = at,
+        )).snapshot.tasks.single()
+        assertEquals("2026-10-22", retimed.raw["planDate"]?.toString()?.trim('"'))
+        assertEquals(at + 10 * 60_000L, retimed.raw["quickReminderAt"]?.toString()?.toLong())
+        assertFalse(retimed.raw.containsKey("questDeferral"))
+        assertFalse(retimed.raw.containsKey("completionDeferral"))
+        assertEquals(0L, retimed.raw["snoozeUntil"]?.toString()?.toLong())
+        assertFalse(retimed.raw.containsKey("quickReminderFiredAt"))
+        assertFalse(retimed.raw.containsKey("zoneOccurrenceKey"))
+        assertFalse(retimed.raw.containsKey("quickCapture"))
+    }
+
     @Test fun quickReminderRejectsNonSimpleAndNonPositiveDelayAndTypeSwitchClearsOldOne() {
         val at = Instant.parse("2026-10-22T10:00:00Z").toEpochMilli()
         val source = snapshot(tasks = listOf(task("""{"id":42,"created":"c","title":"Call","type":"simple","quickReminderAt":${at + 60_000},"quickReminderFiredAt":${at + 60_000}}""")))
@@ -158,6 +186,57 @@ class TaskEditorReducerTest {
             "negative" to """{"title":"Call","type":"simple","quickReminderDelayMinutes":-1}""",
         )) {
             assertTrue(TaskEditorReducer.reduce(snapshot(), FlowCommand.CreateTask(payload(raw), id, at), zone, types, now = at) is FlowCommandResult.Rejected)
+        }
+    }
+
+    @Test fun simpleDayAndQuickCaptureInputsSetExistingReminderAndLocalPlanDateOnly() {
+        val beforeFive = Instant.parse("2026-10-22T01:00:00Z").toEpochMilli()
+        val today = applied(TaskEditorReducer.reduce(snapshot(),
+            FlowCommand.CreateTask(payload("""{"title":"Call","type":"simple","quickCapture":true,"quickReminderDay":"today"}"""), "today", beforeFive),
+            zone, types,
+        )).snapshot.tasks.single()
+        assertEquals(Instant.parse("2026-10-22T02:00:00Z").toEpochMilli(), today.raw["quickReminderAt"]?.toString()?.toLong())
+        assertEquals("2026-10-22", today.raw["planDate"]?.toString()?.trim('"'))
+        assertFalse(today.raw.containsKey("quickReminderDay"))
+
+        val afterFive = Instant.parse("2026-10-22T03:30:00Z").toEpochMilli()
+        val todayAfterFive = applied(TaskEditorReducer.reduce(snapshot(),
+            FlowCommand.CreateTask(payload("""{"title":"Call","type":"simple","quickReminderDay":"today"}"""), "today-after", afterFive),
+            zone, types,
+        )).snapshot.tasks.single()
+        assertEquals(afterFive, todayAfterFive.raw["quickReminderAt"]?.toString()?.toLong())
+
+        val tomorrow = applied(TaskEditorReducer.reduce(snapshot(),
+            FlowCommand.CreateTask(payload("""{"title":"Call","type":"simple","quickReminderDay":"tomorrow"}"""), "tomorrow", afterFive),
+            zone, types,
+        )).snapshot.tasks.single()
+        assertEquals(Instant.parse("2026-10-23T02:00:00Z").toEpochMilli(), tomorrow.raw["quickReminderAt"]?.toString()?.toLong())
+        assertEquals("2026-10-23", tomorrow.raw["planDate"]?.toString()?.trim('"'))
+
+        val captured = applied(TaskEditorReducer.reduce(snapshot(),
+            FlowCommand.CreateTask(payload("""{"title":"Call","type":"simple","quickCapture":true,"quickReminderDelayMinutes":20}"""), "capture", afterFive),
+            zone, types,
+        )).snapshot.tasks.single()
+        assertEquals(afterFive + 20 * 60_000L, captured.raw["quickReminderAt"]?.toString()?.toLong())
+        assertEquals("2026-10-22", captured.raw["planDate"]?.toString()?.trim('"'))
+        assertFalse(captured.raw.containsKey("quickCapture"))
+        assertFalse(captured.raw.containsKey("quickReminderDelayMinutes"))
+    }
+
+    @Test fun quickReminderInputsRejectInvalidCombinationsAndScheduledMarker() {
+        val at = Instant.parse("2026-10-22T10:00:00Z").toEpochMilli()
+        val invalid = listOf(
+            """{"title":"Call","type":"simple","quickReminderDay":"later"}""",
+            """{"title":"Call","type":"simple","quickReminderDay":"today","quickReminderDelayMinutes":10}""",
+            """{"title":"Call","type":"simple","quickCapture":true}""",
+            """{"title":"Call","type":"simple","quickCapture":"yes","quickReminderDelayMinutes":10}""",
+            """{"title":"Call ///12:40///","type":"simple","quickReminderDay":"today"}""",
+            """{"title":"Call","type":"note","quickReminderDay":"today"}""",
+        )
+        for ((index, raw) in invalid.withIndex()) {
+            assertTrue("invalid input $index should be rejected", TaskEditorReducer.reduce(snapshot(),
+                FlowCommand.CreateTask(payload(raw), "invalid-$index", at), zone, types,
+            ) is FlowCommandResult.Rejected)
         }
     }
 

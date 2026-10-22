@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -18,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import android.widget.DatePicker
 import android.widget.TimePicker
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
@@ -62,6 +66,7 @@ class NativeTaskEditorTest {
         assertEquals(10, catalog.size)
         var saved: JsonObject? = null
         show(fixture()) { saved = it }
+        compose.onNodeWithTag("native-task-mode-complex").performClick()
         compose.onNodeWithTag("native-task-title").performTextReplacement("Зібрати речі")
         catalog.forEach { (id, definition) ->
             val label = ((definition as JsonObject).getValue("label") as JsonPrimitive).content
@@ -161,14 +166,122 @@ class NativeTaskEditorTest {
     @Test
     fun freshSimpleTaskKeepsSecondaryOptionsCollapsedAndReachable() {
         show(fixture()) { }
+        compose.onNodeWithTag("native-task-mode-complex").performClick()
         compose.onNodeWithTag("native-task-folder").assertDoesNotExist()
         compose.onNodeWithTag("native-task-tags").assertDoesNotExist()
         compose.onNodeWithTag("native-task-counter-enabled").assertDoesNotExist()
         expandAdvanced()
         scrollTo("native-task-folder")
         compose.onNodeWithTag("native-task-folder").assertIsDisplayed()
+        scrollTo("native-task-tags")
         compose.onNodeWithTag("native-task-tags").assertIsDisplayed()
+        scrollTo("native-task-counter-enabled")
         compose.onNodeWithTag("native-task-counter-enabled").assertIsDisplayed()
+    }
+
+    @Test
+    fun freshSimpleCaptureKeepsOnlyTitleAndTimingAndPersistsModeAndDelayCycle() {
+        var saved: JsonObject? = null
+        var draft = ""
+        show(fixture(), onSave = { saved = it }, onDraftChanged = { draft = it })
+
+        compose.onNodeWithTag("native-task-title").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-quick-today").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-quick-tomorrow").assertIsDisplayed()
+        scrollTo("native-task-quick-delay")
+        compose.onNodeWithTag("native-task-quick-delay").assertTextContains("Через 10 хв", substring = true)
+        compose.onNodeWithTag("native-task-quick-delay-more").assertTextEquals("+")
+        compose.onNodeWithTag("native-task-note").assertDoesNotExist()
+        compose.onNodeWithTag("native-task-type").assertDoesNotExist()
+        compose.onNodeWithTag("native-task-date").assertDoesNotExist()
+        compose.onNodeWithTag("native-task-quick-delay").performClick()
+        compose.onNodeWithTag("native-task-quick-delay").assertTextContains("Через 10 хв", substring = true)
+        listOf("20 хв", "30 хв", "50 хв", "100 хв", "150 хв", "10 хв").forEach { label ->
+            scrollTo("native-task-quick-delay-more")
+            compose.onNodeWithTag("native-task-quick-delay-more").performClick()
+            scrollTo("native-task-quick-delay")
+            compose.onNodeWithTag("native-task-quick-delay").assertTextContains("Через $label", substring = true)
+        }
+        scrollTo("native-task-quick-tomorrow")
+        compose.onNodeWithTag("native-task-quick-tomorrow").performClick()
+        compose.onNodeWithTag("native-task-mode-complex").performClick()
+        scrollTo("native-task-note")
+        compose.onNodeWithTag("native-task-note").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-mode-simple").performClick()
+        scrollTo("native-task-quick-tomorrow")
+        compose.onNodeWithTag("native-task-quick-tomorrow").assertIsDisplayed()
+        scrollTo("native-task-title")
+        compose.onNodeWithTag("native-task-title").performTextReplacement("Зателефонувати")
+        compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
+
+        compose.runOnIdle {
+            val draftValues = ((Json.parseToJsonElement(draft) as JsonObject)["values"] as JsonObject)
+            assertEquals(JsonPrimitive("simple"), draftValues["editorMode"])
+            assertEquals(JsonPrimitive("tomorrow"), draftValues["simpleTimingChoice"])
+            val payload = requireNotNull(saved)
+            assertEquals(JsonPrimitive("simple"), payload["type"])
+            assertEquals(JsonPrimitive("Зателефонувати"), payload["title"])
+            assertEquals(JsonPrimitive(true), payload["quickCapture"])
+            assertEquals(JsonPrimitive("tomorrow"), payload["quickReminderDay"])
+            assertFalse(payload.containsKey("quickReminderDelayMinutes"))
+            assertEquals(JsonPrimitive(""), payload["note"])
+            assertEquals(JsonPrimitive("none"), payload["repeat"])
+            assertFalse(payload.containsKey("planDate"))
+        }
+    }
+
+    @Test
+    fun richFieldsCannotBeHiddenBySwitchingToSimple() {
+        var saved: JsonObject? = null
+        show(fixture()) { saved = it }
+        compose.onNodeWithTag("native-task-mode-complex").performClick()
+        scrollTo("native-task-title")
+        compose.onNodeWithTag("native-task-title").performTextReplacement("Зателефонувати")
+        scrollTo("native-task-note")
+        compose.onNodeWithTag("native-task-note").performTextReplacement("Взяти документи")
+        closeSoftKeyboard()
+        compose.onNodeWithTag("native-task-mode-simple").performClick()
+        compose.onNodeWithTag("native-task-mode-complex").assertIsSelected()
+        compose.onNodeWithTag("native-task-editor-error").assertIsDisplayed().assertTextEquals("Для цих параметрів потрібна складена задача.")
+        scrollTo("native-task-note")
+        compose.onNodeWithTag("native-task-note").assertIsDisplayed().assertTextContains("Взяти документи")
+        compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            val payload = requireNotNull(saved)
+            assertEquals(JsonPrimitive("simple"), payload["type"])
+            assertEquals(JsonPrimitive("Взяти документи"), payload["note"])
+        }
+    }
+
+    @Test
+    fun draftWithRichFieldsRestoresInComplexMode() {
+        val draft = buildJsonObject {
+            put("version", 2)
+            put("values", buildJsonObject {
+                put("title", "Перевірка")
+                put("type", "simple")
+                put("note", "Важлива деталь")
+                put("editorMode", "simple")
+                put("simpleTimingChoice", "delay")
+                put("simpleDelayIndex", 0)
+            })
+        }.toString()
+        show(fixture(draft = draft)) { }
+        compose.onNodeWithTag("native-task-mode-complex").assertIsSelected()
+        scrollTo("native-task-note")
+        compose.onNodeWithTag("native-task-note").assertIsDisplayed().assertTextContains("Важлива деталь")
+        compose.onNodeWithTag("native-task-quick-delay").assertDoesNotExist()
+    }
+
+    @Test
+    fun titleTimeMarkerShowsScheduledInstantAndDisablesQuickTiming() {
+        show(fixture()) { }
+        compose.onNodeWithTag("native-task-title").performTextReplacement("Зустрітися ///12:40///")
+        scrollTo("native-task-quick-preview")
+        compose.onNodeWithTag("native-task-quick-preview").assertIsDisplayed().assertTextContains("Заплановано на", substring = true).assertTextContains("12:40", substring = true)
+        scrollTo("native-task-quick-delay")
+        compose.onNodeWithTag("native-task-quick-delay").assertIsNotEnabled()
+        compose.onNodeWithTag("native-task-quick-delay-more").assertIsNotEnabled()
     }
 
     @Test
@@ -221,16 +334,27 @@ class NativeTaskEditorTest {
         }
     }
 
-    private fun show(snapshot: FlowSnapshot, taskId: Long? = null, onSave: (JsonObject) -> Unit) {
+    private fun show(
+        snapshot: FlowSnapshot,
+        taskId: Long? = null,
+        onDraftChanged: (String) -> Unit = {},
+        onSave: (JsonObject) -> Unit,
+    ) {
         compose.setContent {
             FlowTheme {
                 Box(Modifier.fillMaxWidth().height(420.dp)) {
-                    NativeTaskEditor(snapshot, taskId, busy = false, onSave = onSave, onClose = {})
+                    NativeTaskEditor(snapshot, taskId, busy = false, onSave = onSave, onClose = {}, onDraftChanged = onDraftChanged)
                 }
             }
         }
-        compose.waitUntil(10_000) {
-            runCatching { compose.onNodeWithTag("native-task-save").assertIsEnabled(); true }.getOrDefault(false)
+        var readinessFailure: Throwable? = null
+        try {
+            compose.waitUntil(10_000) {
+                runCatching { compose.onNodeWithTag("native-task-save").assertIsEnabled(); true }
+                    .getOrElse { readinessFailure = it; false }
+            }
+        } catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("Editor readiness: ${readinessFailure?.message}", failure)
         }
     }
 

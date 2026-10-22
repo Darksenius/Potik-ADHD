@@ -7,7 +7,7 @@ import kotlinx.serialization.json.booleanOrNull
 /** Applies validated preference patches without recording user activity. */
 object PreferencesReducer {
     private val booleanKeys = setOf("reduceMotion", "showGamification", "waterSeedRetired")
-    private val knownKeys = booleanKeys + "themeMode"
+    private val knownKeys = booleanKeys + setOf("themeMode", "notificationTheme")
 
     fun reduce(snapshot: FlowSnapshot, command: FlowCommand): FlowCommandResult {
         if (command !is FlowCommand.SetPreferences) {
@@ -20,6 +20,8 @@ object PreferencesReducer {
         for ((key, value) in command.values) {
             val valid = when (key) {
                 "themeMode" -> (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    ?.let { it in setOf("system", "light", "dark") } == true
+                "notificationTheme" -> (value as? JsonPrimitive)?.takeIf { it.isString }?.content
                     ?.let { it in setOf("system", "light", "dark") } == true
                 in booleanKeys -> (value as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull != null
                 else -> false

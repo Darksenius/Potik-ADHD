@@ -58,6 +58,9 @@ object TaskOrder {
         if (terminal) return Key(group = 6, stable = index)
 
         val effective = effectiveAt(task, context, availability.availableAt)
+        if (availability.reason == "quick-reminder") {
+            return Key(group = 5, primary = effective ?: Long.MAX_VALUE, secondary = priority, stable = index)
+        }
         if (effective != null && effective <= imminentThrough(context)) {
             return Key(group = 3, primary = effective, secondary = priority, stable = index)
         }
@@ -69,6 +72,13 @@ object TaskOrder {
         val timeDeferral = (task["questDeferral"] as? JsonObject)
             ?.takeIf { it.string("kind") == "time" }
             ?.long("startAt")
+        if (task.string("type") == "simple") {
+            val quick = task.long("quickReminderAt")
+            if (quick != null) {
+                val deferral = (task["questDeferral"] as? JsonObject)?.long("startAt")
+                return maxOf(quick, deferral ?: Long.MIN_VALUE)
+            }
+        }
         if (timeDeferral != null) return timeDeferral
         val type = task.string("type")
         val time = when (type) {
@@ -92,7 +102,8 @@ object TaskOrder {
         val dated = scheduledOccurrence(task, context)
         val zoneAt = zoneOccurrence(task, context)
         val datedAndZoned = if (dated != null && zoneAt != null) maxOf(dated, zoneAt) else dated ?: zoneAt
-        return listOfNotNull(futurePolicyAt, deferred, datedAndZoned).maxOrNull()
+        val quick = task.long("quickReminderAt")?.takeIf { it > context.now }
+        return listOfNotNull(futurePolicyAt, deferred, datedAndZoned, quick).maxOrNull()
     }
 
     private fun zoneOccurrence(task: JsonObject, context: QuestPolicy.Context): Long? {
