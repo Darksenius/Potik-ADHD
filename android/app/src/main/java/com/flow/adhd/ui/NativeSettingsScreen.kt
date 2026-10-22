@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flow.adhd.BuildConfig
+import com.flow.adhd.AppContainer
 import com.flow.adhd.FlowAlarmReceiver
 import com.flow.adhd.NativeStorageTools
 import com.flow.adhd.data.NativeContent
@@ -38,6 +39,8 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
     tools: NativeStorageTools, modifier: Modifier = Modifier, onDocumentOpenChanged: (Boolean) -> Unit = {}) {
     val state by tools.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val appUpdates = remember(context) { AppContainer.get(context).appUpdates }
+    val updateState by appUpdates.state.collectAsStateWithLifecycle()
     var group by rememberSaveable { mutableStateOf("") }
     var document by rememberSaveable { mutableStateOf("") }
     var pickerPurpose by rememberSaveable { mutableStateOf("backup") }
@@ -71,6 +74,9 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
     LazyColumn(modifier.fillMaxSize().testTag("native-settings"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Налаштування", style = MaterialTheme.typography.headlineSmall) }
         item { FilledTonalButton(onClick = { document = "whatsnew" }, modifier = Modifier.fillMaxWidth()) { Text("Що нового · ${BuildConfig.VERSION_NAME}") } }
+        item { SettingsGroup("updates", "Оновлення", "Перевірити версію та завантажити APK", group, { group = it }) {
+            NativeUpdateSection(updateState, { appUpdates.check() }, tools::openUrl)
+        } }
         state.message?.let { message -> item { Card { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(message, Modifier.weight(1f)); TextButton(onClick = tools::clearMessage) { Text("Гаразд") }
         } } } }
@@ -142,11 +148,10 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
                 } }
             }
         } }
-        item { SettingsGroup("about", "Про застосунок і допомога", "Офлайн-довідка та оновлення", group, { group = it }) {
+        item { SettingsGroup("about", "Про застосунок і допомога", "Довідка, ліцензія й вихідний код", group, { group = it }) {
             Text("Потік ${BuildConfig.VERSION_NAME}")
             Text("Ревізія: ${BuildConfig.SOURCE_REVISION}", style = MaterialTheme.typography.bodySmall)
-            Text("Задачі, нотатки, календар, 100 думок і довідка працюють офлайн. Мережа потрібна лише для переходу на GitHub або надсилання експортованого файла.")
-            OutlinedButton(onClick = { tools.openUrl("https://github.com/Darksenius/Potik-ADHD/releases/latest") }) { Text("Завантажити останній реліз") }
+            Text("Задачі, нотатки, календар, 100 думок і довідка працюють офлайн. Мережа потрібна лише для перевірки оновлень за твоїм запитом, переходу на GitHub або надсилання експортованого файла.")
             OutlinedButton(onClick = { tools.openUrl("https://github.com/Darksenius/Potik-ADHD") }) { Text("Репозиторій на GitHub") }
             OutlinedButton(onClick = { document = "help" }) { Text("Довідка") }
             OutlinedButton(onClick = { document = "license" }) { Text("Ліцензія") }
