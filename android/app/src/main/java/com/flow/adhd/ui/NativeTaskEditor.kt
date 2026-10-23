@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -125,10 +126,20 @@ fun NativeTaskEditor(
         !seed.editorBoolean("counterEnabled", false) && seed.editorText("checklistDraft").orEmpty().isBlank() &&
         (seed["items"] as? JsonArray).orEmpty().isEmpty() && !seedHasNonSimpleFields &&
         (!seedHasPlannedDate || seedHasReminder)
-    val initialSimpleMode = savedMode?.let { it == "simple" && seedIsPlainSimple }
-        ?: (taskId == null && !checklistDefinition && allowQuickReminder && seedIsPlainSimple && seed.editorText("type") == null)
+    val confirmedSimpleDraft = draftValues?.get("simpleModeConfirmed") == JsonPrimitive(true)
+    val draftHasIntentionalContent = seed.editorText("title").orEmpty().isNotBlank() || !seedIsPlainSimple
+    val initialSimpleMode = savedMode?.let { mode ->
+        when {
+            mode == "simple" && (seedIsPlainSimple || confirmedSimpleDraft) -> true
+            // A blank mode-only draft is not a reason to reopen the full editor.
+            mode == "complex" && !draftHasIntentionalContent -> true
+            else -> false
+        }
+    } ?: (taskId == null && !checklistDefinition && allowQuickReminder && seedIsPlainSimple && seed.editorText("type") == null)
     var simpleMode by rememberSaveable(taskId) { mutableStateOf(initialSimpleMode) }
     var complexModeVisited by rememberSaveable(taskId) { mutableStateOf(!initialSimpleMode) }
+    var confirmSimpleMode by rememberSaveable(taskId) { mutableStateOf(false) }
+    var simpleModeConfirmed by rememberSaveable(taskId) { mutableStateOf(confirmedSimpleDraft) }
     var simpleTimingChoice by rememberSaveable(taskId) {
         mutableStateOf(if (taskId == null) draftValues?.editorText("simpleTimingChoice") ?: "delay" else "keep")
     }
@@ -203,12 +214,15 @@ fun NativeTaskEditor(
             rawType != "simple" && (raw["reminderEnabled"] != null || raw["remindBeforeMinutes"] != null) ||
             raw.editorNumberText("remindBeforeMinutes", "0") != "0"
     } == true
-    val simpleModeAllowed = allowQuickReminder && !checklistDefinition && type == "simple" && note.isBlank() && zoneId.isBlank() && folderId.isBlank() &&
-        tags.isBlank() && contextTags.isBlank() && repeat == "none" && repeatMask == 0 && !counterEnabled && quickReminderChoice == null &&
-        checklist.isBlank() && storedItems.orEmpty().isEmpty() && !existingHasOtherFields &&
-        (date.isBlank() || savedReminderDateCanStaySimple)
-    LaunchedEffect(simpleModeAllowed) {
-        if (!simpleModeAllowed) simpleMode = false
+    val simpleModeEligible = allowQuickReminder && !checklistDefinition && (taskId == null || type == "simple")
+    val simpleModeHasAdvancedValues = type != "simple" || note.isNotBlank() || zoneId.isNotBlank() || folderId.isNotBlank() || tags.isNotBlank() || contextTags.isNotBlank() ||
+        repeat != "none" || repeatMask != 0 || counterEnabled || quickReminderChoice != null || checklist.isNotBlank() || storedItems.orEmpty().isNotEmpty() ||
+        time.isNotBlank() || alarmTime.isNotBlank() || windowStart != "07:00" || windowEnd != "09:00" || repeatInterval != "30" || repeatUnit != "min" ||
+        counterTarget != "0" || counterStep != "1" || counterUnit != "count" || negativeXp != "5" || reminderAdvance != "0" ||
+        (date.isNotBlank() && !savedReminderDateCanStaySimple) || (seedHasReminder && taskId == null)
+    val simpleModeAllowed = simpleModeEligible && (taskId == null || (!simpleModeHasAdvancedValues && !existingHasOtherFields))
+    LaunchedEffect(simpleModeAllowed, simpleModeEligible) {
+        if (!simpleModeEligible || taskId != null && !simpleModeAllowed) simpleMode = false
     }
     val localZone = ZoneId.systemDefault()
     val scheduled = type == "sched"
@@ -221,6 +235,7 @@ fun NativeTaskEditor(
     fun chooseType(id: String) {
         type = id
         error = ""
+        if (id != "simple") { simpleMode = false; complexModeVisited = true; simpleModeConfirmed = false }
         if (id == "counter") { counterEnabled = true; if (counterTarget == "0") counterTarget = "10" }
         if (id == "sched" && date.isEmpty()) { date = LocalDate.now(localZone).toString(); dateExplicit = false }
     }
@@ -235,6 +250,7 @@ fun NativeTaskEditor(
             put("negXp", negativeXp); put("reminderEnabled", reminderEnabled); put("remindBeforeMinutes", reminderAdvance); put("checklistDraft", checklist)
             quickReminderChoice?.let { put("quickReminderChoice", it) }
             put("editorMode", if (simpleMode) "simple" else "complex")
+            put("simpleModeConfirmed", simpleModeConfirmed)
             put("simpleTimingChoice", simpleTimingChoice); put("simpleDelayIndex", simpleDelayIndex)
             put("tags", JsonArray(tags.split(',').map { JsonPrimitive(it.trim()) })); put("ctxTags", JsonArray(contextTags.split(',').map { JsonPrimitive(it.trim()) }))
         })
@@ -246,22 +262,40 @@ fun NativeTaskEditor(
         val titleResult = TaskTitleSchedule.parse(title)
         val parsedTitle = (titleResult as? TaskTitleSchedule.Result.Valid)?.value
         val markerTime = parsedTitle?.time
-        if (simpleMode && simpleModeAllowed && markerTime == null && postponeMinutes == null && !tomorrow) {
+        if (simpleMode && simpleModeAllowed && postponeMinutes == null && !tomorrow) {
             val problem = when {
                 unavailable -> "Цієї задачі вже немає. Закрий редактор і онови список."
                 titleResult == TaskTitleSchedule.Result.InvalidTime -> "Час у позначці має бути від 00:00 до 23:59. Наприклад: ///12:40///."
                 titleResult == TaskTitleSchedule.Result.EmptyTitle -> "Напиши, що потрібно зробити."
+                markerTime != null && catalog.types.none { it.id == "sched" } -> "Запланований тип задачі недоступний."
                 else -> null
             }
             if (problem != null) { error = problem; return }
             val payload = (existing?.raw ?: JsonObject(emptyMap())).toMutableMap().apply {
                 put("title", JsonPrimitive(parsedTitle?.title ?: title.trim()))
-                if (existing == null && !complexModeVisited) {
-                    put("type", JsonPrimitive("simple")); put("planDate", JsonNull); put("zoneId", JsonNull); put("folderId", JsonNull)
-                    put("note", JsonPrimitive("")); put("repeat", JsonPrimitive("none")); put("counterEnabled", JsonPrimitive(false))
-                    put("tags", JsonArray(emptyList()))
+                if (markerTime != null) {
+                    val scheduledDate = TaskTitleSchedule.defaultDate(markerTime, now, localZone)
+                    put("type", JsonPrimitive("sched"))
+                    put("schedDate", JsonPrimitive(scheduledDate)); put("schedTime", JsonPrimitive(markerTime))
+                    put("reminderEnabled", JsonPrimitive(true)); put("remindBeforeMinutes", JsonPrimitive(0))
+                    remove("quickCapture"); remove("quickReminderDay"); remove("quickReminderDelayMinutes"); remove("clearQuickReminder")
+                } else {
+                    put("type", JsonPrimitive("simple"))
+                    if (allowQuickReminder && simpleTimingChoice != "keep") {
+                        put("quickCapture", JsonPrimitive(true))
+                        when (simpleTimingChoice) {
+                            "today", "tomorrow" -> {
+                                put("quickReminderDay", JsonPrimitive(simpleTimingChoice))
+                                remove("quickReminderDelayMinutes")
+                            }
+                            "delay" -> {
+                                put("quickReminderDelayMinutes", JsonPrimitive(delayChoices[simpleDelayIndex]))
+                                remove("quickReminderDay")
+                            }
+                        }
+                    }
                 }
-                if (complexModeVisited) {
+                if (!simpleMode && complexModeVisited) {
                     put("type", JsonPrimitive(type)); put("zoneId", zoneId.toLongOrNull()?.let(::JsonPrimitive) ?: JsonNull)
                     put("folderId", folderId.takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
                     if (date.isNotEmpty() || existing?.raw?.get("planDate") != null) {
@@ -291,19 +325,6 @@ fun NativeTaskEditor(
                     if (type == "check" && checklistDefinition) put("items", JsonArray(checklist.lineSequence().mapNotNull { line ->
                         line.trim().takeIf(String::isNotEmpty)?.let { text -> buildJsonObject { put("text", text); put("done", false); put("credited", false) } }
                     }.toList()))
-                }
-                if (allowQuickReminder && simpleTimingChoice != "keep") {
-                    put("quickCapture", JsonPrimitive(true))
-                    when (simpleTimingChoice) {
-                        "today", "tomorrow" -> {
-                            put("quickReminderDay", JsonPrimitive(simpleTimingChoice))
-                            remove("quickReminderDelayMinutes")
-                        }
-                        "delay" -> {
-                            put("quickReminderDelayMinutes", JsonPrimitive(delayChoices[simpleDelayIndex]))
-                            remove("quickReminderDay")
-                        }
-                    }
                 }
             }
             error = ""
@@ -408,10 +429,14 @@ fun NativeTaskEditor(
         if (allowQuickReminder && !checklistDefinition) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = simpleMode, onClick = {
-                if (simpleModeAllowed) { simpleMode = true; error = "" }
-                else error = "Для цих параметрів потрібна складена задача."
+                when {
+                    !simpleModeEligible -> error = "Для цього типу потрібна складена задача."
+                    taskId != null && !simpleModeAllowed -> error = "Для цих параметрів потрібна складена задача."
+                    taskId == null && simpleModeHasAdvancedValues && !simpleModeConfirmed -> confirmSimpleMode = true
+                    else -> { simpleMode = true; complexModeVisited = false; error = "" }
+                }
             }, enabled = enabled, label = { Text("Проста") }, modifier = Modifier.testTag("native-task-mode-simple"))
-            FilterChip(selected = !simpleMode, onClick = { simpleMode = false; complexModeVisited = true; error = "" }, enabled = enabled, label = { Text("Складена") }, modifier = Modifier.testTag("native-task-mode-complex"))
+            FilterChip(selected = !simpleMode, onClick = { simpleMode = false; complexModeVisited = true; simpleModeConfirmed = false; error = "" }, enabled = enabled, label = { Text("Складена") }, modifier = Modifier.testTag("native-task-mode-complex"))
         }
         if (!simpleModeAllowed) Text("Для цих параметрів потрібна складена задача.", Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -425,6 +450,11 @@ fun NativeTaskEditor(
             if (simpleMode) {
                 item {
                     EditorInput("Що потрібно зробити?", title, { title = it; error = "" }, "native-task-title", enabled, minLines = 1, maxLines = 2)
+                }
+                if (simpleModeConfirmed && simpleModeHasAdvancedValues) item {
+                    Text("У просту задачу потраплять лише назва й вибране нагадування.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("native-task-simple-omits-details"))
                 }
                 item {
                     val today = LocalDate.now(localZone)
@@ -660,6 +690,23 @@ fun NativeTaskEditor(
             }
         }
     }
+    if (confirmSimpleMode) AlertDialog(
+        onDismissRequest = { confirmSimpleMode = false },
+        title = { Text("Створити просту задачу?") },
+        text = { Text("Збережуться лише назва й вибране коротке нагадування. Нотатка, дата, зона, повторення та інші додаткові параметри в задачу не потраплять. Якщо повернешся до складеної до збереження, чернетка залишиться.") },
+        confirmButton = {
+            TextButton(onClick = {
+                confirmSimpleMode = false
+                simpleMode = true
+                complexModeVisited = false
+                simpleModeConfirmed = true
+                error = ""
+            }, modifier = Modifier.testTag("native-task-simple-confirm")) { Text("Обрати просту") }
+        },
+        dismissButton = {
+            TextButton(onClick = { confirmSimpleMode = false }, modifier = Modifier.testTag("native-task-simple-cancel")) { Text("Залишити складену") }
+        },
+    )
     }
 }
 

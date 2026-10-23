@@ -11,7 +11,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,8 +41,6 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
     val context = LocalContext.current
     val appUpdates = remember(context) { AppContainer.get(context).appUpdates }
     val updateState by appUpdates.state.collectAsStateWithLifecycle()
-    var eggTaps by remember { mutableIntStateOf(0) }
-    var showEgg by remember { mutableStateOf(false) }
     var group by rememberSaveable { mutableStateOf("") }
     var document by rememberSaveable { mutableStateOf("") }
     var pickerPurpose by rememberSaveable { mutableStateOf("backup") }
@@ -144,10 +141,12 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
         } }
         item { SettingsGroup("about", "Про застосунок і допомога", "Довідка, ліцензія й вихідний код", group, { group = it }) {
             Text("Потік ${BuildConfig.VERSION_NAME}", Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                .clickable { eggTaps++; if (eggTaps >= 7) { showEgg = true; eggTaps = 0 } }.padding(vertical = 12.dp)
-                .testTag("native-about-version"))
+                .padding(vertical = 12.dp).testTag("native-about-version"))
             Text("Ревізія: ${BuildConfig.SOURCE_REVISION}", style = MaterialTheme.typography.bodySmall)
             Text("Задачі, нотатки, календар, 100 думок і довідка працюють офлайн. Мережа потрібна лише для перевірки оновлень за твоїм запитом, переходу на GitHub або надсилання експортованого файла.")
+            Text("Тут не могло бути вашої реклами. А от на будь-який збір, якому довіряєте, задонатьте для Сил Оборони України.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("native-donation-message"))
             OutlinedButton(onClick = { tools.openUrl("https://github.com/Darksenius/Potik-ADHD") }) { Text("Репозиторій на GitHub") }
             OutlinedButton(onClick = { document = "help" }) { Text("Довідка") }
             OutlinedButton(onClick = { document = "license" }) { Text("Ліцензія") }
@@ -167,9 +166,6 @@ fun NativeSettingsScreen(snapshot: FlowSnapshot, busy: Boolean, onCommand: (Flow
             if (demoMessage.isNotEmpty()) Text(demoMessage)
         } }
     }
-    if (showEgg) AlertDialog(onDismissRequest = { showEgg = false }, title = { Text("r35") },
-        text = { Text("так, я знаю про правило інтернету номер 34. Але ми поки не настільки популярні щоб мати маскота для цього, тому поки підпадаємо під правило інтернету номер 35") },
-        confirmButton = { TextButton(onClick = { showEgg = false }) { Text("Зрозуміло") } })
     if (confirmReplacement) AlertDialog(onDismissRequest = { confirmReplacement = false }, title = { Text("Замінити копію в папці?") },
         text = { Text("Наявний файл буде замінено поточними даними. Спочатку віднови або експортуй його, якщо він потрібний.") },
         confirmButton = { TextButton(onClick = { confirmReplacement = false; tools.replaceExistingBackup() }) { Text("Замінити") } },

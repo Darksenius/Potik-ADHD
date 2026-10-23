@@ -183,7 +183,8 @@ class NativeTaskEditorTest {
     fun freshSimpleCaptureKeepsOnlyTitleAndTimingAndPersistsModeAndDelayCycle() {
         var saved: JsonObject? = null
         var draft = ""
-        show(fixture(), onSave = { saved = it }, onDraftChanged = { draft = it })
+        val snapshot = fixture()
+        show(snapshot, onSave = { saved = it }, onDraftChanged = { draft = it })
 
         compose.onNodeWithTag("native-task-title").assertIsDisplayed()
         compose.onNodeWithTag("native-task-quick-today").assertIsDisplayed()
@@ -224,14 +225,21 @@ class NativeTaskEditorTest {
             assertEquals(JsonPrimitive(true), payload["quickCapture"])
             assertEquals(JsonPrimitive("tomorrow"), payload["quickReminderDay"])
             assertFalse(payload.containsKey("quickReminderDelayMinutes"))
-            assertEquals(JsonPrimitive(""), payload["note"])
-            assertEquals(JsonPrimitive("none"), payload["repeat"])
+            assertFalse(payload.containsKey("note"))
+            assertFalse(payload.containsKey("repeat"))
+            assertFalse(payload.containsKey("counterEnabled"))
+            assertFalse(payload.containsKey("zoneId"))
             assertFalse(payload.containsKey("planDate"))
+            val applied = FlowEngine(mapOf("simple" to 1.0)).apply(snapshot,
+                FlowCommand.CreateTask(payload, "simple-create-after-mode-switch", now), ZoneId.of("UTC"), now) as FlowCommandResult.Applied
+            assertEquals("simple", applied.snapshot.tasks.single().type)
+            assertEquals(JsonPrimitive("Зателефонувати"), applied.snapshot.tasks.single().raw["title"])
+            assertEquals(JsonPrimitive("tomorrow"), payload["quickReminderDay"])
         }
     }
 
     @Test
-    fun richFieldsCannotBeHiddenBySwitchingToSimple() {
+    fun richFieldsRequireConfirmationAndSurviveCancelingSimpleMode() {
         var saved: JsonObject? = null
         show(fixture()) { saved = it }
         compose.onNodeWithTag("native-task-mode-complex").performClick()
@@ -241,8 +249,9 @@ class NativeTaskEditorTest {
         compose.onNodeWithTag("native-task-note").performTextReplacement("Взяти документи")
         closeSoftKeyboard()
         compose.onNodeWithTag("native-task-mode-simple").performClick()
+        compose.onNodeWithTag("native-task-simple-confirm").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-simple-cancel").performClick()
         compose.onNodeWithTag("native-task-mode-complex").assertIsSelected()
-        compose.onNodeWithTag("native-task-editor-error").assertIsDisplayed().assertTextEquals("Для цих параметрів потрібна складена задача.")
         scrollTo("native-task-note")
         compose.onNodeWithTag("native-task-note").assertIsDisplayed().assertTextContains("Взяти документи")
         compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
@@ -250,6 +259,130 @@ class NativeTaskEditorTest {
             val payload = requireNotNull(saved)
             assertEquals(JsonPrimitive("simple"), payload["type"])
             assertEquals(JsonPrimitive("Взяти документи"), payload["note"])
+        }
+    }
+
+    @Test
+    fun blankComplexModeDraftStartsSimpleInsteadOfRememberingAnEmptyModeChoice() {
+        val draft = buildJsonObject {
+            put("version", 2)
+            put("values", buildJsonObject {
+                put("title", "")
+                put("type", "simple")
+                put("editorMode", "complex")
+            })
+        }.toString()
+        show(fixture(draft = draft)) { }
+        compose.onNodeWithTag("native-task-mode-simple").assertIsSelected()
+        compose.onNodeWithTag("native-task-title").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-note").assertDoesNotExist()
+    }
+
+    @Test
+    fun confirmedSimpleModeCreatesMinimalTaskAndKeepsComplexDraftUntilSave() {
+        val draft = buildJsonObject {
+            put("version", 2)
+            put("values", buildJsonObject {
+                put("title", "Зателефонувати")
+                put("type", "counter")
+                put("editorMode", "complex")
+                put("note", "Взяти документи")
+                put("planDate", "2099-01-02")
+                put("zoneId", 300)
+                put("folderId", "home")
+                put("repeat", "weekdays")
+                put("counterEnabled", true)
+                put("counterTarget", 10)
+                put("tags", JsonArray(listOf(JsonPrimitive("важливо"))))
+            })
+        }.toString()
+        val snapshot = fixture(draft = draft)
+        var saved: JsonObject? = null
+        var currentDraft = ""
+        show(snapshot, onDraftChanged = { currentDraft = it }, onSave = { saved = it })
+
+        compose.onNodeWithTag("native-task-mode-complex").assertIsSelected()
+        compose.onNodeWithTag("native-task-mode-simple").performClick()
+        compose.onNodeWithTag("native-task-simple-confirm").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("native-task-mode-simple").assertIsSelected()
+        compose.onNodeWithTag("native-task-simple-omits-details").assertIsDisplayed()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            val draftValues = ((Json.parseToJsonElement(currentDraft) as JsonObject)["values"] as JsonObject)
+            assertEquals(JsonPrimitive(true), draftValues["simpleModeConfirmed"])
+            assertEquals(JsonPrimitive("counter"), draftValues["type"])
+            assertEquals(JsonPrimitive("Взяти документи"), draftValues["note"])
+            assertEquals(JsonPrimitive("2099-01-02"), draftValues["planDate"])
+        }
+
+        compose.onNodeWithTag("native-task-mode-complex").performClick()
+        compose.onNodeWithTag("native-task-mode-complex").assertIsSelected()
+        scrollTo("native-task-note")
+        compose.onNodeWithTag("native-task-note").assertTextContains("Взяти документи")
+        compose.onNodeWithTag("native-task-mode-simple").performClick()
+        compose.onNodeWithTag("native-task-simple-confirm").assertIsDisplayed().performClick()
+
+        compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            val payload = requireNotNull(saved)
+            assertEquals(JsonPrimitive("simple"), payload["type"])
+            assertEquals(JsonPrimitive("Зателефонувати"), payload["title"])
+            assertFalse(payload.containsKey("note"))
+            assertFalse(payload.containsKey("repeat"))
+            assertFalse(payload.containsKey("counterEnabled"))
+            assertFalse(payload.containsKey("zoneId"))
+            assertFalse(payload.containsKey("folderId"))
+            assertFalse(payload.containsKey("planDate"))
+            assertEquals(JsonPrimitive(true), payload["quickCapture"])
+            assertEquals(JsonPrimitive(10), payload["quickReminderDelayMinutes"])
+            val applied = FlowEngine(mapOf("simple" to 1.0)).apply(snapshot,
+                FlowCommand.CreateTask(payload, "confirmed-simple-create", now), ZoneId.of("UTC"), now) as FlowCommandResult.Applied
+            assertEquals("simple", applied.snapshot.tasks.first().type)
+            assertEquals(JsonPrimitive("Зателефонувати"), applied.snapshot.tasks.first().raw["title"])
+        }
+    }
+
+    @Test
+    fun simpleModeTimeMarkerCreatesMinimalScheduledTaskInsteadOfRestoringComplexFields() {
+        val draft = buildJsonObject {
+            put("version", 2)
+            put("values", buildJsonObject {
+                put("title", "Зателефонувати")
+                put("type", "counter")
+                put("editorMode", "complex")
+                put("note", "Взяти документи")
+                put("planDate", "2099-01-02")
+                put("counterEnabled", true)
+                put("counterTarget", 10)
+            })
+        }.toString()
+        val snapshot = fixture(draft = draft)
+        var saved: JsonObject? = null
+        show(snapshot, onSave = { saved = it })
+
+        compose.onNodeWithTag("native-task-mode-simple").performClick()
+        compose.onNodeWithTag("native-task-simple-confirm").assertIsDisplayed().performClick()
+        scrollTo("native-task-title")
+        compose.onNodeWithTag("native-task-title").performTextReplacement("Зустрітися ///12:40///")
+        closeSoftKeyboard()
+        compose.onNodeWithTag("native-task-save").assertIsDisplayed().performClick()
+
+        compose.runOnIdle {
+            val payload = requireNotNull(saved)
+            assertEquals(JsonPrimitive("sched"), payload["type"])
+            assertEquals(JsonPrimitive("Зустрітися"), payload["title"])
+            assertEquals(JsonPrimitive("12:40"), payload["schedTime"])
+            assertEquals(JsonPrimitive(true), payload["reminderEnabled"])
+            assertEquals(JsonPrimitive(0), payload["remindBeforeMinutes"])
+            assertFalse(payload.containsKey("note"))
+            assertFalse(payload.containsKey("counterEnabled"))
+            assertFalse(payload.containsKey("counterTarget"))
+            assertFalse(payload.containsKey("quickCapture"))
+            val applied = FlowEngine(mapOf("sched" to 1.0)).apply(snapshot,
+                FlowCommand.CreateTask(payload, "simple-scheduled-marker", now), ZoneId.of("UTC"), now) as FlowCommandResult.Applied
+            assertEquals("sched", applied.snapshot.tasks.single().type)
+            assertEquals(JsonPrimitive("12:40"), applied.snapshot.tasks.single().raw["schedTime"])
+            assertEquals(payload["schedDate"], applied.snapshot.tasks.single().raw["planDate"])
         }
     }
 
