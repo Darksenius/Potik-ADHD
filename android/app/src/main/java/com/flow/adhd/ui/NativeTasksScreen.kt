@@ -111,7 +111,7 @@ fun NativeTasksScreen(
     var filterMenu by remember { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    var requestSearchFocus by remember { mutableStateOf(searchOpen) }
+    var requestSearchFocus by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current

@@ -8,9 +8,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -22,6 +24,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -65,18 +69,30 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
         }
     }
     var page by rememberSaveable { mutableStateOf("tasks") }
+    val pageStates = rememberSaveableStateHolder()
+    val inputFocus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun clearInputFocus() { inputFocus.clearFocus(); keyboard?.hide() }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var planAuthoring by remember { mutableStateOf(false) }
     var moreAuthoring by rememberSaveable { mutableStateOf(false) }
     var editorId by rememberSaveable { mutableStateOf<Long?>(null) }
     var insightDay by rememberSaveable { mutableStateOf<String?>(null) }
     var openedNote by rememberSaveable { mutableStateOf<Long?>(null) }
+    var handledIncomingNote by rememberSaveable { mutableStateOf<Long?>(null) }
+    fun closeTaskEditor() { clearInputFocus(); editorOpen = false }
     var touch by remember { mutableStateOf(Offset(140f, 300f)) }
     val snapshot = (read as? SnapshotRead.Ready)?.snapshot
-    val edit: (Long) -> Unit = { editorId = it; editorOpen = true }
+    val edit: (Long) -> Unit = { clearInputFocus(); editorId = it; editorOpen = true }
     LaunchedEffect(incomingTask, snapshot != null) { if (incomingTask != null && snapshot?.tasks?.any { it.id == incomingTask } == true) edit(incomingTask) }
     LaunchedEffect(incomingInsight) { if (incomingInsight != null) insightDay = incomingInsight }
-    LaunchedEffect(incomingNote) { if (incomingNote != null) { openedNote = incomingNote; page = "notes" } }
+    LaunchedEffect(incomingNote) {
+        if (incomingNote != null && incomingNote != handledIncomingNote) {
+            handledIncomingNote = incomingNote
+            openedNote = incomingNote
+            page = "notes"
+        }
+    }
     LaunchedEffect(snapshot != null) { if (snapshot != null) recoveryNotice = recoveryPrefs.getBoolean("notice", false) }
     val lifecycle = LocalLifecycleOwner.current
     LaunchedEffect(lifecycle) {
@@ -91,7 +107,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
             }
         }
     }
-    BackHandler(editorOpen && !busy) { editorOpen = false }
+    BackHandler(editorOpen && !busy) { closeTaskEditor() }
     val shellChromeVisible = !editorOpen && !(page == "more" && moreAuthoring) && !(page == "plan" && planAuthoring)
 
     BoxWithConstraints(Modifier.fillMaxSize().pointerInput(Unit) {
@@ -102,10 +118,12 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
             }
         }
     }) {
+        // In a short, keyboard-resized window, give the field room and keep navigation.
+        val showHeader = shellChromeVisible && maxHeight >= 360.dp
         Scaffold(
             snackbarHost = { if (!busy) SnackbarHost(snackbar) },
             topBar = {
-                if (shellChromeVisible) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (showHeader) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(R.drawable.potik_mark), null, Modifier.size(32.dp))
                     Text("Потік", Modifier.weight(1f).padding(start = 10.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     if ((snapshot?.data?.get("preferences") as? JsonObject)?.get("showGamification") != JsonPrimitive(false))
@@ -118,7 +136,7 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
             bottomBar = {
                 if (shellChromeVisible) NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                     listOf("tasks" to "Задачі", "plan" to "План", "notes" to "Нотатки", "more" to "Ще").forEachIndexed { index, (key, label) ->
-                        NavigationBarItem(selected = page == key, onClick = { model.flushDraft(); page = key },
+                        NavigationBarItem(selected = page == key, onClick = { model.flushDraft(); clearInputFocus(); page = key },
                             icon = { NativeNavigationIcon(index) }, label = { Text(label) }, modifier = Modifier.testTag("native-nav-$key"),
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.primaryContainer,
@@ -147,20 +165,27 @@ fun NativeFlowScreen(model: NativeFlowViewModel, incomingTask: Long?, incomingIn
                     }
                     editorOpen -> NativeTaskEditor(snapshot, editorId, busy, onSave = { payload ->
                         val command = FlowCommand.SaveTaskEditor(editorId, payload, null, false, UUID.randomUUID().toString(), System.currentTimeMillis())
-                        model.command(command) { editorOpen = false }
-                    }, onClose = { model.flushDraft(); editorOpen = false }, modifier = Modifier.weight(1f),
-                        onSnooze = { payload, minutes, tomorrow -> model.command(FlowCommand.SaveTaskEditor(editorId, payload, minutes, tomorrow, UUID.randomUUID().toString(), System.currentTimeMillis())) { editorOpen = false } },
+                        model.command(command) { closeTaskEditor() }
+                    }, onClose = { model.flushDraft(); closeTaskEditor() }, modifier = Modifier.weight(1f),
+                        onSnooze = { payload, minutes, tomorrow -> model.command(FlowCommand.SaveTaskEditor(editorId, payload, minutes, tomorrow, UUID.randomUUID().toString(), System.currentTimeMillis())) { closeTaskEditor() } },
                         onDraftChanged = model::editTaskDraft)
-                    page == "notes" -> NativeNotesScreen(snapshot, draft, status, busy, model::editNotepad, model::command,
-                        model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f), openNoteId = openedNote)
-                    page == "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f), onAuthoringChanged = { planAuthoring = it })
-                    page == "more" -> NativeMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
-                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, tools = tools, modifier = Modifier.weight(1f),
-                        presetAuthoring = moreAuthoring,
-                        onAuthoringChanged = { moreAuthoring = it })
-                    else -> NativeTasksScreen(snapshot, projection, busy, model::command,
-                        onCreate = { editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f),
-                        onOpenPlan = { page = "plan" })
+                    // A tab is temporarily disposed while another tab or the editor is open.
+                    // Save its UI state here; durable data still belongs only to the Repository.
+                    else -> pageStates.SaveableStateProvider(page) {
+                        when (page) {
+                            "notes" -> NativeNotesScreen(snapshot, draft, status, busy, model::editNotepad, model::command,
+                                model::fileNotepad, onMakeTask = { model.makeTask(edit) }, modifier = Modifier.weight(1f),
+                                openNoteId = openedNote, onOpenedNote = { openedNote = null })
+                            "plan" -> NativePlannerScreen(snapshot, busy, model::command, edit, Modifier.weight(1f), onAuthoringChanged = { planAuthoring = it })
+                            "more" -> NativeMore(snapshot, projection, content, busy, model::command, onInsight = { insightDay = it },
+                                onCreate = { clearInputFocus(); editorId = null; editorOpen = true }, onEdit = edit, tools = tools, modifier = Modifier.weight(1f),
+                                presetAuthoring = moreAuthoring,
+                                onAuthoringChanged = { moreAuthoring = it })
+                            else -> NativeTasksScreen(snapshot, projection, busy, model::command,
+                                onCreate = { clearInputFocus(); editorId = null; editorOpen = true }, onEdit = edit, modifier = Modifier.weight(1f),
+                                onOpenPlan = { clearInputFocus(); page = "plan" })
+                        }
+                    }
                 }
             }
         }
@@ -226,6 +251,7 @@ private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: 
     onInsight: (String) -> Unit, onCreate: () -> Unit, onEdit: (Long) -> Unit, tools: NativeStorageTools, modifier: Modifier,
     presetAuthoring: Boolean = false, onAuthoringChanged: (Boolean) -> Unit = {}) {
     var destination by rememberSaveable { mutableStateOf("") }
+    val menuScroll = rememberLazyListState()
     var settingsDocumentOpen by remember { mutableStateOf(false) }
     DisposableEffect(Unit) { onDispose { onAuthoringChanged(false) } }
     if (destination.isNotEmpty()) {
@@ -248,7 +274,7 @@ private fun NativeMore(snapshot: FlowSnapshot, projection: JsonObject, content: 
         }
         return
     }
-    LazyColumn(modifier.testTag("native-more"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(modifier.testTag("native-more"), state = menuScroll, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { PotikMenuRow("Налаштування", "Вигляд, сповіщення, дані та допомога", { destination = "settings" }, Modifier.padding(top = 8.dp).testTag("native-open-settings")) }
         item { Text("Планування", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { PotikMenuRow("Зони", "Напрямки дня та їхній розклад", { destination = "zones" }) }

@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -57,6 +58,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -82,6 +84,7 @@ fun NativeNotesScreen(
     onMakeTask: () -> Unit,
     modifier: Modifier = Modifier,
     openNoteId: Long? = null,
+    onOpenedNote: () -> Unit = {},
 ) {
     val folders = remember(snapshot) { notesFolders(snapshot) }
     val notes = remember(snapshot) { notesEntries(snapshot) }
@@ -108,9 +111,14 @@ fun NativeNotesScreen(
     LaunchedEffect(openNoteId, notes.any { it.id == openNoteId }) {
         val note = notes.firstOrNull { it.id == openNoteId } ?: return@LaunchedEffect
         filterFolder = null; query = ""; editingId = note.id; editText = note.text; editFolder = note.folder
-        listState.scrollToItem(3 + notes.indexOf(note))
+        val noteIndex = notes.indexOfFirst { it.key == note.key }
+        if (noteIndex >= 0) {
+            snapshotFlow { listState.layoutInfo.totalItemsCount }
+                .first { it == 4 + notes.size }
+            listState.scrollToItem(4 + noteIndex)
+            onOpenedNote()
+        }
     }
-
     LaunchedEffect(folders.map { it.id }) {
         if (filterFolder != null && folders.none { it.id == filterFolder }) filterFolder = null
     }
