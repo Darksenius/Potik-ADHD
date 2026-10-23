@@ -135,7 +135,8 @@ fun NativeTaskEditor(
             mode == "complex" && !draftHasIntentionalContent -> true
             else -> false
         }
-    } ?: (taskId == null && !checklistDefinition && allowQuickReminder && seedIsPlainSimple && seed.editorText("type") == null)
+    } ?: (!checklistDefinition && allowQuickReminder && seedIsPlainSimple &&
+        (taskId == null || seed.editorText("type").let { it == null || it == "simple" }))
     var simpleMode by rememberSaveable(taskId) { mutableStateOf(initialSimpleMode) }
     var complexModeVisited by rememberSaveable(taskId) { mutableStateOf(!initialSimpleMode) }
     var confirmSimpleMode by rememberSaveable(taskId) { mutableStateOf(false) }

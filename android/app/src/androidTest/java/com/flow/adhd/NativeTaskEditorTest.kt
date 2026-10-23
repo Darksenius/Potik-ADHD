@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsSelected
@@ -276,6 +277,31 @@ class NativeTaskEditorTest {
         compose.onNodeWithTag("native-task-mode-simple").assertIsSelected()
         compose.onNodeWithTag("native-task-title").assertIsDisplayed()
         compose.onNodeWithTag("native-task-note").assertDoesNotExist()
+    }
+
+    @Test
+    fun editingPlainSimpleTaskOpensSimpleModeAndKeepsItsReminder() {
+        val reminderAt = now + 10 * 60_000L
+        val task = JsonObject(TaskFactory.create(700, "Зателефонувати", "simple", now) + mapOf(
+            "planDate" to JsonPrimitive("2026-10-17"),
+            "quickReminderAt" to JsonPrimitive(reminderAt),
+        ))
+        var saved: JsonObject? = null
+        show(fixture(task), taskId = 700) { saved = it }
+
+        compose.onNodeWithTag("native-task-mode-simple").assertIsSelected()
+        compose.onNodeWithTag("native-task-mode-complex").assertIsNotSelected()
+        compose.onNodeWithTag("native-task-quick-preview").assertIsDisplayed()
+        compose.onNodeWithTag("native-task-note").assertDoesNotExist()
+        compose.onNodeWithTag("native-task-save").performClick()
+
+        compose.runOnIdle {
+            val payload = requireNotNull(saved)
+            assertEquals(JsonPrimitive("simple"), payload["type"])
+            assertEquals(JsonPrimitive(reminderAt), payload["quickReminderAt"])
+            assertFalse(payload.containsKey("note"))
+            assertFalse(payload.containsKey("counterEnabled"))
+        }
     }
 
     @Test
